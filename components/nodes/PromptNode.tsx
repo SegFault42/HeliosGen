@@ -7,6 +7,15 @@ import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import CornerResizer from "./CornerResizer";
 
+function cfImg(url: string, width: number): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}/cdn-cgi/image/width=${width},quality=75,format=webp${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 type PromptNodeType = Node<NodeData, "promptNode">;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -289,7 +298,7 @@ export default function PromptNode({ id, data }: NodeProps<PromptNodeType>) {
                 <div className="w-6 h-6 rounded bg-[#1A1A1A] overflow-hidden shrink-0 flex items-center justify-center">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                    <img src={cfImg(imageUrl, 64)} alt="" className="w-full h-full object-cover" />
                   ) : videoUrl ? (
                     <VideoThumb />
                   ) : (

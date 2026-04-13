@@ -10,6 +10,16 @@ type GenerateNodeType = Node<NodeData, "generateNode">;
 
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 
+/** Return a Cloudflare-resized URL for display. Falls back to original if not a CF URL. */
+function cfImg(url: string, width: number): string {
+  try {
+    const u = new URL(url);
+    return `${u.origin}/cdn-cgi/image/width=${width},quality=75,format=webp${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 // Derived from config — no hardcoding needed
 const MODELS     = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
 const MODEL_CAPS = Object.fromEntries(
@@ -209,7 +219,7 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
             position={Position.Left}
             id="image"
             style={{ top: "72%" }}
-            className="node-handle-icon node-handle-icon-image"
+            className="node-handle-icon node-handle-icon-resource"
             onMouseEnter={() => setHoveredHandle("image")}
             onMouseLeave={() => setHoveredHandle(null)}
           >
@@ -226,12 +236,12 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
               left:      0,
               transform: "translate(calc(-100% - 34px), -50%)",
               background: "#1A1A1A",
-              border: `1px solid ${hoveredHandle === "prompt" ? "#77E54433" : "#818cf833"}`,
+              border: `1px solid ${hoveredHandle === "prompt" ? "#77E54433" : "#fb923c33"}`,
               color: "#CCCCCC",
             }}
           >
             <span
-              style={{ color: hoveredHandle === "prompt" ? "#77E544" : "#818cf8" }}
+              style={{ color: hoveredHandle === "prompt" ? "#77E544" : "#fb923c" }}
               className="mr-1.5"
             >●</span>
             {hoveredHandle === "prompt"
@@ -256,7 +266,7 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
           {data.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={data.imageUrl as string}
+              src={cfImg(data.imageUrl as string, 800)}
               alt="Generated"
               className="w-full h-full object-fill block"
               onLoad={(e) => {
@@ -443,11 +453,27 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
 
         </div>
 
+      {busy && <SpinnerOverlay />}
     </div>
   );
 }
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
+
+function SpinnerOverlay() {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      pointerEvents: "none", zIndex: 20,
+    }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
+        <circle cx="14" cy="14" r="11" stroke="#333" strokeWidth="2.5" />
+        <path d="M14 3 A11 11 0 0 1 25 14" stroke="#77E544" strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
 
 function PromptIcon() {
   return (

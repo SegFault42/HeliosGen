@@ -15,6 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
@@ -48,6 +49,10 @@ const nodeTypes = {
   imageInputNode:      ImageInputNode,
   generateNode:        GenerateNode,
   videoGeneratorNode:  VideoGeneratorNode,
+};
+
+const edgeTypes = {
+  default: CuttableEdge,
 };
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -243,10 +248,23 @@ export default function WorkflowCanvas() {
     setLog((l) => [...l.slice(-60), { text, ok }]);
   }, []);
 
-  // prompt handle: 1 connection max. image handle: up to 14 (nano-banana-2 limit).
+  // prompt handle: only promptNode; 1 connection max. image handle: up to 14 (nano-banana-2 limit).
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
+      const source = nodes.find((n) => n.id === connection.source);
       const target = nodes.find((n) => n.id === connection.target);
+
+      // Prompt handles only accept text (prompt) nodes
+      if (connection.targetHandle === "prompt" && source?.type !== "promptNode") return false;
+
+      // Image/resource handles do not accept text (prompt) nodes
+      if (
+        source?.type === "promptNode" &&
+        (connection.targetHandle === "image" ||
+         connection.targetHandle === "resource" ||
+         connection.targetHandle === "startFrame" ||
+         connection.targetHandle === "endFrame")
+      ) return false;
 
       if (target?.type === "generateNode") {
         if (connection.targetHandle === "prompt") {
@@ -505,6 +523,7 @@ export default function WorkflowCanvas() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onEdgeClick={(_, edge) => onEdgesChange([{ type: "remove", id: edge.id }])}
         onConnect={onConnect}
         onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
@@ -512,7 +531,9 @@ export default function WorkflowCanvas() {
         onDrop={onDrop}
         onDragOver={onDragOver}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
+        minZoom={0.05}
         colorMode="dark"
         className="flex-1"
         // Right-click drag pans; left-click drag draws selection box
@@ -529,7 +550,7 @@ export default function WorkflowCanvas() {
           strokeLinecap: "round",
         }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#2A1A14" />
+        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
 
         {dropState && (
           <NodePickerMenu

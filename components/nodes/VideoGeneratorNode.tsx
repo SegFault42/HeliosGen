@@ -416,11 +416,27 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
         </button>
       </div>
 
+      {busy && <SpinnerOverlay color="#3A6FFF" />}
     </div>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function SpinnerOverlay({ color = "#77E544" }: { color?: string }) {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      pointerEvents: "none", zIndex: 20,
+    }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
+        <circle cx="14" cy="14" r="11" stroke="#333" strokeWidth="2.5" />
+        <path d="M14 3 A11 11 0 0 1 25 14" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
 
 function Pill({
   children, onClick, interactive = true, fullWidth = false,
@@ -531,11 +547,10 @@ function FrameEndIcon() {
 
 function ResourceIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="5" cy="8" r="2.5" />
-      <circle cx="11" cy="4" r="2.5" />
-      <circle cx="11" cy="12" r="2.5" />
-      <path d="M7.4 6.9 8.6 5.1M7.4 9.1l1.2 1.8" />
+    <svg width="15" height="13" viewBox="0 0 18 15" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="1" width="16" height="13" rx="2" />
+      <circle cx="5.5" cy="5" r="1.5" fill="white" stroke="none" />
+      <path d="m1 11 4.5-4.5 3 3 2.5-2.5 6 4" />
     </svg>
   );
 }

@@ -328,6 +328,11 @@ body {
   box-shadow: 0 0 0 1px rgba(106, 159, 255, 0.35), 0 0 28px rgba(106, 159, 255, 0.15);
 }
 
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Generating border animation ─────────────────────────────────────────── */
 @keyframes node-pulse-glow {
   0%, 100% { box-shadow: 0 0 6px 2px rgba(119,229,68,0.15); }
