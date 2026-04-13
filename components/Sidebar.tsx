@@ -1,11 +1,12 @@
 "use client";
-import { useRef, useState } from "react";
-import { useWorkflowStore, NodeData, Space } from "@/lib/store";
+import { useEffect, useRef, useState } from "react";
+import { useWorkflowStore, Space } from "@/lib/store";
 import { NODES } from "@/lib/nodeTypes";
+import { useSpaceSync, timeAgo, SyncStatus } from "@/lib/useSpaceSync";
 
 // ── Spaces panel ──────────────────────────────────────────────────────────────
 
-function SpacesPanel() {
+function SpacesPanel({ syncNow }: { syncNow: () => void }) {
   const spaces        = useWorkflowStore((s) => s.spaces);
   const activeSpaceId = useWorkflowStore((s) => s.activeSpaceId);
   const createSpace   = useWorkflowStore((s) => s.createSpace);
@@ -31,6 +32,7 @@ function SpacesPanel() {
   const addSpace = () => {
     const n = spaces.length + 1;
     createSpace(`Space ${n}`);
+    syncNow();
   };
 
   return (
@@ -93,7 +95,7 @@ function SpacesPanel() {
 
               {spaces.length > 1 && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); deleteSpace(sp.id); }}
+                  onClick={(e) => { e.stopPropagation(); deleteSpace(sp.id); syncNow(); }}
                   className="opacity-0 group-hover:opacity-100 shrink-0 w-3.5 h-3.5 flex items-center justify-center text-[#8D8E89] hover:text-red-400 transition-colors"
                   title="Delete space"
                 >
@@ -113,6 +115,8 @@ function SpacesPanel() {
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
 export default function Sidebar() {
+  const { status, lastSyncedAt, syncNow } = useSpaceSync();
+
   const onDragStart = (e: React.DragEvent, type: string) => {
     e.dataTransfer.setData("application/reactflow-node", type);
     e.dataTransfer.effectAllowed = "copy";
@@ -128,7 +132,7 @@ export default function Sidebar() {
       </div>
 
       {/* Spaces */}
-      <SpacesPanel />
+      <SpacesPanel syncNow={syncNow} />
 
       {/* Node list */}
       <div className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -155,11 +159,47 @@ export default function Sidebar() {
         ))}
       </div>
 
-      <div className="p-3 border-t border-[#1A100C]">
+      <div className="p-3 border-t border-[#1A100C] flex flex-col gap-2">
         <p className="text-[10px] text-[#4A4A45] leading-4">
           Drag nodes onto the canvas to add them
         </p>
+        <SyncIndicator status={status} lastSyncedAt={lastSyncedAt} />
       </div>
     </aside>
+  );
+}
+
+// ── Sync indicator ────────────────────────────────────────────────────────────
+
+function SyncIndicator({ status, lastSyncedAt }: { status: SyncStatus; lastSyncedAt: Date | null }) {
+  const [, forceUpdate] = useState(0);
+
+  // Re-render every 30s so the "X ago" text stays fresh
+  useEffect(() => {
+    const id = setInterval(() => forceUpdate((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (status === "idle") return null;
+
+  const dot: Record<SyncStatus, string> = {
+    idle:    "",
+    syncing: "bg-amber-400 animate-pulse",
+    synced:  "bg-[#77E544]",
+    error:   "bg-red-500",
+  };
+
+  const label: Record<SyncStatus, string> = {
+    idle:    "",
+    syncing: "Syncing…",
+    synced:  lastSyncedAt ? `Synced ${timeAgo(lastSyncedAt)}` : "Synced",
+    error:   "Sync failed",
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot[status]}`} />
+      <span className="text-[10px] text-[#4A4A45]">{label[status]}</span>
+    </div>
   );
 }

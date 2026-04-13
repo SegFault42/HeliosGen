@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { ensureR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { IMAGE_MODELS } from "@/lib/modelConfig";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -52,32 +53,27 @@ export async function POST(req: NextRequest) {
     // Upload all reference images to R2
     const r2ImageUrls = await resolveImages(imageUrls);
 
-    let requestBody: Record<string, unknown>;
+    const cfg = IMAGE_MODELS.find((m) => m.id === model);
+    if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
 
-    if (model === "z-image") {
-      requestBody = {
-        model: "z-image",
-        callBackUrl,
-        input: {
-          prompt:       prompt.slice(0, 1000),
-          aspect_ratio: aspectRatio,
-          nsfw_checker: true,
-        },
-      };
-    } else {
-      const resolution = quality === "4k" ? "4K" : quality === "2k" ? "2K" : "1K";
-      requestBody = {
-        model: "nano-banana-2",
-        callBackUrl,
-        input: {
-          prompt,
-          image_input:  r2ImageUrls,
-          aspect_ratio: aspectRatio,
-          resolution,
-          output_format: "jpg",
-        },
-      };
+    const { apiInput } = cfg;
+
+    // Build input object from config mapping
+    const input: Record<string, unknown> = {
+      prompt:                       prompt.slice(0, apiInput.promptMaxLength),
+      [apiInput.aspectRatioKey]:    aspectRatio,
+    };
+
+    if (apiInput.outputFormat)                         input.output_format           = apiInput.outputFormat;
+    if (apiInput.imageInputKey && r2ImageUrls.length)  input[apiInput.imageInputKey] = r2ImageUrls.slice(0, cfg.maxImages);
+    if (apiInput.qualityKey) {
+      input[apiInput.qualityKey] = apiInput.qualityMap
+        ? (apiInput.qualityMap[quality] ?? quality)
+        : quality === "4k" ? "4K" : quality === "2k" ? "2K" : "1K";
     }
+    if (apiInput.extra) Object.assign(input, apiInput.extra);
+
+    const requestBody = { model: cfg.apiId, callBackUrl, input };
 
     const res = await fetch(CREATE, {
       method:  "POST",

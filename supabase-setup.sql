@@ -1,5 +1,48 @@
 -- Run this in your Supabase SQL editor
 
+-- ── User uploads ──────────────────────────────────────────────────────────────
+
+create table public.user_uploads (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        references auth.users(id) on delete set null,
+  r2_url     text        not null,
+  mime_type  text,
+  source     text        not null default 'user_upload',
+  created_at timestamptz not null default now()
+);
+
+alter table public.user_uploads enable row level security;
+
+create policy "users read own uploads"
+  on public.user_uploads for select
+  using (auth.uid() = user_id);
+
+create policy "users insert own uploads"
+  on public.user_uploads for insert
+  with check (auth.uid() = user_id);
+
+-- ── Spaces ─────────────────────────────────────────────────────────────────────
+
+create table public.spaces (
+  id         text        primary key,
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  name       text        not null,
+  data       jsonb       not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger spaces_updated_at
+  before update on public.spaces
+  for each row execute procedure public.touch_updated_at();
+
+alter table public.spaces enable row level security;
+
+create policy "users manage own spaces"
+  on public.spaces for all
+  using  (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 create table public.generations (
   id                   uuid primary key default gen_random_uuid(),
   created_at           timestamptz not null default now(),

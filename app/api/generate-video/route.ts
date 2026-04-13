@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureR2, mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { VIDEO_MODELS } from "@/lib/modelConfig";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -30,14 +31,17 @@ async function getUserId(req: NextRequest): Promise<string | null> {
 
 export async function POST(req: NextRequest) {
   const {
+    videoModel      = "kling-3.0",
     prompt,
     startFrameUrl:  rawStartFrame,
     endFrameUrl:    rawEndFrame,
-    resources    = [] as Resource[],
-    sound        = false,
-    duration     = 5,
-    aspectRatio  = "16:9",
-    mode         = "pro",
+    resources       = [] as Resource[],
+    referenceImageUrls: rawRefImages = [] as string[],
+    sound           = false,
+    duration        = 5,
+    aspectRatio     = "16:9",
+    mode            = "pro",
+    resolution      = "480p",
   } = await req.json();
 
   const apiKey = process.env.KIE_API_TOKEN;
@@ -45,52 +49,83 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "KIE_API_TOKEN not set" }, { status: 500 });
   }
 
-  // Upload any base64 / non-R2 URLs to R2 first
-  const [startFrameUrl, endFrameUrl, r2Resources] = await Promise.all([
-    rawStartFrame ? ensureR2(rawStartFrame, "references") : Promise.resolve(undefined),
-    rawEndFrame   ? ensureR2(rawEndFrame,   "references") : Promise.resolve(undefined),
-    Promise.all(
-      (resources as Resource[]).slice(0, 3).map(async (r) => ({
-        ...r,
-        url: await ensureR2(r.url, "references").catch(() => r.url),
-      }))
-    ),
-  ]);
+  const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
+  if (!cfg) {
+    return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
+  }
 
-  const image_urls: string[] = [];
-  if (startFrameUrl) image_urls.push(startFrameUrl);
-  if (endFrameUrl)   image_urls.push(endFrameUrl);
+  const { apiInput } = cfg;
 
-  const kling_elements = r2Resources.map((r) => {
-    const safeName = r.label
-      .toLowerCase()
-      .replace(/\s+#/g, "_")
-      .replace(/[^a-z0-9_]/g, "")
-      || "element";
-    return {
-      name:               safeName,
-      description:        r.label,
-      element_input_urls: [r.url, r.url],
+  // Clamp duration to model limits
+  const clampedDuration = Math.max(apiInput.durationMin, Math.min(apiInput.durationMax, Number(duration)));
+
+  let input: Record<string, unknown>;
+
+  if (apiInput.referenceImagesKey) {
+    // ── Reference-image-based models (Grok Imagine) ───────────────────────────
+    const refImageUrls = (
+      await Promise.all(
+        (rawRefImages as string[]).map((u) => ensureR2(u, "references").catch(() => null))
+      )
+    ).filter((u): u is string => u !== null);
+
+    input = {
+      prompt:                          prompt ?? "",
+      [apiInput.aspectRatioKey]:       aspectRatio,
+      [apiInput.durationKey]:          clampedDuration,
     };
-  });
 
-  const input: Record<string, unknown> = {
-    prompt:       prompt ?? "",
-    sound:        Boolean(sound),
-    duration:     String(Math.max(3, Math.min(15, Number(duration)))),
-    aspect_ratio: aspectRatio,
-    mode,
-    multi_shots:  false,
-  };
+    if (apiInput.modeKey)       input[apiInput.modeKey]       = mode;
+    if (apiInput.resolutionKey) input[apiInput.resolutionKey] = resolution;
+    if (apiInput.extra)         Object.assign(input, apiInput.extra);
 
-  if (image_urls.length > 0)     input.image_urls     = image_urls;
-  if (kling_elements.length > 0) input.kling_elements = kling_elements;
+    // Include reference images when connected (switches to image-guided mode)
+    if (refImageUrls.length > 0) input[apiInput.referenceImagesKey] = refImageUrls;
+
+  } else {
+    // ── Start/end-frame + elements models (Kling) ─────────────────────────────
+    const [startFrameUrl, endFrameUrl, r2Resources] = await Promise.all([
+      rawStartFrame ? ensureR2(rawStartFrame, "references") : Promise.resolve(undefined),
+      rawEndFrame   ? ensureR2(rawEndFrame,   "references") : Promise.resolve(undefined),
+      Promise.all(
+        (resources as Resource[]).slice(0, 3).map(async (r) => ({
+          ...r,
+          url: await ensureR2(r.url, "references").catch(() => r.url),
+        }))
+      ),
+    ]);
+
+    input = {
+      prompt:                    prompt ?? "",
+      [apiInput.aspectRatioKey]: aspectRatio,
+      [apiInput.durationKey]:    apiInput.durationAsString ? String(clampedDuration) : clampedDuration,
+    };
+
+    if (apiInput.modeKey)  input[apiInput.modeKey]  = mode;
+    if (apiInput.soundKey) input[apiInput.soundKey] = Boolean(sound);
+    if (apiInput.extra)    Object.assign(input, apiInput.extra);
+
+    if (apiInput.useImageUrls) {
+      const image_urls: string[] = [];
+      if (startFrameUrl) image_urls.push(startFrameUrl);
+      if (endFrameUrl)   image_urls.push(endFrameUrl);
+      if (image_urls.length > 0) input.image_urls = image_urls;
+    }
+
+    if (apiInput.useKlingElements) {
+      const kling_elements = r2Resources.map((r) => {
+        const safeName = r.label.toLowerCase().replace(/\s+#/g, "_").replace(/[^a-z0-9_]/g, "") || "element";
+        return { name: safeName, description: r.label, element_input_urls: [r.url, r.url] };
+      });
+      if (kling_elements.length > 0) input.kling_elements = kling_elements;
+    }
+  }
 
   // Submit task
   const createRes = await fetch(`${KIE_BASE}/api/v1/jobs/createTask`, {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body:    JSON.stringify({ model: "kling-3.0/video", input }),
+    body:    JSON.stringify({ model: cfg.apiId, input }),
   });
 
   if (!createRes.ok) {
@@ -109,22 +144,27 @@ export async function POST(req: NextRequest) {
 
   // Save pending record to Supabase
   const userId = await getUserId(req);
-  const referenceUrls = [
-    ...(startFrameUrl ? [startFrameUrl] : []),
-    ...(endFrameUrl   ? [endFrameUrl]   : []),
-    ...r2Resources.map((r) => r.url),
-  ];
+
+  // Collect reference URLs for DB record from whichever input fields were used
+  const referenceUrls: string[] = apiInput.referenceImagesKey
+    ? (input[apiInput.referenceImagesKey] as string[] | undefined) ?? []
+    : [
+        ...((input.image_urls as string[] | undefined) ?? []),
+        ...((input.kling_elements as Array<{ element_input_urls: string[] }> | undefined)
+          ?.map((el) => el.element_input_urls[0]) ?? []),
+      ];
 
   supabaseAdmin.from("generations").insert({
     task_id:              taskId,
     user_id:              userId,
     generation_type:      "video",
     status:               "pending",
+    model:                videoModel,
     prompt,
     aspect_ratio:         aspectRatio,
-    duration:             Number(duration),
+    duration:             clampedDuration,
     kling_mode:           mode,
-    sound:                Boolean(sound),
+    sound:                cfg.sound ? Boolean(sound) : false,
     reference_image_urls: referenceUrls,
   }).then(({ error }) => {
     if (error) console.error("[generate-video] supabase insert error:", error.message);

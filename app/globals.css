@@ -317,15 +317,26 @@ body {
 /* ── Video Generator node — blue identity border ─────────────────────────── */
 .video-node-card.node-card {
   border-color: #3A6FFF !important;
-  box-shadow: 0 0 0 1px rgba(58, 111, 255, 0.12), 0 0 18px rgba(58, 111, 255, 0.06) !important;
+  box-shadow: 0 0 0 1px rgba(58, 111, 255, 0.12), 0 0 18px rgba(58, 111, 255, 0.06);
 }
 .video-node-card.node-card:hover {
   border-color: #5A8FFF !important;
-  box-shadow: 0 0 0 1px rgba(90, 143, 255, 0.22), 0 0 22px rgba(90, 143, 255, 0.10) !important;
+  box-shadow: 0 0 0 1px rgba(90, 143, 255, 0.22), 0 0 22px rgba(90, 143, 255, 0.10);
 }
 .react-flow__node.selected .video-node-card.node-card {
   border-color: #6A9FFF !important;
-  box-shadow: 0 0 0 1px rgba(106, 159, 255, 0.35), 0 0 28px rgba(106, 159, 255, 0.15) !important;
+  box-shadow: 0 0 0 1px rgba(106, 159, 255, 0.35), 0 0 28px rgba(106, 159, 255, 0.15);
+}
+
+/* ── Generating border animation ─────────────────────────────────────────── */
+@keyframes node-pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px 2px rgba(119,229,68,0.15); }
+  50%       { box-shadow: 0 0 22px 8px rgba(119,229,68,0.50); }
+}
+
+@keyframes video-node-pulse-glow {
+  0%, 100% { box-shadow: 0 0 6px 2px rgba(58,111,255,0.15); }
+  50%       { box-shadow: 0 0 22px 8px rgba(58,111,255,0.55); }
 }
 
 /* ── @mention chip in PromptNode ─────────────────────────────────────────── */

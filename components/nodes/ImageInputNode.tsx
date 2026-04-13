@@ -3,6 +3,7 @@ import { useRef, useCallback } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
 
 type ImageInputNodeType = Node<NodeData, "imageInputNode">;
 
@@ -11,7 +12,7 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
   const fileRef        = useRef<HTMLInputElement>(null);
 
   const setImage = useCallback(
-    (src: string) => {
+    (src: string, mimeType?: string) => {
       const img = new Image();
       img.onload = () => {
         updateNodeData(id, {
@@ -21,16 +22,23 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
 
         // Upload to R2 in the background; swap inputImage for the durable CDN URL
         if (src.startsWith("data:") || src.startsWith("http")) {
-          fetch("/api/upload-to-r2", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ dataUrl: src, folder: "references" }),
-          })
-            .then((r) => r.json())
-            .then(({ cdnUrl }) => {
+          (async () => {
+            try {
+              const { data: { session } } = await createClient().auth.getSession();
+              const headers: Record<string, string> = { "Content-Type": "application/json" };
+              if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+              const r = await fetch("/api/upload-to-r2", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({ dataUrl: src, folder: "uploads", mimeType }),
+              });
+              const { cdnUrl } = await r.json();
               if (cdnUrl) updateNodeData(id, { r2Url: cdnUrl });
-            })
-            .catch(() => {/* R2 unavailable — base64 stays as fallback */});
+            } catch {
+              // R2 unavailable — base64 stays as fallback
+            }
+          })();
         }
       };
       img.src = src;
@@ -41,7 +49,7 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
   const loadFile = useCallback(
     (file: File) => {
       const reader = new FileReader();
-      reader.onload = (e) => setImage(e.target?.result as string);
+      reader.onload = (e) => setImage(e.target?.result as string, file.type);
       reader.readAsDataURL(file);
     },
     [setImage]

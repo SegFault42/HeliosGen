@@ -34,10 +34,15 @@ export interface NodeData extends Record<string, unknown> {
   quality?: string;
   // video output
   videoUrl?: string;
+  // video model
+  videoModel?: string;
   // kling 3.0 settings
   sound?: boolean;
   klingMode?: string;
   count?: number;
+  // grok imagine settings
+  grokMode?: string;
+  grokResolution?: string;
   // error
   errorMsg?: string;
   // validation
@@ -51,7 +56,7 @@ export function getNodeLabel(type: string, n: number): string {
   const map: Record<string, string> = {
     promptNode:          `Text #${n}`,
     imageInputNode:      `Image #${n}`,
-    generateNode:        `Generator #${n}`,
+    generateNode:        `Image Generator #${n}`,
     videoGeneratorNode:  `Video Generator #${n}`,
   };
   return map[type] ?? `Node #${n}`;
@@ -127,6 +132,11 @@ interface WorkflowStore {
   updateNodeSize:     (id: string, width: number, height: number) => void;
   setIsRunning:       (v: boolean) => void;
   toggleDebug:        () => void;
+  authModalOpen:           boolean;
+  setAuthModalOpen:        (v: boolean) => void;
+  resetPasswordModalOpen:  boolean;
+  setResetPasswordModalOpen: (v: boolean) => void;
+  loadSpacesFromDB: (spaces: Space[]) => void;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -291,8 +301,28 @@ export const useWorkflowStore = create<WorkflowStore>()(
             };
           }),
 
-        setIsRunning: (v) => set({ isRunning: v }),
-        toggleDebug:  () => set((s) => ({ debugMode: !s.debugMode })),
+        setIsRunning:     (v) => set({ isRunning: v }),
+        toggleDebug:      () => set((s) => ({ debugMode: !s.debugMode })),
+
+        loadSpacesFromDB: (dbSpaces) =>
+          set((s) => {
+            if (!dbSpaces.length) return {};
+            // Prefer the active space from DB; fall back to first
+            const activeId = dbSpaces.find((sp) => sp.id === s.activeSpaceId)?.id ?? dbSpaces[0].id;
+            const active   = dbSpaces.find((sp) => sp.id === activeId)!;
+            return {
+              spaces:        dbSpaces,
+              activeSpaceId: activeId,
+              nodes:         active.nodes,
+              edges:         active.edges,
+              nodeCounters:  active.nodeCounters,
+            };
+          }),
+
+        authModalOpen:             false,
+        setAuthModalOpen:          (v) => set({ authModalOpen: v }),
+        resetPasswordModalOpen:    false,
+        setResetPasswordModalOpen: (v) => set({ resetPasswordModalOpen: v }),
       };
     },
     {

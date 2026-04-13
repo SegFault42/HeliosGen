@@ -48,7 +48,7 @@ export const NODES = [
         <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
       </svg>
     ),
-    label: "Resource Image",
+    label: "Reference Image",
     description: "Upload or URL source",
   },
 ];

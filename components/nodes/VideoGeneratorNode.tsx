@@ -1,72 +1,107 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs } from "@/lib/executor";
+import { createClient } from "@/lib/supabase/client";
+import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
 
 type VideoGeneratorNodeType = Node<NodeData, "videoGeneratorNode">;
 
-const ASPECT_RATIOS = ["16:9", "9:16", "1:1"] as const;
-const DURATIONS     = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+// ── Handles ───────────────────────────────────────────────────────────────────
 
-// Handle definitions — drives both rendering and tooltip display
-const HANDLE_DEFS = [
-  { id: "prompt",     label: "Text prompt",              topPct: 26, className: "node-handle-icon node-handle-icon-prompt"   },
-  { id: "startFrame", label: "Start frame",              topPct: 44, className: "node-handle-icon node-handle-icon-image"    },
-  { id: "endFrame",   label: "End frame",                topPct: 60, className: "node-handle-icon node-handle-icon-image"    },
-  { id: "resource",   label: "Reference images (up to 3)", topPct: 77, className: "node-handle-icon node-handle-icon-resource" },
-] as const;
+type HandleDef = { id: string; label: string; topPct: number; className: string };
 
-// Border colors per handle (for tooltip accent)
+const KLING_HANDLES: HandleDef[] = [
+  { id: "prompt", label: "Text prompt", topPct: 26, className: "node-handle-icon node-handle-icon-prompt" },
+  { id: "startFrame", label: "Start frame", topPct: 44, className: "node-handle-icon node-handle-icon-image" },
+  { id: "endFrame", label: "End frame", topPct: 60, className: "node-handle-icon node-handle-icon-image" },
+  { id: "resource", label: "Reference images (up to 3)", topPct: 77, className: "node-handle-icon node-handle-icon-resource" },
+];
+
 const HANDLE_COLORS: Record<string, string> = {
-  prompt:     "#77E544",
+  prompt: "#77E544",
   startFrame: "#818cf8",
-  endFrame:   "#818cf8",
-  resource:   "#fb923c",
+  endFrame: "#818cf8",
+  resource: "#fb923c",
 };
-
-type HandleId = (typeof HANDLE_DEFS)[number]["id"];
 
 const STATUS_DOT: Record<string, string> = {
-  idle:    "bg-[#1E1E1E]",
+  idle: "bg-[#1E1E1E]",
   running: "bg-amber-400 animate-pulse",
-  done:    "bg-[#34d399]",
-  error:   "bg-red-500",
+  done: "bg-[#34d399]",
+  error: "bg-red-500",
 };
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGeneratorNodeType>) {
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
-  const nodes          = useWorkflowStore((s) => s.nodes);
-  const edges          = useWorkflowStore((s) => s.edges);
-  const debugMode      = useWorkflowStore((s) => s.debugMode);
+  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const debugMode = useWorkflowStore((s) => s.debugMode);
 
+  const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [loading,     setLoading]     = useState(false);
-  const [hoveredHand, setHoveredHand] = useState<HandleId | null>(null);
-  const [ratioOpen,   setRatioOpen]   = useState(false);
-  const [durOpen,     setDurOpen]     = useState(false);
-  const [modeOpen,    setModeOpen]    = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hoveredHand, setHoveredHand] = useState<string | null>(null);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [ratioOpen, setRatioOpen] = useState(false);
+  const [durOpen, setDurOpen] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
+  const [grokResOpen, setGrokResOpen] = useState(false);
 
-  const klingMode   = (data.klingMode   as string)  ?? "pro";
-  const duration    = (data.duration    as number)  ?? 5;
-  const aspectRatio = (data.aspectRatio as string)  ?? "16:9";
-  const sound  = (data.sound  as boolean) ?? false;
-  const status = (data.status as string)  ?? "idle";
-  const prompt      = (data.prompt      as string)  ?? "";
-  const busy        = loading || status === "running";
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const videoModelId = (data.videoModel as string) ?? "kling-3.0";
+  const cfg = VIDEO_MODEL_CFG.find((m) => m.id === videoModelId) ?? VIDEO_MODEL_CFG[0];
 
-  const closeAll = () => { setRatioOpen(false); setDurOpen(false); setModeOpen(false); };
+  const mode = (data.klingMode as string) ?? cfg.defaultMode ?? "";
+  const resolution = (data.grokResolution as string) ?? cfg.defaultResolution ?? "";
+  const duration = (data.duration as number) ?? cfg.defaultDuration;
+  const aspectRatio = (data.aspectRatio as string) ?? cfg.defaultRatio;
+  const sound = (data.sound as boolean) ?? false;
+  const status = (data.status as string) ?? "idle";
+  const prompt = (data.prompt as string) ?? "";
+  const busy = loading || status === "running";
 
-  // Connected text node indicator
+  // Re-sync edge anchor positions whenever the node resizes
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (cardRef.current) {
+        const { offsetWidth, offsetHeight } = cardRef.current;
+        updateNodeSize(id, offsetWidth, offsetHeight);
+      }
+      updateNodeInternals(id);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [id, aspectRatio, data.imageNaturalRatio, updateNodeSize, updateNodeInternals]);
+
+  // All 4 handle slots always render at fixed positions so anchors never jump.
+  // Handles not in cfg.handles are hidden.
+  const handles = KLING_HANDLES;
+  const activeHandles = new Set<string>(cfg.handles);
+  const ratios = cfg.ratios;
+  const durations = cfg.durations;
+
+  const closeAll = () => {
+    setModelOpen(false); setRatioOpen(false); setDurOpen(false);
+    setModeOpen(false); setGrokResOpen(false);
+  };
+
   const textEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
   const textNode = textEdge ? nodes.find((n) => n.id === textEdge.source) : undefined;
+  const hasResource = edges.some((e) => e.target === id && e.targetHandle === "resource");
 
   // ── Generate ──────────────────────────────────────────────────────────────
   const generate = useCallback(async () => {
-    const upstream    = resolveInputs(id, nodes as Node<NodeData>[], edges);
+    const { data: authData } = await createClient().auth.getSession();
+    if (!authData.session) { setAuthModalOpen(true); return; }
+
+    const upstream = resolveInputs(id, nodes as Node<NodeData>[], edges);
     const finalPrompt = upstream.prompt ?? prompt;
 
     if (!finalPrompt.trim()) {
@@ -74,17 +109,28 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
       return;
     }
 
-    const payload = {
-      prompt:       finalPrompt,
+    // Build full payload first so debug log matches what gets sent
+    const payload: Record<string, unknown> = {
+      videoModel: videoModelId,
+      prompt: finalPrompt,
+      aspectRatio,
+      duration,
+      mode,
+      resolution,
+      sound,
       startFrameUrl: upstream.startFrameUrl,
-      endFrameUrl:   upstream.endFrameUrl,
-      resources:     upstream.resources,
-      sound, duration, aspectRatio,
-      mode: klingMode,
+      endFrameUrl: upstream.endFrameUrl,
+      resources: upstream.resources,
+      referenceImageUrls: upstream.resources.length > 0
+        ? upstream.resources.map((r) => r.url)
+        : undefined,
     };
 
     if (debugMode) {
       console.log(`[DEBUG] videoNode=${id}`, payload);
+      setLoading(true);
+      await new Promise((r) => setTimeout(r, 3000));
+      setLoading(false);
       return;
     }
 
@@ -92,60 +138,77 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
     updateNodeData(id, { status: "running", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined });
 
     try {
-      const res  = await fetch("/api/generate-video", {
-        method:  "POST",
+      const res = await fetch("/api/generate-video", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
       updateNodeData(id, { status: "done", videoUrl: json.videoUrl });
     } catch (e: unknown) {
       updateNodeData(id, {
-        status:   "error",
+        status: "error",
         errorMsg: e instanceof Error ? e.message : String(e),
       });
     } finally {
       setLoading(false);
     }
-  }, [id, nodes, edges, prompt, sound, duration, aspectRatio, klingMode, debugMode, textEdge, updateNodeData]);
+  }, [id, nodes, edges, prompt, sound, duration, aspectRatio, videoModelId,
+    mode, resolution, cfg, debugMode, textEdge, updateNodeData, setAuthModalOpen]);
 
-  // Tooltip data
-  const hoveredDef = hoveredHand ? HANDLE_DEFS.find((h) => h.id === hoveredHand) : null;
+  const hoveredDef = hoveredHand && activeHandles.has(hoveredHand)
+    ? handles.find((h) => h.id === hoveredHand)
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
       ref={cardRef}
       className="video-node-card node-card w-full h-full flex flex-col"
-      style={{ minWidth: 320, minHeight: 280 }}
+      style={{ minWidth: 320, minHeight: 280, ...(busy ? { animation: "video-node-pulse-glow 2.4s ease-in-out infinite" } : {}) }}
       onMouseLeave={closeAll}
     >
       <CornerResizer minWidth={280} minHeight={80} keepAspectRatio={!!data.videoUrl} />
 
-      {/* ── Label above card ────────────────────────────────────────── */}
       <span className="node-above-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <VideoNodeIcon />
         {data.label as string}
       </span>
 
-      {/* ── Handles with icons ──────────────────────────────────────── */}
-      <Handle type="target" position={Position.Left} id="prompt"     style={{ top: `${HANDLE_DEFS[0].topPct}%` }} className={HANDLE_DEFS[0].className} onMouseEnter={() => setHoveredHand("prompt")}     onMouseLeave={() => setHoveredHand(null)}><PromptIcon /></Handle>
-      <Handle type="target" position={Position.Left} id="startFrame" style={{ top: `${HANDLE_DEFS[1].topPct}%` }} className={HANDLE_DEFS[1].className} onMouseEnter={() => setHoveredHand("startFrame")} onMouseLeave={() => setHoveredHand(null)}><FrameStartIcon /></Handle>
-      <Handle type="target" position={Position.Left} id="endFrame"   style={{ top: `${HANDLE_DEFS[2].topPct}%` }} className={HANDLE_DEFS[2].className} onMouseEnter={() => setHoveredHand("endFrame")}   onMouseLeave={() => setHoveredHand(null)}><FrameEndIcon /></Handle>
-      <Handle type="target" position={Position.Left} id="resource"   style={{ top: `${HANDLE_DEFS[3].topPct}%` }} className={HANDLE_DEFS[3].className} onMouseEnter={() => setHoveredHand("resource")}   onMouseLeave={() => setHoveredHand(null)}><ResourceIcon /></Handle>
+      {/* ── Handles ──────────────────────────────────────────────────── */}
+      {handles.map((h) => {
+        const hidden = !activeHandles.has(h.id);
+        return (
+          <Handle
+            key={h.id}
+            type="target"
+            position={Position.Left}
+            id={h.id}
+            style={{ top: `${h.topPct}%`, visibility: hidden ? "hidden" : "visible", pointerEvents: hidden ? "none" : "auto" }}
+            className={h.className}
+            onMouseEnter={() => { if (!hidden) setHoveredHand(h.id); }}
+            onMouseLeave={() => setHoveredHand(null)}
+          >
+            {h.id === "prompt" && <PromptIcon />}
+            {h.id === "startFrame" && <FrameStartIcon />}
+            {h.id === "endFrame" && <FrameEndIcon />}
+            {h.id === "resource" && <ResourceIcon />}
+          </Handle>
+        );
+      })}
 
       {/* Handle tooltip */}
       {hoveredDef && (
         <div
           className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
           style={{
-            top:       `${hoveredDef.topPct}%`,
-            left:      0,
+            top: `${hoveredDef.topPct}%`,
+            left: 0,
             transform: "translate(calc(-100% - 34px), -50%)",
             background: "#1A1A1A",
-            border:    `1px solid ${HANDLE_COLORS[hoveredDef.id]}33`,
-            color:      "#CCCCCC",
+            border: `1px solid ${HANDLE_COLORS[hoveredDef.id]}33`,
+            color: "#CCCCCC",
           }}
         >
           <span style={{ color: HANDLE_COLORS[hoveredDef.id] }} className="mr-1.5">●</span>
@@ -153,15 +216,11 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
         </div>
       )}
 
-      {/* ── Main content area ───────────────────────────────────────── */}
+      {/* ── Main content ─────────────────────────────────────────────── */}
       {data.videoUrl ? (
-        // Video present: aspect-ratio container so video fills edge-to-edge at its natural ratio
         <div
           className="relative bg-[#090B0D] rounded-t-[7px] overflow-hidden"
-          style={{
-            aspectRatio: (data.imageNaturalRatio as string | undefined) ?? "16 / 9",
-            width: "100%",
-          }}
+          style={{ aspectRatio: (data.imageNaturalRatio as string | undefined) ?? "16 / 9", width: "100%" }}
         >
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <video
@@ -171,34 +230,20 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
             onLoadedMetadata={(e) => {
               const v = e.currentTarget;
               if (!v.videoWidth || !v.videoHeight) return;
-              const nw = v.videoWidth, nh = v.videoHeight;
-              updateNodeData(id, { imageNaturalRatio: `${nw} / ${nh}` });
-              // Calculate correct node dimensions from video ratio + control bar
+              updateNodeData(id, { imageNaturalRatio: `${v.videoWidth} / ${v.videoHeight}` });
               const nodeWidth = cardRef.current?.offsetWidth ?? 320;
-              const videoH    = nodeWidth * (nh / nw);
-              const BAR_H     = 38; // control bar height (px)
-              updateNodeSize(id, nodeWidth, videoH + BAR_H);
+              const videoH = nodeWidth * (v.videoHeight / v.videoWidth);
+              updateNodeSize(id, nodeWidth, videoH + 76); // 76 = two control rows
             }}
           />
-          {busy && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 z-20">
-              <Spinner />
-              <span className="text-[10px] text-[#8D8E89]">Generating…</span>
-            </div>
-          )}
         </div>
       ) : (
-        // No video: flex-1 area with prompt textarea
-        <div
-          className="relative flex-1 bg-[#090B0D] rounded-t-[7px] overflow-hidden"
-          style={{ minHeight: 160 }}
-        >
+        <div className="relative flex-1 bg-[#090B0D] rounded-t-[7px] overflow-hidden" style={{ minHeight: 160 }}>
           {status === "error" && (
             <p className="absolute top-3 left-0 right-0 text-center text-[10px] text-red-600 px-4 leading-5">
               {(data.errorMsg as string) ?? "Generation failed"}
             </p>
           )}
-
           {textNode ? (
             <div className="absolute bottom-3 left-4 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#77E544] shrink-0" />
@@ -214,39 +259,51 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
               onChange={(e) => updateNodeData(id, { prompt: e.target.value })}
             />
           )}
-
-          {busy && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 z-20">
-              <Spinner />
-              <span className="text-[10px] text-[#8D8E89]">Generating…</span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── Row 1: model · ratio · duration ────────────────────────── */}
+      {/* ── Row 1: model · ratio · duration ──────────────────────────── */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-t border-[#111]">
-        {/* Model label — static, Kling 3.0 only */}
-        <Pill interactive={false}>
-          <span className="text-[11px] text-[#AAAAAA]">Kling 3.0</span>
-          <ChevronIcon />
-        </Pill>
+        {/* Model selector */}
+        <div className="relative">
+          <Pill onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
+            <span className="text-[11px] text-[#AAAAAA]">{cfg.name}</span>
+            <ChevronIcon open={modelOpen} />
+          </Pill>
+          {modelOpen && (
+            <FloatMenu>
+              {VIDEO_MODEL_CFG.map((m) => (
+                <button
+                  key={m.id}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => {
+                    const validRatio = m.ratios.includes(aspectRatio) ? aspectRatio : m.defaultRatio;
+                    const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
+                    updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur });
+                    setModelOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-[11px] hover:bg-[#161A1E] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#8D8E89]"
+                    }`}
+                >
+                  <span>{m.name}</span>
+                  <span className="text-[#4A4A45]">{m.provider}</span>
+                </button>
+              ))}
+            </FloatMenu>
+          )}
+        </div>
 
         {/* Aspect ratio */}
         <div className="relative">
-          <Pill onClick={() => { setRatioOpen((o) => !o); setDurOpen(false); setModeOpen(false); }}>
+          <Pill onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
             <AspectIcon ratio={aspectRatio} />
             <span className="text-[11px] text-[#AAAAAA]">{aspectRatio}</span>
             <ChevronIcon open={ratioOpen} />
           </Pill>
           {ratioOpen && (
             <FloatMenu>
-              {ASPECT_RATIOS.map((r) => (
-                <FloatItem
-                  key={r}
-                  active={aspectRatio === r}
-                  onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
-                >
+              {(ratios as readonly string[]).map((r) => (
+                <FloatItem key={r} active={aspectRatio === r} onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}>
                   {r}
                 </FloatItem>
               ))}
@@ -254,23 +311,16 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
           )}
         </div>
 
-        {/* Duration — flex-1 so it stretches to fill remaining width */}
+        {/* Duration */}
         <div className="relative flex-1">
-          <Pill
-            onClick={() => { setDurOpen((o) => !o); setRatioOpen(false); setModeOpen(false); }}
-            fullWidth
-          >
+          <Pill fullWidth onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
             <span className="text-[11px] text-[#AAAAAA] tabular-nums">{duration}s</span>
             <ChevronIcon open={durOpen} />
           </Pill>
           {durOpen && (
             <FloatMenu fullWidth>
-              {DURATIONS.map((d) => (
-                <FloatItem
-                  key={d}
-                  active={duration === d}
-                  onClick={() => { updateNodeData(id, { duration: d }); setDurOpen(false); }}
-                >
+              {(durations as readonly number[]).map((d) => (
+                <FloatItem key={d} active={duration === d} onClick={() => { updateNodeData(id, { duration: d }); setDurOpen(false); }}>
                   {d}s
                 </FloatItem>
               ))}
@@ -279,68 +329,93 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
         </div>
       </div>
 
-      {/* ── Row 2: resolution · sound · gear · generate ─────────────── */}
+      {/* ── Row 2: model-specific controls ───────────────────────────── */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-t border-[#111]">
-        {/* Resolution */}
-        <div className="relative">
-          <Pill onClick={() => { setModeOpen((o) => !o); setRatioOpen(false); setDurOpen(false); }}>
-            <span className="text-[11px] text-[#AAAAAA]">{klingMode === "pro" ? "1080p" : "720p"}</span>
-            <ChevronIcon open={modeOpen} />
-          </Pill>
-          {modeOpen && (
-            <FloatMenu>
-              {(["std", "pro"] as const).map((m) => (
-                <FloatItem
-                  key={m}
-                  active={klingMode === m}
-                  onClick={() => { updateNodeData(id, { klingMode: m }); setModeOpen(false); }}
-                >
-                  {m === "std" ? "720p" : "1080p"}
-                </FloatItem>
-              ))}
-            </FloatMenu>
-          )}
-        </div>
+        {/* Mode picker — shown for any model with cfg.modes (Kling: 720p/1080p, Grok: fun/normal/spicy) */}
+        {cfg.modes && (
+          <div className="relative">
+            <Pill onClick={() => { setModeOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setDurOpen(false); setGrokResOpen(false); }}>
+              <span className="text-[11px] text-[#AAAAAA]">
+                {cfg.modes.find((m) => m.value === mode)?.label ?? mode}
+              </span>
+              <ChevronIcon open={modeOpen} />
+            </Pill>
+            {modeOpen && (
+              <FloatMenu>
+                {cfg.modes.map((m) => (
+                  <FloatItem key={m.value} active={mode === m.value} onClick={() => { updateNodeData(id, { klingMode: m.value }); setModeOpen(false); }}>
+                    {m.label}
+                  </FloatItem>
+                ))}
+              </FloatMenu>
+            )}
+          </div>
+        )}
 
-        {/* Sound toggle */}
-        <button
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={() => updateNodeData(id, { sound: !sound })}
-          className="flex items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors"
-          style={{ background: "#111317" }}
-        >
-          <ToggleSwitch on={sound} />
-          <span className="text-[11px] text-[#AAAAAA]">Sound</span>
-        </button>
+        {/* Resolution picker — shown for models with cfg.resolutions (Grok) */}
+        {cfg.resolutions && (
+          <div className="relative">
+            <Pill onClick={() => { setGrokResOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setDurOpen(false); setModeOpen(false); }}>
+              <span className="text-[11px] text-[#AAAAAA]">{resolution}</span>
+              <ChevronIcon open={grokResOpen} />
+            </Pill>
+            {grokResOpen && (
+              <FloatMenu>
+                {cfg.resolutions.map((r) => (
+                  <FloatItem key={r} active={resolution === r} onClick={() => { updateNodeData(id, { grokResolution: r }); setGrokResOpen(false); }}>
+                    {r}
+                  </FloatItem>
+                ))}
+              </FloatMenu>
+            )}
+          </div>
+        )}
 
-        {/* Gear */}
-        <button
-          onMouseDown={(e) => e.stopPropagation()}
-          className="w-6 h-6 flex items-center justify-center rounded-full text-[#444] hover:text-[#888] transition-colors"
-          style={{ background: "#111317" }}
-        >
-          <GearIcon />
-        </button>
+        {/* Sound toggle — shown for models with cfg.sound (Kling) */}
+        {cfg.sound && (
+          <>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => updateNodeData(id, { sound: !sound })}
+              className="flex items-center gap-2 rounded-full px-2.5 py-1.5 transition-colors"
+              style={{ background: "#111317" }}
+            >
+              <ToggleSwitch on={sound} />
+              <span className="text-[11px] text-[#AAAAAA]">Sound</span>
+            </button>
 
-        {/* Status dot + spacer */}
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-6 h-6 flex items-center justify-center rounded-full text-[#444] hover:text-[#888] transition-colors"
+              style={{ background: "#111317" }}
+            >
+              <GearIcon />
+            </button>
+          </>
+        )}
+
+        {/* Reference image indicator — shown when resource handle is active and connected */}
+        {activeHandles.has("resource") && hasResource && (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full" style={{ background: "#111317" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c] shrink-0" />
+            <span className="text-[10px] text-[#AAAAAA]">Img ref</span>
+          </div>
+        )}
+
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ml-auto ${STATUS_DOT[status]}`} />
 
-        {/* Generate button */}
         <button
           onMouseDown={(e) => e.stopPropagation()}
           onClick={generate}
           disabled={busy}
           className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-[#E8E8E8] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
         >
-          {busy ? (
-            <Spinner size="sm" dark />
-          ) : (
-            <svg width="9" height="10" viewBox="0 0 9 10" fill="#0A0C0E">
-              <path d="M8.5 4.634a.5.5 0 0 1 0 .732l-7.5 4.5A.5.5 0 0 1 .25 9.5v-9A.5.5 0 0 1 1 .17l7.5 4.464Z" />
-            </svg>
-          )}
+          <svg width="9" height="10" viewBox="0 0 9 10" fill="#0A0C0E">
+            <path d="M8.5 4.634a.5.5 0 0 1 0 .732l-7.5 4.5A.5.5 0 0 1 .25 9.5v-9A.5.5 0 0 1 1 .17l7.5 4.464Z" />
+          </svg>
         </button>
       </div>
+
     </div>
   );
 }
@@ -348,26 +423,18 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function Pill({
-  children,
-  onClick,
-  interactive = true,
-  fullWidth   = false,
+  children, onClick, interactive = true, fullWidth = false,
 }: {
-  children:     React.ReactNode;
-  onClick?:     () => void;
-  interactive?: boolean;
-  fullWidth?:   boolean;
+  children: React.ReactNode; onClick?: () => void;
+  interactive?: boolean; fullWidth?: boolean;
 }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag
       onMouseDown={onClick ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 ${
-        fullWidth ? "w-full justify-between" : ""
-      } ${
-        interactive && onClick ? "hover:brightness-125 transition-all cursor-pointer" : ""
-      }`}
+      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 ${fullWidth ? "w-full justify-between" : ""} ${interactive && onClick ? "hover:brightness-125 transition-all cursor-pointer" : ""
+        }`}
       style={{ background: "#111317" }}
     >
       {children}
@@ -383,22 +450,12 @@ function FloatMenu({ children, fullWidth = false }: { children: React.ReactNode;
   );
 }
 
-function FloatItem({
-  children,
-  active,
-  onClick,
-}: {
-  children: React.ReactNode;
-  active: boolean;
-  onClick: () => void;
-}) {
+function FloatItem({ children, active, onClick }: { children: React.ReactNode; active: boolean; onClick: () => void }) {
   return (
     <button
       onMouseDown={(e) => e.stopPropagation()}
       onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[11px] hover:bg-[#161A1E] transition-colors ${
-        active ? "text-white font-medium" : "text-[#8D8E89]"
-      }`}
+      className={`w-full px-3 py-2 text-left text-[11px] hover:bg-[#161A1E] transition-colors ${active ? "text-white font-medium" : "text-[#8D8E89]"}`}
     >
       {children}
     </button>
@@ -406,16 +463,9 @@ function FloatItem({
 }
 
 function AspectIcon({ ratio }: { ratio: string }) {
-  const [w, h] =
-    ratio === "16:9" ? [11, 7] : ratio === "9:16" ? [7, 11] : [9, 9];
+  const [w, h] = ratio === "16:9" ? [11, 7] : ratio === "9:16" ? [7, 11] : ratio === "2:3" ? [7, 11] : ratio === "3:2" ? [11, 7] : [9, 9];
   return (
-    <svg
-      width={w} height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      fill="none"
-      stroke="#666"
-      strokeWidth="1.2"
-    >
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none" stroke="#666" strokeWidth="1.2">
       <rect x="0.6" y="0.6" width={w - 1.2} height={h - 1.2} rx="0.8" />
     </svg>
   );
@@ -423,11 +473,8 @@ function AspectIcon({ ratio }: { ratio: string }) {
 
 function ChevronIcon({ open = false }: { open?: boolean }) {
   return (
-    <svg
-      width="7" height="7" viewBox="0 0 8 8" fill="none"
-      stroke="#555" strokeWidth="1.5" strokeLinecap="round"
-      className={`shrink-0 transition-transform duration-100 ${open ? "rotate-180" : ""}`}
-    >
+    <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round"
+      className={`shrink-0 transition-transform duration-100 ${open ? "rotate-180" : ""}`}>
       <path d="M1 2.5 4 5.5 7 2.5" />
     </svg>
   );
@@ -435,23 +482,8 @@ function ChevronIcon({ open = false }: { open?: boolean }) {
 
 function ToggleSwitch({ on }: { on: boolean }) {
   return (
-    <div
-      className="relative shrink-0 rounded-full transition-colors"
-      style={{
-        width:      32,
-        height:     18,
-        background: on ? "rgba(119,229,68,0.25)" : "#2A2A2A",
-      }}
-    >
-      <div
-        className="absolute top-[3px] rounded-full transition-transform"
-        style={{
-          width:      12,
-          height:     12,
-          background: on ? "#77E544" : "#555",
-          transform:  on ? "translateX(17px)" : "translateX(3px)",
-        }}
-      />
+    <div className="relative shrink-0 rounded-full transition-colors" style={{ width: 32, height: 18, background: on ? "rgba(119,229,68,0.25)" : "#2A2A2A" }}>
+      <div className="absolute top-[3px] rounded-full transition-transform" style={{ width: 12, height: 12, background: on ? "#77E544" : "#555", transform: on ? "translateX(17px)" : "translateX(3px)" }} />
     </div>
   );
 }
@@ -465,18 +497,6 @@ function GearIcon() {
   );
 }
 
-function Spinner({ size = "md", dark = false }: { size?: "sm" | "md"; dark?: boolean }) {
-  const cls = size === "sm" ? "w-3 h-3" : "w-5 h-5";
-  return (
-    <span
-      className={`${cls} rounded-full animate-spin inline-block`}
-      style={{
-        border:    `1.5px solid ${dark ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.15)"}`,
-        borderTop: dark ? "1.5px solid #0A0C0E" : "1.5px solid #77E544",
-      }}
-    />
-  );
-}
 
 function VideoNodeIcon() {
   return (
@@ -487,14 +507,8 @@ function VideoNodeIcon() {
   );
 }
 
-// ── Handle icons ──────────────────────────────────────────────────────────────
-
 function PromptIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="white">
-      <path d="M2 2h12v2.5H9.5V14h-3V4.5H2V2z" />
-    </svg>
-  );
+  return <svg width="12" height="12" viewBox="0 0 16 16" fill="white"><path d="M2 2h12v2.5H9.5V14h-3V4.5H2V2z" /></svg>;
 }
 
 function FrameStartIcon() {

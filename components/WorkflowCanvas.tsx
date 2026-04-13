@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -64,30 +64,30 @@ export default function WorkflowCanvas() {
   // its paired locked prompt (deletable:false nodes are skipped by React Flow
   // normally, but we want them gone when their generator is removed).
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    const removedGenIds = changes
+    const removedIds = changes
       .filter((c): c is Extract<NodeChange, { type: "remove" }> => c.type === "remove")
-      .map((c) => c.id)
-      .filter((id) => nodes.find((n) => n.id === id)?.type === "generateNode");
+      .map((c) => c.id);
 
-    if (removedGenIds.length > 0) {
-      const pairedPromptIds = edges
-        .filter(
-          (e) =>
-            removedGenIds.includes(e.target) &&
-            e.targetHandle === "prompt" &&
-            e.deletable === false
-        )
-        .map((e) => e.source);
+    const removedGenIds = removedIds.filter(
+      (id) => nodes.find((n) => n.id === id)?.type === "generateNode"
+    );
 
-      if (pairedPromptIds.length > 0) {
-        const extra: Extract<NodeChange, { type: "remove" }>[] =
-          pairedPromptIds.map((id) => ({ type: "remove", id }));
-        _onNodesChange([...changes, ...extra]);
-        return;
-      }
-    }
+    // When a generateNode is removed, also remove its locked paired prompt node
+    const pairedPromptIds = edges
+      .filter(
+        (e) =>
+          removedGenIds.includes(e.target) &&
+          e.targetHandle === "prompt" &&
+          e.deletable === false
+      )
+      .map((e) => e.source)
+      // Don't add if already in the changes list
+      .filter((id) => !removedIds.includes(id));
 
-    _onNodesChange(changes);
+    const extra: Extract<NodeChange, { type: "remove" }>[] =
+      pairedPromptIds.map((id) => ({ type: "remove", id }));
+
+    _onNodesChange(extra.length > 0 ? [...changes, ...extra] : changes);
   }, [_onNodesChange, nodes, edges]);
 
   // ── Sidebar drag-and-drop ────────────────────────────────────────────────────
@@ -148,6 +148,92 @@ export default function WorkflowCanvas() {
       data: { label: type, status: "idle" },
     });
   }, [addNode, insertEdge]);
+
+  // ── Copy / Paste ─────────────────────────────────────────────────────────────
+  const clipboardRef = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
+  const mousePosRef  = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const handleCopy = useCallback(() => {
+    const selected = nodes.filter((n) => n.selected);
+    if (selected.length === 0) return;
+    const selectedIds = new Set(selected.map((n) => n.id));
+
+    // For every selected generateNode, pull in its locked paired prompt node too
+    for (const n of selected) {
+      if (n.type !== "generateNode") continue;
+      const pairedEdge = edges.find(
+        (e) => e.target === n.id && e.targetHandle === "prompt" && e.deletable === false
+      );
+      if (pairedEdge && !selectedIds.has(pairedEdge.source)) {
+        selectedIds.add(pairedEdge.source);
+      }
+    }
+
+    const allNodes = nodes.filter((n) => selectedIds.has(n.id));
+    const selectedEdges = edges.filter(
+      (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
+    );
+    clipboardRef.current = { nodes: allNodes, edges: selectedEdges };
+  }, [nodes, edges]);
+
+  const handlePaste = useCallback(() => {
+    if (!clipboardRef.current) return;
+    const { nodes: copied, edges: copiedEdges } = clipboardRef.current;
+
+    // Convert current mouse screen position → canvas position
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const { x: panX, y: panY, zoom } = viewportRef.current;
+    const cursorCanvas = {
+      x: (mousePosRef.current.x - rect.left - panX) / zoom,
+      y: (mousePosRef.current.y - rect.top  - panY) / zoom,
+    };
+
+    // Find the bounding-box center of the copied group
+    const xs = copied.map((n) => n.position.x);
+    const ys = copied.map((n) => n.position.y);
+    const groupCenter = {
+      x: (Math.min(...xs) + Math.max(...xs)) / 2,
+      y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    };
+
+    const idMap = new Map<string, string>();
+    for (const n of copied) {
+      const newId = `${n.type}-${uid()}`;
+      idMap.set(n.id, newId);
+      addNode({
+        ...n,
+        id: newId,
+        selected: false,
+        position: {
+          x: cursorCanvas.x + (n.position.x - groupCenter.x),
+          y: cursorCanvas.y + (n.position.y - groupCenter.y),
+        },
+        data: { ...n.data, status: n.data.status === "running" ? "idle" : n.data.status },
+      });
+    }
+
+    for (const e of copiedEdges) {
+      const src = idMap.get(e.source);
+      const tgt = idMap.get(e.target);
+      if (!src || !tgt) continue;
+      insertEdge({ ...e, id: `edge-${uid()}`, source: src, target: tgt });
+    }
+  }, [addNode, insertEdge]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ignore when typing in an input / textarea
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
+      if (mod && e.key === "v") { e.preventDefault(); handlePaste(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [handleCopy, handlePaste]);
 
   // ── Edge drop → node picker ──────────────────────────────────────────────────
   const [dropState, setDropState] = useState<DropState | null>(null);
@@ -246,12 +332,18 @@ export default function WorkflowCanvas() {
     [],
   );
 
+  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+
   const runAll = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) {
+      setAuthModalOpen(true);
+      return;
+    }
+
     setIsRunning(true);
     setLog([]);
     push("Running workflow…");
-
-    const token = await getAccessToken();
     const order = topoSort(nodes, edges);
 
     for (const nodeId of order) {
@@ -403,7 +495,11 @@ export default function WorkflowCanvas() {
   }, []);
 
   return (
-    <div ref={wrapperRef} className="flex-1 flex flex-col min-w-0 h-full">
+    <div
+      ref={wrapperRef}
+      className="flex-1 flex flex-col min-w-0 h-full"
+      onMouseMove={(e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -419,8 +515,11 @@ export default function WorkflowCanvas() {
         fitView
         colorMode="dark"
         className="flex-1"
-        // Right drag pans; left drag selects (default ReactFlow behaviour)
+        // Right-click drag pans; left-click drag draws selection box
         panOnDrag={[2]}
+        selectionOnDrag
+        deleteKeyCode={["Delete", "Backspace"]}
+        multiSelectionKeyCode="Shift"
         panOnScroll
         defaultEdgeOptions={{ animated: false }}
         connectionLineStyle={{

@@ -1,34 +1,26 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
 import { resolveInputs } from "@/lib/executor";
 
 type GenerateNodeType = Node<NodeData, "generateNode">;
 
-// ── Models ────────────────────────────────────────────────────────────────────
+import { IMAGE_MODELS } from "@/lib/modelConfig";
 
-const MODELS = [
-  { id: "nano-banana-2", name: "Nano Banana 2", meta: "Google" },
-  { id: "z-image",       name: "Z-Image",       meta: "Z-AI"  },
-];
-
-// ── Per-model capabilities ────────────────────────────────────────────────────
-
-const MODEL_CAPS: Record<string, { supportsImages: boolean; supportsQuality: boolean; ratios: string[] }> = {
-  "nano-banana-2": {
-    supportsImages:  true,
-    supportsQuality: true,
-    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2", "21:9"],
-  },
-  "z-image": {
-    supportsImages:  false,
-    supportsQuality: false,
-    ratios: ["1:1", "4:3", "3:4", "16:9", "9:16"],
-  },
-};
-
+// Derived from config — no hardcoding needed
+const MODELS     = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
+const MODEL_CAPS = Object.fromEntries(
+  IMAGE_MODELS.map((m) => [m.id, {
+    supportsImages:  m.supportsImages,
+    supportsQuality: m.supportsQuality,
+    ratios:          m.ratios,
+    maxImages:       m.maxImages,
+    qualityOptions:  m.apiInput.qualityOptions,
+  }])
+);
 const DEFAULT_CAPS = MODEL_CAPS["nano-banana-2"];
 
 // ── Aspect ratios ─────────────────────────────────────────────────────────────
@@ -59,16 +51,19 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
   const updateNodeData       = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize       = useWorkflowStore((s) => s.updateNodeSize);
   const removeEdgesForHandle = useWorkflowStore((s) => s.removeEdgesForHandle);
+  const setAuthModalOpen     = useWorkflowStore((s) => s.setAuthModalOpen);
   const nodes                = useWorkflowStore((s) => s.nodes);
   const edges                = useWorkflowStore((s) => s.edges);
   const debugMode            = useWorkflowStore((s) => s.debugMode);
 
+  const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
 
   const [modelOpen, setModelOpen]     = useState(false);
   const [ratioOpen, setRatioOpen]     = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [loading, setLoading]         = useState(false);
+  const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
 
   const model       = (data.model as string) ?? "nano-banana-2";
   const caps        = MODEL_CAPS[model] ?? DEFAULT_CAPS;
@@ -83,6 +78,18 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
   const [rw, rh] = aspectRatio.split(":").map(Number);
   const cssRatio = `${rw} / ${rh}`;
   const busy     = loading || status === "running";
+
+  // Re-sync edge anchor positions whenever the node resizes
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (cardRef.current) {
+        const { offsetWidth, offsetHeight } = cardRef.current;
+        updateNodeSize(id, offsetWidth, offsetHeight);
+      }
+      updateNodeInternals(id);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [id, aspectRatio, data.imageNaturalRatio, updateNodeSize, updateNodeInternals]);
 
   const closeDropdowns = () => {
     setModelOpen(false);
@@ -130,6 +137,9 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
   )?.source;
 
   const generate = useCallback(async () => {
+    const { data } = await createClient().auth.getSession();
+    if (!data.session) { setAuthModalOpen(true); return; }
+
     const upstream  = resolveInputs(id, nodes as Node<NodeData>[], edges);
     const prompt    = upstream.prompt;
     const imageUrls = upstream.imageUrls;
@@ -144,6 +154,9 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
 
     if (debugMode) {
       console.log(`[DEBUG] node=${id}`, payload);
+      setLoading(true);
+      await new Promise((r) => setTimeout(r, 3000));
+      setLoading(false);
       return;
     }
 
@@ -171,7 +184,7 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
     <div
       ref={cardRef}
       className="node-card w-full flex flex-col"
-      style={{ minWidth: 280 }}
+      style={{ minWidth: 280, ...(busy ? { animation: "node-pulse-glow 2.4s ease-in-out infinite" } : {}) }}
       onMouseLeave={closeDropdowns}
     >
       <CornerResizer minWidth={220} minHeight={80} keepAspectRatio={!!data.imageUrl} />
@@ -184,6 +197,8 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
           id="prompt"
           style={{ top: "36%" }}
           className="node-handle-icon node-handle-icon-prompt"
+          onMouseEnter={() => setHoveredHandle("prompt")}
+          onMouseLeave={() => setHoveredHandle(null)}
         >
           <PromptIcon />
         </Handle>
@@ -195,9 +210,37 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
             id="image"
             style={{ top: "72%" }}
             className="node-handle-icon node-handle-icon-image"
+            onMouseEnter={() => setHoveredHandle("image")}
+            onMouseLeave={() => setHoveredHandle(null)}
           >
             <PhotoIcon />
           </Handle>
+        )}
+
+        {/* ── Handle tooltip ────────────────────────────────────────────── */}
+        {hoveredHandle && (
+          <div
+            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            style={{
+              top:       hoveredHandle === "prompt" ? "36%" : "72%",
+              left:      0,
+              transform: "translate(calc(-100% - 34px), -50%)",
+              background: "#1A1A1A",
+              border: `1px solid ${hoveredHandle === "prompt" ? "#77E54433" : "#818cf833"}`,
+              color: "#CCCCCC",
+            }}
+          >
+            <span
+              style={{ color: hoveredHandle === "prompt" ? "#77E544" : "#818cf8" }}
+              className="mr-1.5"
+            >●</span>
+            {hoveredHandle === "prompt"
+              ? "Text prompt"
+              : caps.maxImages > 0
+                ? `Reference image (up to ${caps.maxImages})`
+                : "Reference image"
+            }
+          </div>
         )}
 
         <Handle type="source" position={Position.Right} className="node-handle node-handle-source" />
@@ -240,12 +283,6 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
             </div>
           )}
 
-          {/* Loading overlay */}
-          {busy && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <Spinner />
-            </div>
-          )}
         </div>
 
         {/* ── Control bar ─────────────────────────────────────────────────
@@ -254,29 +291,36 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
           {/* Status dot */}
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[status]}`} />
 
-          {/* Model dropdown */}
+          {/* Model dropdown — locked once a result exists */}
           <div className="relative flex-1 min-w-0">
             <button
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setQualityOpen(false); }}
-              className="flex items-center gap-1 w-full text-left"
+              onClick={() => {
+                if (data.imageUrl) return;
+                setModelOpen((o) => !o); setRatioOpen(false); setQualityOpen(false);
+              }}
+              className={`flex items-center gap-1 w-full text-left ${data.imageUrl ? "cursor-default" : ""}`}
+              title={data.imageUrl ? "Clear the image to change model" : undefined}
             >
-              <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors truncate">
+              <span className={`text-[11px] truncate transition-colors ${data.imageUrl ? "text-[#555]" : "text-[#8D8E89] hover:text-white"}`}>
                 {modelInfo.name}
               </span>
-              <ChevronIcon open={modelOpen} />
+              {!data.imageUrl && <ChevronIcon open={modelOpen} />}
             </button>
 
-            {modelOpen && (
+            {modelOpen && !data.imageUrl && (
               <div className="absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl">
                 {MODELS.map((m) => (
                   <button
                     key={m.id}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => {
-                      const newCaps    = MODEL_CAPS[m.id] ?? DEFAULT_CAPS;
-                      const validRatio = newCaps.ratios.includes(aspectRatio) ? aspectRatio : "1:1";
-                      updateNodeData(id, { model: m.id, aspectRatio: validRatio });
+                      const newCaps     = MODEL_CAPS[m.id] ?? DEFAULT_CAPS;
+                      const validRatio  = newCaps.ratios.includes(aspectRatio) ? aspectRatio : "1:1";
+                      const validQuality = newCaps.qualityOptions && !newCaps.qualityOptions.includes(quality as "1k" | "2k" | "4k")
+                        ? newCaps.qualityOptions[0]
+                        : quality;
+                      updateNodeData(id, { model: m.id, aspectRatio: validRatio, quality: validQuality });
                       // Unlink any attached images if the new model doesn't support them
                       if (!newCaps.supportsImages) removeEdgesForHandle(id, "image");
                       setModelOpen(false);
@@ -363,7 +407,7 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
                       { id: "1k", label: "1K", meta: "Standard" },
                       { id: "2k", label: "2K", meta: "High" },
                       { id: "4k", label: "4K", meta: "Maximum" },
-                    ].map((q) => (
+                    ].filter((q) => !caps.qualityOptions || caps.qualityOptions.includes(q.id as "1k" | "2k" | "4k")).map((q) => (
                       <button
                         key={q.id}
                         onMouseDown={(e) => e.stopPropagation()}
@@ -392,16 +436,13 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
             disabled={busy}
             className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full border border-[#2A1A14] hover:border-[#77E544] text-[#8D8E89] hover:text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {busy ? (
-              <Spinner size="sm" />
-            ) : (
-              <svg width="7" height="8" viewBox="0 0 7 8" fill="currentColor">
-                <path d="M6.5 3.634a.5.5 0 0 1 0 .732L1 7.83A.5.5 0 0 1 .25 7.464V.536A.5.5 0 0 1 1 .17l5.5 3.464Z"/>
-              </svg>
-            )}
+            <svg width="7" height="8" viewBox="0 0 7 8" fill="currentColor">
+              <path d="M6.5 3.634a.5.5 0 0 1 0 .732L1 7.83A.5.5 0 0 1 .25 7.464V.536A.5.5 0 0 1 1 .17l5.5 3.464Z"/>
+            </svg>
           </button>
 
         </div>
+
     </div>
   );
 }
