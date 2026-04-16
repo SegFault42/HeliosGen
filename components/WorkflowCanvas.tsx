@@ -15,6 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { VIDEO_MODELS } from "@/lib/modelConfig";
 import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE } from "@/lib/nodeTypes";
@@ -305,6 +306,44 @@ export default function WorkflowCanvas() {
     return () => document.removeEventListener("keydown", onKey);
   }, [handleCopy, handlePaste]);
 
+  // ── Auto-trim: check video duration vs model max on new connections ──────────
+  const handleConnect = useCallback((connection: Connection) => {
+    onConnect(connection);
+
+    const h = connection.targetHandle;
+    if (h !== "resource" && h !== "videoRef") return;
+
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    if (sourceNode?.type !== "videoInputNode") return;
+    if (targetNode?.type !== "videoGeneratorNode") return;
+
+    const videoModelId = (targetNode.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const cfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
+    if (!cfg) return;
+
+    // Pick the right cap: videoRef uses videoRefMaxDuration, resource uses durationMax
+    const maxDuration = h === "videoRef"
+      ? cfg.apiInput.videoRefMaxDuration
+      : cfg.apiInput.durationMax > 0 ? cfg.apiInput.durationMax : undefined;
+    if (!maxDuration) return;
+
+    const videoDuration = sourceNode.data?.videoDuration as number | undefined;
+    if (!videoDuration) return;
+
+    // If a trim is already applied, use the trimmed duration — not the full video length
+    const trimStart = sourceNode.data?.trimStart as number | undefined;
+    const trimEnd   = sourceNode.data?.trimEnd   as number | undefined;
+    const effectiveDuration = (trimStart !== undefined && trimEnd !== undefined)
+      ? trimEnd - trimStart
+      : videoDuration;
+
+    if (effectiveDuration <= maxDuration) return;
+
+    // Video exceeds model limit — ask the VideoInputNode to open the trimmer
+    updateNodeData(connection.source, { triggerTrimMaxDuration: maxDuration });
+  }, [onConnect, nodes, updateNodeData]);
+
   // ── Edge drop → node picker ──────────────────────────────────────────────────
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [log, setLog] = useState<{ text: string; ok: boolean }[]>([]);
@@ -322,11 +361,9 @@ export default function WorkflowCanvas() {
       // Prompt handles only accept text (prompt) nodes
       if (connection.targetHandle === "prompt" && source?.type !== "promptNode") return false;
 
-      // videoRef handle only accepts video nodes (videoInputNode or videoGeneratorNode), 1 connection max
+      // videoRef handle only accepts video nodes
       if (connection.targetHandle === "videoRef") {
         if (source?.type !== "videoInputNode" && source?.type !== "videoGeneratorNode") return false;
-        const taken = edges.some((e) => e.target === connection.target && e.targetHandle === "videoRef");
-        if (taken) return false;
       }
 
       // Image/resource handles do not accept text (prompt) nodes
@@ -365,6 +402,15 @@ export default function WorkflowCanvas() {
 
       // Video generator: prompt/startFrame/endFrame accept 1 each; resource accepts up to 3
       if (target?.type === "videoGeneratorNode") {
+        const videoModelId = (target.data?.videoModel as string | undefined) ?? "kling-3.0";
+        const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
+        const isMotionControl = videoCfg?.apiInput.useMotionControl === true;
+
+        // Only allow handles that the selected model actually supports
+        if (connection.targetHandle && !videoCfg?.handles.includes(connection.targetHandle as never)) {
+          return false;
+        }
+
         if (
           connection.targetHandle === "prompt" ||
           connection.targetHandle === "startFrame" ||
@@ -376,15 +422,24 @@ export default function WorkflowCanvas() {
           if (taken) return false;
         }
         if (connection.targetHandle === "resource") {
+          // Motion control uses videoRef instead — resource is blocked above via handles check
+          const maxResources = isMotionControl ? 0 : 3;
           const count = edges.filter(
             (e) => e.target === connection.target && e.targetHandle === "resource"
           ).length;
-          if (count >= 3) return false;
+          if (count >= maxResources) return false;
           // Same source can't connect twice via resource
           const dup = edges.some(
             (e) => e.source === connection.source && e.target === connection.target && e.targetHandle === "resource"
           );
           if (dup) return false;
+        }
+        if (connection.targetHandle === "videoRef") {
+          // Motion control: only 1 reference video allowed
+          const taken = edges.some(
+            (e) => e.target === connection.target && e.targetHandle === "videoRef"
+          );
+          if (taken) return false;
         }
       }
 
@@ -627,7 +682,7 @@ export default function WorkflowCanvas() {
         onEdgesChange={onEdgesChange}
         onEdgeClick={handleEdgeClick}
         onSelectionChange={onSelectionChange}
-        onConnect={onConnect}
+        onConnect={handleConnect}
         onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         onMove={(_, vp) => { viewportRef.current = vp; }}

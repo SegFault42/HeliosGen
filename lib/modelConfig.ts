@@ -212,6 +212,11 @@ export interface VideoModel {
      * modeKey → character_orientation, resolutionKey → mode (720p/1080p)
      */
     useMotionControl?: boolean;
+    /**
+     * Max duration (seconds) accepted for a connected reference video (videoRef handle).
+     * Independent of durationMax which controls the generated output length.
+     */
+    videoRefMaxDuration?: number;
     /** Any other static fields to include in the input object */
     extra?: Record<string, unknown>;
   };
@@ -306,6 +311,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       modeKey: "character_orientation",  // mode selector → character_orientation
       resolutionKey: "mode",             // resolution selector → mode (720p / 1080p)
       useMotionControl: true,
+      videoRefMaxDuration: 30,           // reference video may not exceed 30 s
     },
   },
 ];
