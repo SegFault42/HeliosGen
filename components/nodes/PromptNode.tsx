@@ -163,8 +163,16 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   useEffect(() => {
     const el = textZoneRef.current;
     if (!el) return;
-    // Block mousedown (and thus drag/text-selection) only when the node is selected
-    const onMouseDown = (e: MouseEvent) => { if (selectedRef.current) e.stopPropagation(); };
+    const onMouseDown = (e: MouseEvent) => {
+      if (selectedRef.current) {
+        // Selected: block node drag so the user can place cursor / select text
+        e.stopPropagation();
+      } else {
+        // Unselected: let ReactFlow drag the node, but prevent the browser from
+        // starting a text-selection gesture on the textarea at the same time
+        e.preventDefault();
+      }
+    };
     // Block wheel only when the node is selected (otherwise canvas zooms normally).
     // No passive:true so stopPropagation is fully honoured; stopImmediatePropagation
     // also blocks any other listeners registered on this same element.
