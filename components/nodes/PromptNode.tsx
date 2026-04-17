@@ -7,15 +7,6 @@ import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import CornerResizer from "./CornerResizer";
 
-function cfImg(url: string, width: number): string {
-  try {
-    const u = new URL(url);
-    if (u.hostname.endsWith(".r2.dev")) return url;
-    return `${u.origin}/cdn-cgi/image/width=${width},quality=75,format=webp${u.pathname}`;
-  } catch {
-    return url;
-  }
-}
 
 type PromptNodeType = Node<NodeData, "promptNode">;
 
@@ -28,8 +19,14 @@ function getMentionQuery(text: string, cursor: number): string | null {
   return match ? match[1] : null;
 }
 
-/** Render text with exact @NodeLabel matches highlighted as chips. */
-function renderWithMentions(text: string, knownLabels: string[]): ReactNode {
+type MentionPreview = { imageUrl?: string; videoUrl?: string };
+
+/** Render text with exact @NodeLabel matches highlighted as chips + inline preview thumbnails. */
+function renderWithMentions(
+  text: string,
+  knownLabels: string[],
+  previews: Map<string, MentionPreview> = new Map(),
+): ReactNode {
   if (!text) return null;
   const sorted = [...knownLabels].sort((a, b) => b.length - a.length);
   const parts: ReactNode[] = [];
@@ -45,7 +42,28 @@ function renderWithMentions(text: string, knownLabels: string[]): ReactNode {
     }
     if (!earliest) { parts.push(<span key={key++}>{rest}</span>); break; }
     if (earliest.idx > 0) parts.push(<span key={key++}>{rest.slice(0, earliest.idx)}</span>);
-    parts.push(<span key={key++} className="mention-chip">@{earliest.label}</span>);
+
+    const preview = previews.get(earliest.label);
+    parts.push(
+      <span key={key++} className="mention-chip" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+        {preview?.videoUrl ? (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            src={preview.videoUrl}
+            autoPlay loop muted playsInline
+            style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
+          />
+        ) : preview?.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={preview.imageUrl}
+            alt=""
+            style={{ width: 14, height: 14, objectFit: "cover", borderRadius: 2, flexShrink: 0 }}
+          />
+        ) : null}
+        @{earliest.label}
+      </span>
+    );
     rest = rest.slice(earliest.idx + earliest.label.length + 1);
   }
   return <>{parts}</>;
@@ -117,6 +135,16 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   });
 
   const knownLabels = mentionableNodes.map((n) => n.data.label as string).filter(Boolean);
+
+  const mentionPreviews = new Map<string, MentionPreview>(
+    mentionableNodes.map((n) => [
+      n.data.label as string,
+      {
+        imageUrl: (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined,
+        videoUrl: n.data.videoUrl as string | undefined,
+      },
+    ])
+  );
 
   const filteredMentions =
     mentionQuery !== null
@@ -257,7 +285,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           aria-hidden
           className="absolute inset-0 px-3 py-2.5 text-[12px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words overflow-hidden select-none"
         >
-          {renderWithMentions(localText, knownLabels)}
+          {renderWithMentions(localText, knownLabels, mentionPreviews)}
           {"\u200b"}
         </div>
 
@@ -374,6 +402,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           {filteredMentions.map((n, idx) => {
             const label    = n.data.label as string;
             const imageUrl =
+              (n.data.r2Url      as string | undefined) ??
               (n.data.inputImage as string | undefined) ??
               (n.data.imageUrl   as string | undefined);
             const videoUrl = n.data.videoUrl as string | undefined;
@@ -390,9 +419,18 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
                 <div className="w-6 h-6 rounded bg-[#1A1A1A] overflow-hidden shrink-0 flex items-center justify-center">
                   {imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={cfImg(imageUrl, 64)} alt="" className="w-full h-full object-cover" />
+                    <img src={imageUrl} alt="" className="w-full h-full object-cover" />
                   ) : videoUrl ? (
-                    <VideoThumb />
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <video
+                      src={videoUrl}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="w-full h-full"
+                      style={{ objectFit: "cover" }}
+                    />
                   ) : (
                     <EmptyThumb />
                   )}
@@ -414,14 +452,6 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
 
 // ── Small icons ───────────────────────────────────────────────────────────────
 
-function VideoThumb() {
-  return (
-    <svg width="12" height="10" viewBox="0 0 14 12" fill="#818cf8">
-      <rect width="14" height="12" rx="1.5" opacity="0.2" />
-      <path d="M9 6 5.5 4v4z" />
-    </svg>
-  );
-}
 
 function EmptyThumb() {
   return (

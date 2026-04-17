@@ -441,11 +441,11 @@ body {
 }
 
 /* ── @mention chip in PromptNode ─────────────────────────────────────────── */
-/* No padding — must occupy exactly the same space as the raw text in the
-   underlying textarea so the overlay stays pixel-aligned with the cursor. */
 .mention-chip {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
   background: rgba(255, 255, 255, 0.13);
   border-radius: 3px;
   color: #FFFFFF;
+  padding: 0 6px;
 }
