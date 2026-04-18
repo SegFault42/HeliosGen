@@ -13,9 +13,25 @@ const isRemote = (src: string) => src.startsWith("http://") || src.startsWith("h
 
 type ImageInputNodeType = Node<NodeData, "imageInputNode">;
 
-export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeType>) {
-  const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
+export default function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
+  const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
+  const edges           = useWorkflowStore((s) => s.edges);
+  const sourceConnected = edges.some((e) => e.source === id);
   const fileRef        = useRef<HTMLInputElement>(null);
+  const rootRef        = useRef<HTMLDivElement>(null);
+
+  // Instant hide on deselect
+  const prevSelectedRef = useRef(selected);
+  useEffect(() => {
+    const was = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (was && !selected && rootRef.current) {
+      const el = rootRef.current;
+      el.classList.add("handles-no-delay");
+      const t = setTimeout(() => el.classList.remove("handles-no-delay"), 200);
+      return () => { clearTimeout(t); el.classList.remove("handles-no-delay"); };
+    }
+  }, [selected]);
   const nodeImgRef     = useRef<HTMLImageElement>(null);
   const [lightboxOpen, setLightboxOpen]           = useState(false);
   const [lightboxVisible, setLightboxVisible]     = useState(false);
@@ -188,6 +204,7 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
       // Outer: node-card for border/hover/selected styling + overflow:visible for corner handles.
       // aspect-ratio drives height so ReactFlow ResizeObserver auto-sizes the node.
       <div
+        ref={rootRef}
         className={`node-card group${(data.hasError as boolean) ? " node-error-blink" : ""}`}
         style={{
           width: "100%",
@@ -300,7 +317,7 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
         </div>
 
         {/* Handle rendered last so it sits above the image div in stacking order */}
-        <Handle type="source" position={Position.Right} className="node-handle node-handle-source" />
+        <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
 
         <input
           ref={fileRef}
@@ -365,13 +382,14 @@ export default function ImageInputNode({ id, data }: NodeProps<ImageInputNodeTyp
   // Empty state — upload card
   return (
     <div
+      ref={rootRef}
       className={`node-card w-full${(data.hasError as boolean) ? " node-error-blink" : ""}`}
       style={{ minWidth: 200 }}
       onAnimationEnd={(e) => { if (e.animationName === "node-error-blink") updateNodeData(id, { hasError: false }); }}
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
-      <Handle type="source" position={Position.Right} className="node-handle node-handle-source" />
+      <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
 
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div

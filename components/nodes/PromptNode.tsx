@@ -65,6 +65,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   // Desired cursor position after a programmatic text change (insertion / deletion)
   const pendingCursorRef = useRef<number | null>(null);
   const selectedRef      = useRef(selected);
+  const prevSelectedRef  = useRef(selected);
 
   const [mentionQuery,    setMentionQuery]    = useState<string | null>(null);
   const [selectedIdx,    setSelectedIdx]    = useState(0);
@@ -81,7 +82,22 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const popoverPosRef     = useRef<HTMLDivElement | null>(null); // outer positioning div
 
   selectedRef.current = selected;
+
+  // Instant handle hide on deselect
+  useEffect(() => {
+    const was = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (was && !selected && cardRef.current) {
+      const el = cardRef.current;
+      el.classList.add("handles-no-delay");
+      const t = setTimeout(() => el.classList.remove("handles-no-delay"), 200);
+      return () => { clearTimeout(t); el.classList.remove("handles-no-delay"); };
+    }
+  }, [selected]);
+
   const { zoom } = useViewport();
+
+  const sourceConnected = edges.some((e) => e.source === id);
 
   const storePrompt = (data.prompt as string) ?? "";
   const hasError    = !!data.hasError;
@@ -454,7 +470,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
       <Handle
         type="source"
         position={Position.Right}
-        className="node-handle node-handle-source"
+        className={`node-handle node-handle-prompt${sourceConnected ? " node-handle-connected" : ""}`}
       />
 
       {/* ── Inline @mention menu (scales with canvas zoom) ─────────────── */}

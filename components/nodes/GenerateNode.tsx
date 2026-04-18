@@ -141,7 +141,7 @@ function resolveMentions(
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) {
+export default function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
   const updateNodeData       = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize       = useWorkflowStore((s) => s.updateNodeSize);
   const removeEdgesForHandle = useWorkflowStore((s) => s.removeEdgesForHandle);
@@ -153,6 +153,19 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
 
   const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Instant hide on deselect
+  const prevSelectedRef = useRef(selected);
+  useEffect(() => {
+    const was = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (was && !selected && cardRef.current) {
+      const el = cardRef.current;
+      el.classList.add("handles-no-delay");
+      const t = setTimeout(() => el.classList.remove("handles-no-delay"), 200);
+      return () => { clearTimeout(t); el.classList.remove("handles-no-delay"); };
+    }
+  }, [selected]);
 
   const [modelOpen, setModelOpen]     = useState(false);
   const [ratioOpen, setRatioOpen]     = useState(false);
@@ -307,6 +320,10 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
     return () => { cancelled = true; clearInterval(interval); };
   }, [data.taskId, status, id, updateNodeData]);
 
+  const promptConnected = edges.some((e) => e.target === id && e.targetHandle === "prompt");
+  const imageConnected  = edges.some((e) => e.target === id && e.targetHandle === "image");
+  const sourceConnected = edges.some((e) => e.source === id);
+
   // ── Submit generation job ────────────────────────────────────────────────────
   const connectedPromptNodeId = edges.find(
     (e) => e.target === id && e.targetHandle === "prompt"
@@ -379,13 +396,14 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
       <CornerResizer minWidth={220} minHeight={80} keepAspectRatio={!!data.imageUrl} />
       <span className="node-above-label">{data.label as string}</span>
 
-        {/* ── Icon handles ──────────────────────────────────────────────── */}
+        {/* ── Icon handles — bottom-anchored, consistent with other nodes ── */}
+        {/* prompt is top-most; image is closest to bottom */}
         <Handle
           type="target"
           position={Position.Left}
           id="prompt"
-          style={{ top: "36%" }}
-          className="node-handle-icon node-handle-icon-prompt"
+          style={{ top: `calc(100% - ${caps.supportsImages ? 90 : 52}px)` }}
+          className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}`}
           onMouseEnter={() => setHoveredHandle("prompt")}
           onMouseLeave={() => setHoveredHandle(null)}
         >
@@ -397,8 +415,8 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
             type="target"
             position={Position.Left}
             id="image"
-            style={{ top: "72%" }}
-            className="node-handle-icon node-handle-icon-resource"
+            style={{ top: "calc(100% - 52px)" }}
+            className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}`}
             onMouseEnter={() => setHoveredHandle("image")}
             onMouseLeave={() => setHoveredHandle(null)}
           >
@@ -411,7 +429,9 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
           <div
             className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
             style={{
-              top:       hoveredHandle === "prompt" ? "36%" : "72%",
+              top:       hoveredHandle === "prompt"
+                ? `calc(100% - ${caps.supportsImages ? 90 : 52}px)`
+                : "calc(100% - 52px)",
               left:      0,
               transform: "translate(calc(-100% - 34px), -50%)",
               background: "#1A1A1A",
@@ -429,7 +449,7 @@ export default function GenerateNode({ id, data }: NodeProps<GenerateNodeType>) 
           </div>
         )}
 
-        <Handle type="source" position={Position.Right} className="node-handle node-handle-source" />
+        <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
 
         {/* ── Image area — top corners clip to card border-radius ───────── */}
         <div

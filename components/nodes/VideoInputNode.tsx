@@ -13,7 +13,7 @@ type VideoInputNodeType = Node<NodeData, "videoInputNode">;
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
 
-export default function VideoInputNode({ id, data }: NodeProps<VideoInputNodeType>) {
+export default function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const edges           = useWorkflowStore((s) => s.edges);
   const nodes           = useWorkflowStore((s) => s.nodes);
@@ -22,6 +22,20 @@ export default function VideoInputNode({ id, data }: NodeProps<VideoInputNodeTyp
   const videoRef       = useRef<HTMLVideoElement>(null);
   const topVideoRef    = useRef<HTMLVideoElement>(null);
   const localUrlRef    = useRef<string | null>(null);
+  const rootRef        = useRef<HTMLDivElement>(null);
+
+  // Instant hide on deselect
+  const prevSelectedRef = useRef(selected);
+  useEffect(() => {
+    const was = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (was && !selected && rootRef.current) {
+      const el = rootRef.current;
+      el.classList.add("handles-no-delay");
+      const t = setTimeout(() => el.classList.remove("handles-no-delay"), 200);
+      return () => { clearTimeout(t); el.classList.remove("handles-no-delay"); };
+    }
+  }, [selected]);
 
   const [uploading, setUploading]   = useState(false);
   const [uploadErr, setUploadErr]   = useState<string | null>(null);
@@ -88,6 +102,7 @@ export default function VideoInputNode({ id, data }: NodeProps<VideoInputNodeTyp
     (e) => e.source === id && IMAGE_HANDLES.has(e.targetHandle as string)
   );
   const connectedToImageHandle = !!imageEdge;
+  const sourceConnected = edges.some((e) => e.source === id);
   const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
   const capturedFrameRef  = useRef(capturedFrameUrl);
   capturedFrameRef.current = capturedFrameUrl;
@@ -458,13 +473,14 @@ export default function VideoInputNode({ id, data }: NodeProps<VideoInputNodeTyp
   if (baseVideoUrl) {
     return (
       <div
+        ref={rootRef}
         className={`node-card group${hasError ? " node-error-blink" : ""}`}
         style={{ width: "100%", aspectRatio }}
         onAnimationEnd={handleAnimEnd}
       >
         <CornerResizer minWidth={160} minHeight={80} keepAspectRatio />
         <span className="node-above-label">{data.label as string}</span>
-        <Handle type="source" position={Position.Right} className="node-handle node-handle-video" />
+        <Handle type="source" position={Position.Right} className={`node-handle node-handle-video${sourceConnected ? " node-handle-connected" : ""}`} />
 
         <div
           className="relative w-full h-full overflow-hidden rounded-[7px] group/player"
@@ -970,13 +986,14 @@ export default function VideoInputNode({ id, data }: NodeProps<VideoInputNodeTyp
   /* ── Empty state ──────────────────────────────────────────────────────────── */
   return (
     <div
+      ref={rootRef}
       className={`node-card w-full${hasError ? " node-error-blink" : ""}`}
       style={{ minWidth: 200 }}
       onAnimationEnd={handleAnimEnd}
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
-      <Handle type="source" position={Position.Right} className="node-handle node-handle-video" />
+      <Handle type="source" position={Position.Right} className={`node-handle node-handle-video${sourceConnected ? " node-handle-connected" : ""}`} />
 
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div

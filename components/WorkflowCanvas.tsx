@@ -584,6 +584,7 @@ export default function WorkflowCanvas() {
   }, [onConnect, nodes, updateNodeData]);
 
   // ── Edge drop → node picker ──────────────────────────────────────────────────
+  const [isConnecting, setIsConnecting]   = useState(false);
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [log, setLog] = useState<{ text: string; ok: boolean }[]>([]);
 
@@ -691,6 +692,19 @@ export default function WorkflowCanvas() {
     [nodes, edges]
   );
 
+  // Tag the ReactFlow container with the output handle type so CSS can filter compatible inputs
+  const onConnectStart = useCallback((event: MouseEvent | TouchEvent) => {
+    const handle = (event.target as HTMLElement)?.closest?.(".react-flow__handle") as HTMLElement | null;
+    const rf     = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
+    if (!handle || !rf) return;
+    let type = "unknown";
+    if (handle.classList.contains("node-handle-prompt")) type = "prompt";
+    else if (handle.classList.contains("node-handle-source")) type = "image";
+    else if (handle.classList.contains("node-handle-video"))  type = "video";
+    rf.setAttribute("data-connecting-type", type);
+    setIsConnecting(true);
+  }, []);
+
   // Show node-picker when an edge is dragged and released on empty canvas
   const onConnectEnd = useCallback(
     (
@@ -698,6 +712,11 @@ export default function WorkflowCanvas() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       connectionState: any,
     ) => {
+      // Remove connecting-type tag
+      const rf = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
+      rf?.removeAttribute("data-connecting-type");
+      setIsConnecting(false);
+
       // toHandle is set whenever the drag landed on any handle (valid or blocked).
       // isValid is true when the connection was accepted.
       // Either condition means the user wasn't dropping on empty canvas → skip picker.
@@ -947,7 +966,7 @@ export default function WorkflowCanvas() {
           const anySelected = selIds.size > 0;
           return nodes.map((n) => {
             const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id);
-            const isDimmed = anySelected && !isHighlighted;
+            const isDimmed = anySelected && !isHighlighted && !isConnecting;
             const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
             return {
               ...n,
@@ -979,6 +998,7 @@ export default function WorkflowCanvas() {
         onSelectionChange={onSelectionChange}
         onNodeDragStop={handleNodeDragStop}
         onConnect={handleConnect}
+        onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         onMove={(_, vp) => { viewportRef.current = vp; saveViewport(vp); }}

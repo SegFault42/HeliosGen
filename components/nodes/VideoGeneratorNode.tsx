@@ -11,15 +11,20 @@ type VideoGeneratorNodeType = Node<NodeData, "videoGeneratorNode">;
 
 // ── Handles ───────────────────────────────────────────────────────────────────
 
-type HandleDef = { id: string; label: string; topPct: number; className: string };
+type HandleDef = { id: string; label: string; className: string };
 
 const BASE_HANDLES: HandleDef[] = [
-  { id: "prompt",     label: "Text prompt",               topPct: 26, className: "node-handle-icon node-handle-icon-prompt" },
-  { id: "startFrame", label: "Reference image",           topPct: 44, className: "node-handle-icon node-handle-icon-image" },
-  { id: "endFrame",   label: "End frame",                 topPct: 60, className: "node-handle-icon node-handle-icon-image" },
-  { id: "resource",   label: "Reference images (up to 3)",topPct: 77, className: "node-handle-icon node-handle-icon-resource" },
-  { id: "videoRef",   label: "Reference video",           topPct: 77, className: "node-handle-icon node-handle-icon-videoref" },
+  { id: "prompt",     label: "Text prompt",                className: "node-handle-icon node-handle-icon-prompt" },
+  { id: "startFrame", label: "Reference image",            className: "node-handle-icon node-handle-icon-image" },
+  { id: "endFrame",   label: "End frame",                  className: "node-handle-icon node-handle-icon-image" },
+  { id: "resource",   label: "Reference images (up to 3)", className: "node-handle-icon node-handle-icon-resource" },
+  { id: "videoRef",   label: "Reference video",            className: "node-handle-icon node-handle-icon-videoref" },
 ];
+
+// Fixed order for bottom-anchored stacking (top-most first, bottom-most last)
+const HANDLE_ORDER = ["prompt", "startFrame", "endFrame", "resource", "videoRef"];
+const HANDLE_BOTTOM_BASE = 52; // px above node bottom edge
+const HANDLE_SPACING     = 38; // px between handles
 
 const HANDLE_COLORS: Record<string, string> = {
   prompt:     "#77E544",
@@ -107,7 +112,7 @@ function resolveMentions(
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGeneratorNodeType>) {
+export default function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNodeType>) {
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
@@ -119,6 +124,19 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
 
   const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Instant hide on deselect — no delay when clicking outside the node
+  const prevSelectedRef = useRef(selected);
+  useEffect(() => {
+    const was = prevSelectedRef.current;
+    prevSelectedRef.current = selected;
+    if (was && !selected && cardRef.current) {
+      const el = cardRef.current;
+      el.classList.add("handles-no-delay");
+      const t = setTimeout(() => el.classList.remove("handles-no-delay"), 200);
+      return () => { clearTimeout(t); el.classList.remove("handles-no-delay"); };
+    }
+  }, [selected]);
 
   const [loading, setLoading] = useState(false);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
@@ -244,14 +262,30 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
     return () => { cancelled = true; clearInterval(interval); };
   }, [data.taskId, status, id, updateNodeData]);
 
-  // All 4 handle slots always render at fixed positions so anchors never jump.
-  // Handles not in cfg.handles are hidden.
-  const handles = BASE_HANDLES.map((h) =>
-    h.id === "resource" && cfg.maxResources
-      ? { ...h, label: `Reference images (up to ${cfg.maxResources})` }
-      : h
-  );
   const activeHandles = new Set<string>(cfg.handles);
+  const connectedHandles = new Set(
+    edges.filter((e) => e.target === id).map((e) => e.targetHandle).filter(Boolean) as string[]
+  );
+
+  // Compute bottom-anchored positions — active handles stack together with no gaps.
+  const activeInOrder = HANDLE_ORDER.filter((hid) => activeHandles.has(hid));
+  const N = activeInOrder.length;
+  const handleBottomMap = new Map(
+    activeInOrder.map((hid, idx) => [hid, HANDLE_BOTTOM_BASE + (N - 1 - idx) * HANDLE_SPACING])
+  );
+
+  // Apply model-specific label/class overrides.
+  const handles = BASE_HANDLES.map((h) => {
+    let label = h.label;
+    let className = h.className;
+    if (h.id === "resource" && cfg.maxResources)
+      label = `Reference images (up to ${cfg.maxResources})`;
+    if (h.id === "startFrame" && cfg.id === "kling-3.0")
+      label = "Start frame";
+    if (h.id === "startFrame" && cfg.id === "kling-2.6-motion-control")
+      className = "node-handle-icon node-handle-icon-resource";
+    return { ...h, label, className };
+  });
   const ratios = cfg.ratios;
   const durations = cfg.durations;
 
@@ -446,43 +480,53 @@ export default function VideoGeneratorNode({ id, data }: NodeProps<VideoGenerato
       {/* ── Handles ──────────────────────────────────────────────────── */}
       {handles.map((h) => {
         const hidden = !activeHandles.has(h.id);
+        const bottomPx = handleBottomMap.get(h.id) ?? 0;
+        const isMotionStartFrame = h.id === "startFrame" && cfg.id === "kling-2.6-motion-control";
         return (
           <Handle
             key={h.id}
             type="target"
             position={Position.Left}
             id={h.id}
-            style={{ top: `${h.topPct}%`, visibility: hidden ? "hidden" : "visible", pointerEvents: hidden ? "none" : "auto" }}
-            className={`${h.className}${errorHandles.has(h.id) ? " node-handle-error" : ""}`}
+            style={{ top: `calc(100% - ${bottomPx}px)`, visibility: hidden ? "hidden" : undefined, pointerEvents: hidden ? "none" : undefined }}
+            className={`${h.className}${errorHandles.has(h.id) ? " node-handle-error" : ""}${connectedHandles.has(h.id) ? " node-handle-connected" : ""}`}
             onMouseEnter={() => { if (!hidden) setHoveredHand(h.id); }}
             onMouseLeave={() => setHoveredHand(null)}
           >
-            {h.id === "prompt"     && <PromptIcon />}
-            {h.id === "startFrame" && <FrameStartIcon />}
-            {h.id === "endFrame"   && <FrameEndIcon />}
-            {h.id === "resource"   && <ResourceIcon />}
-            {h.id === "videoRef"   && <VideoRefIcon />}
+            {h.id === "prompt"                          && <PromptIcon />}
+            {h.id === "startFrame" && !isMotionStartFrame && <FrameStartIcon />}
+            {isMotionStartFrame                         && <ResourceIcon />}
+            {h.id === "endFrame"                        && <FrameEndIcon />}
+            {h.id === "resource"                        && <ResourceIcon />}
+            {h.id === "videoRef"                        && <VideoRefIcon />}
           </Handle>
         );
       })}
 
       {/* Handle tooltip */}
-      {hoveredDef && (
-        <div
-          className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
-          style={{
-            top: `${hoveredDef.topPct}%`,
-            left: 0,
-            transform: "translate(calc(-100% - 34px), -50%)",
-            background: "#1A1A1A",
-            border: `1px solid ${HANDLE_COLORS[hoveredDef.id]}33`,
-            color: "#CCCCCC",
-          }}
-        >
-          <span style={{ color: HANDLE_COLORS[hoveredDef.id] }} className="mr-1.5">●</span>
-          {hoveredDef.label}
-        </div>
-      )}
+      {hoveredDef && (() => {
+        const bottomPx = handleBottomMap.get(hoveredDef.id) ?? 0;
+        const tooltipColor =
+          hoveredDef.id === "startFrame" && cfg.id === "kling-2.6-motion-control"
+            ? "#fb923c"
+            : HANDLE_COLORS[hoveredDef.id] ?? "#888";
+        return (
+          <div
+            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            style={{
+              top: `calc(100% - ${bottomPx}px)`,
+              left: 0,
+              transform: "translate(calc(-100% - 34px), -50%)",
+              background: "#1A1A1A",
+              border: `1px solid ${tooltipColor}33`,
+              color: "#CCCCCC",
+            }}
+          >
+            <span style={{ color: tooltipColor }} className="mr-1.5">●</span>
+            {hoveredDef.label}
+          </div>
+        );
+      })()}
 
       {/* ── Main content ─────────────────────────────────────────────── */}
       {generations.length > 0 ? (

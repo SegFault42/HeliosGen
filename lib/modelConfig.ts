@@ -298,7 +298,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     ratios: [],    // no aspect-ratio selector — output inherits from inputs
     durations: [], // no duration selector
     defaultDuration: 0,
-    defaultRatio: "",
+    defaultRatio: "9:16",
     handles: ["prompt", "startFrame", "videoRef"],
     sound: false,
     promptOptional: true,
