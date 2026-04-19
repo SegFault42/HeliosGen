@@ -2,7 +2,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import NextImage from "next/image";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
+import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +19,12 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
   const sourceConnected = edges.some((e) => e.source === id);
   const fileRef        = useRef<HTMLInputElement>(null);
   const rootRef        = useRef<HTMLDivElement>(null);
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => updateNodeInternals(id));
+    return () => cancelAnimationFrame(raf);
+  }, [id, data.imageNaturalRatio, updateNodeInternals]);
 
   // Instant hide on deselect
   const prevSelectedRef = useRef(selected);
@@ -179,7 +185,15 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
   const baseSrcRef = useRef(baseSrc);
 
   useEffect(() => {
-    if (!canonicalSrc || canonicalSrc === baseSrcRef.current) return;
+    if (!canonicalSrc) {
+      // Asset removed — reset crossfade state so the empty state renders
+      setBaseSrc(undefined);
+      baseSrcRef.current = undefined;
+      setTopSrc(undefined);
+      setTopReady(false);
+      return;
+    }
+    if (canonicalSrc === baseSrcRef.current) return;
 
     if (!baseSrcRef.current) {
       // No existing image — set directly, nothing to crossfade over
@@ -298,20 +312,13 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           </div>
-          <div className="absolute bottom-2 left-0 right-0 flex justify-between px-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => fileRef.current?.click()}
-              className="text-[10px] text-[#8D8E89] hover:text-white transition-colors relative z-10"
+              className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors relative z-10"
             >
               replace
-            </button>
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => updateNodeData(id, { inputImage: undefined, imageNaturalRatio: undefined })}
-              className="text-[10px] text-[#8D8E89] hover:text-white transition-colors relative z-10"
-            >
-              remove
             </button>
           </div>
         </div>

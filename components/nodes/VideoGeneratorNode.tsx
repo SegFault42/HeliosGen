@@ -14,24 +14,35 @@ type VideoGeneratorNodeType = Node<NodeData, "videoGeneratorNode">;
 type HandleDef = { id: string; label: string; className: string };
 
 const BASE_HANDLES: HandleDef[] = [
-  { id: "prompt",     label: "Text prompt",                className: "node-handle-icon node-handle-icon-prompt" },
-  { id: "startFrame", label: "Reference image",            className: "node-handle-icon node-handle-icon-image" },
-  { id: "endFrame",   label: "End frame",                  className: "node-handle-icon node-handle-icon-image" },
-  { id: "resource",   label: "Reference images (up to 3)", className: "node-handle-icon node-handle-icon-resource" },
-  { id: "videoRef",   label: "Reference video",            className: "node-handle-icon node-handle-icon-videoref" },
+  { id: "prompt",         label: "Text prompt",                className: "node-handle-icon node-handle-icon-prompt" },
+  { id: "startFrame",     label: "Start frame",                className: "node-handle-icon node-handle-icon-image" },
+  { id: "endFrame",       label: "End frame",                  className: "node-handle-icon node-handle-icon-image" },
+  { id: "resource",       label: "Reference images (up to 3)", className: "node-handle-icon node-handle-icon-resource" },
+  { id: "videoRef",       label: "Reference video",            className: "node-handle-icon node-handle-icon-videoref" },
+  { id: "referenceVideo", label: "Reference videos (up to 3)", className: "node-handle-icon node-handle-icon-refvideo" },
+  { id: "audioRef",       label: "Reference audios (up to 3)", className: "node-handle-icon node-handle-icon-audioref" },
 ];
 
 // Fixed order for bottom-anchored stacking (top-most first, bottom-most last)
-const HANDLE_ORDER = ["prompt", "startFrame", "endFrame", "resource", "videoRef"];
+const HANDLE_ORDER = ["prompt", "startFrame", "endFrame", "resource", "videoRef", "referenceVideo", "audioRef"];
+
+// Which handle IDs are connectable for each dragged output type
+const CONNECTABLE_FOR_TYPE: Record<string, Set<string>> = {
+  prompt:  new Set(["prompt"]),
+  image:   new Set(["startFrame", "endFrame", "resource"]),
+  video:   new Set(["videoRef", "referenceVideo"]),
+};
 const HANDLE_BOTTOM_BASE = 52; // px above node bottom edge
 const HANDLE_SPACING     = 38; // px between handles
 
 const HANDLE_COLORS: Record<string, string> = {
-  prompt:     "#77E544",
-  startFrame: "#818cf8",
-  endFrame:   "#818cf8",
-  resource:   "#fb923c",
-  videoRef:   "#22d3ee",
+  prompt:         "#77E544",
+  startFrame:     "#818cf8",
+  endFrame:       "#818cf8",
+  resource:       "#fb923c",
+  videoRef:       "#22d3ee",
+  referenceVideo: "#38bdf8",
+  audioRef:       "#a78bfa",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -121,6 +132,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const nodes = useWorkflowStore((s) => s.nodes);
   const edges = useWorkflowStore((s) => s.edges);
   const debugMode = useWorkflowStore((s) => s.debugMode);
+  const connectingHandleType = useWorkflowStore((s) => s.connectingHandleType);
 
   const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -150,8 +162,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const [hovering, setHovering] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentSec, setCurrentSec] = useState(0);
-  const videoRef  = useRef<HTMLVideoElement>(null);
-  const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
+  const videoRef        = useRef<HTMLVideoElement>(null);
+  const videoRefs       = useRef<Map<number, HTMLVideoElement>>(new Map());
+  const durLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -216,7 +229,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       updateNodeInternals(id);
     });
     return () => cancelAnimationFrame(raf);
-  }, [id, aspectRatio, data.imageNaturalRatio, data.generations, updateNodeSize, updateNodeInternals]);
+  }, [id, aspectRatio, data.videoModel, data.imageNaturalRatio, data.generations, updateNodeSize, updateNodeInternals]);
 
   // ── Poll job-status while a taskId is pending ────────────────────────────
   useEffect(() => {
@@ -280,10 +293,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     let className = h.className;
     if (h.id === "resource" && cfg.maxResources)
       label = `Reference images (up to ${cfg.maxResources})`;
-    if (h.id === "startFrame" && cfg.id === "kling-3.0")
-      label = "Start frame";
-    if (h.id === "startFrame" && cfg.id === "kling-2.6-motion-control")
-      className = "node-handle-icon node-handle-icon-resource";
+    if (h.id === "referenceVideo" && cfg.maxReferenceVideos)
+      label = `Reference videos (up to ${cfg.maxReferenceVideos})`;
+    if (h.id === "audioRef" && cfg.maxReferenceAudios)
+      label = `Reference audios (up to ${cfg.maxReferenceAudios})`;
+    if (h.id === "startFrame" && cfg.id === "kling-2.6-motion-control") {
+      label = "Character";
+      className = "node-handle-icon node-handle-icon-character";
+    }
     return { ...h, label, className };
   });
   const ratios = cfg.ratios;
@@ -305,7 +322,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     if (!authData.session) { setAuthModalOpen(true); return; }
 
     const upstream = resolveInputs(id, nodes as Node<NodeData>[], edges);
-    const maxRes = cfg.maxResources ?? 3;
+    const maxRes       = cfg.maxResources       ?? 3;
+    const maxRefVideos = cfg.maxReferenceVideos ?? 3;
+    const maxRefAudios = cfg.maxReferenceAudios ?? 3;
     const limitedResources = upstream.resources.slice(0, maxRes);
     const { resolvedPrompt, orderedUrls } = resolveMentions(
       upstream.prompt ?? prompt,
@@ -410,6 +429,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       referenceImageUrls: orderedResources.length > 0
         ? orderedResources.map((r) => r.url)
         : undefined,
+      referenceVideoUrls: upstream.referenceVideoUrls.slice(0, maxRefVideos),
+      referenceAudioUrls: upstream.referenceAudioUrls.slice(0, maxRefAudios),
     };
 
     if (debugMode) {
@@ -482,23 +503,29 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         const hidden = !activeHandles.has(h.id);
         const bottomPx = handleBottomMap.get(h.id) ?? 0;
         const isMotionStartFrame = h.id === "startFrame" && cfg.id === "kling-2.6-motion-control";
+        const compatible = !connectingHandleType
+          || (CONNECTABLE_FOR_TYPE[connectingHandleType]?.has(h.id) ?? false);
+        const connectable = !hidden && compatible;
         return (
           <Handle
             key={h.id}
             type="target"
             position={Position.Left}
             id={h.id}
+            isConnectable={connectable}
             style={{ top: `calc(100% - ${bottomPx}px)`, visibility: hidden ? "hidden" : undefined, pointerEvents: hidden ? "none" : undefined }}
             className={`${h.className}${errorHandles.has(h.id) ? " node-handle-error" : ""}${connectedHandles.has(h.id) ? " node-handle-connected" : ""}`}
-            onMouseEnter={() => { if (!hidden) setHoveredHand(h.id); }}
+            onMouseEnter={() => { if (!hidden && compatible) setHoveredHand(h.id); }}
             onMouseLeave={() => setHoveredHand(null)}
           >
             {h.id === "prompt"                          && <PromptIcon />}
             {h.id === "startFrame" && !isMotionStartFrame && <FrameStartIcon />}
-            {isMotionStartFrame                         && <ResourceIcon />}
+            {isMotionStartFrame                         && <CharacterIcon />}
             {h.id === "endFrame"                        && <FrameEndIcon />}
             {h.id === "resource"                        && <ResourceIcon />}
             {h.id === "videoRef"                        && <VideoRefIcon />}
+            {h.id === "referenceVideo"                  && <RefVideoIcon />}
+            {h.id === "audioRef"                        && <AudioRefIcon />}
           </Handle>
         );
       })}
@@ -508,7 +535,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         const bottomPx = handleBottomMap.get(hoveredDef.id) ?? 0;
         const tooltipColor =
           hoveredDef.id === "startFrame" && cfg.id === "kling-2.6-motion-control"
-            ? "#fb923c"
+            ? "#f472b6"
             : HANDLE_COLORS[hoveredDef.id] ?? "#888";
         return (
           <div
@@ -816,6 +843,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                           const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
                           updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur });
                           const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
+                          // startFrame is "Character" on motion-control and "Start frame" on others —
+                          // kill its edges whenever the character-ness changes between models.
+                          const wasMotionControl = cfg.id === "kling-2.6-motion-control";
+                          const isMotionControl  = m.id   === "kling-2.6-motion-control";
+                          if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
+                            removedHandles.push("startFrame");
+                          }
                           if (removedHandles.length) killEdgesForHandles(id, removedHandles);
                           setModelOpen(false);
                         }}
@@ -851,19 +885,50 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
               {/* Duration */}
               {durations.length > 0 && (
-                <div className="relative flex-1">
-                  <Pill fullWidth onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
+                <div
+                  className="relative flex-1"
+                  onMouseEnter={() => {
+                    if (durLeaveTimerRef.current) clearTimeout(durLeaveTimerRef.current);
+                    setDurOpen(true);
+                  }}
+                  onMouseLeave={() => {
+                    durLeaveTimerRef.current = setTimeout(() => setDurOpen(false), 120);
+                  }}
+                >
+                  <Pill fullWidth>
                     <span className="text-[11px] text-[#AAAAAA] tabular-nums">{duration}s</span>
-                    <ChevronIcon open={durOpen} />
                   </Pill>
                   {durOpen && (
-                    <FloatMenu fullWidth>
-                      {(durations as readonly number[]).map((d) => (
-                        <FloatItem key={d} active={duration === d} onClick={() => { updateNodeData(id, { duration: d }); setDurOpen(false); }}>
-                          {d}s
-                        </FloatItem>
-                      ))}
-                    </FloatMenu>
+                    <div
+                      className="absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl z-50 shadow-2xl p-3"
+                      style={{ minWidth: 240 }}
+                      onMouseEnter={() => { if (durLeaveTimerRef.current) clearTimeout(durLeaveTimerRef.current); }}
+                      onMouseLeave={() => { durLeaveTimerRef.current = setTimeout(() => setDurOpen(false), 120); }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
+                      <div
+                        className="nodrag flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-lg"
+                        style={{ background: "#161A1E" }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-[11px] text-[#AAAAAA] tabular-nums shrink-0 w-6">{duration}s</span>
+                        <div className="w-px h-3.5 shrink-0" style={{ background: "#2A2A2A" }} />
+                        <input
+                          type="range"
+                          min={0}
+                          max={(durations as readonly number[]).length - 1}
+                          step={1}
+                          value={Math.max(0, (durations as readonly number[]).indexOf(duration))}
+                          onChange={(e) => {
+                            const idx = parseInt(e.target.value);
+                            updateNodeData(id, { duration: (durations as readonly number[])[idx] });
+                          }}
+                          className="dur-slider"
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -1062,6 +1127,33 @@ function ResourceIcon() {
       <rect x="1" y="1" width="16" height="13" rx="2" />
       <circle cx="5.5" cy="5" r="1.5" fill="white" stroke="none" />
       <path d="m1 11 4.5-4.5 3 3 2.5-2.5 6 4" />
+    </svg>
+  );
+}
+
+function RefVideoIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+      <path d="M11.5 3v1.5M11.5 7.5v1.5" strokeWidth="1.1" />
+    </svg>
+  );
+}
+
+function AudioRefIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 5v4M4.5 3v8M7 4.5v5M9.5 3v8M12 5v4" />
+    </svg>
+  );
+}
+
+function CharacterIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="4.5" r="2.5" />
+      <path d="M1.5 13c0-2.8 2.46-5 5.5-5s5.5 2.2 5.5 5" />
     </svg>
   );
 }

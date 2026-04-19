@@ -2,13 +2,16 @@ import type { CSSProperties } from "react";
 
 // Colours match the handle border colours exactly
 export const EDGE_COLORS: Record<string, string> = {
-  prompt:     "#77E544", // green  — matches node-handle-icon-prompt
-  image:      "#fb923c", // orange — matches node-handle-icon-resource
-  startFrame: "#818cf8", // indigo — matches node-handle-icon-image
-  endFrame:   "#818cf8", // indigo — matches node-handle-icon-image
-  resource:   "#fb923c", // orange — matches node-handle-icon-resource
-  videoRef:   "#22d3ee", // cyan   — matches node-handle-icon-videoref
-  default:    "#3a3a3a", // neutral
+  prompt:         "#77E544", // green  — matches node-handle-icon-prompt
+  image:          "#fb923c", // orange — matches node-handle-icon-resource
+  startFrame:     "#818cf8", // indigo — matches node-handle-icon-image
+  endFrame:       "#818cf8", // indigo — matches node-handle-icon-image
+  resource:       "#fb923c", // orange — matches node-handle-icon-resource
+  videoRef:       "#22d3ee", // cyan   — matches node-handle-icon-videoref
+  referenceVideo: "#38bdf8", // sky    — matches node-handle-icon-refvideo
+  audioRef:       "#a78bfa", // violet — matches node-handle-icon-audioref
+  character:      "#f472b6", // pink   — matches node-handle-icon-character (motion control startFrame)
+  default:        "#3a3a3a", // neutral
 };
 
 // Handles that carry image data get a heavier stroke

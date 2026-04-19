@@ -107,6 +107,7 @@ export default function WorkflowCanvas() {
     onNodesChange: _onNodesChange, onEdgesChange, onConnect,
     addNode, insertEdge,
     updateNodeData, isRunning, setIsRunning, debugMode, toggleDebug,
+    setConnectingHandleType,
     saveViewport,
   } = useWorkflowStore();
   const updateNodeDataRef = useRef(updateNodeData);
@@ -702,8 +703,9 @@ export default function WorkflowCanvas() {
     else if (handle.classList.contains("node-handle-source")) type = "image";
     else if (handle.classList.contains("node-handle-video"))  type = "video";
     rf.setAttribute("data-connecting-type", type);
+    setConnectingHandleType(type);
     setIsConnecting(true);
-  }, []);
+  }, [setConnectingHandleType]);
 
   // Show node-picker when an edge is dragged and released on empty canvas
   const onConnectEnd = useCallback(
@@ -715,6 +717,7 @@ export default function WorkflowCanvas() {
       // Remove connecting-type tag
       const rf = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
       rf?.removeAttribute("data-connecting-type");
+      setConnectingHandleType(null);
       setIsConnecting(false);
 
       // toHandle is set whenever the drag landed on any handle (valid or blocked).

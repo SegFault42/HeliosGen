@@ -136,6 +136,9 @@ interface WorkflowStore {
   updateNodeSize:     (id: string, width: number, height: number) => void;
   setIsRunning:       (v: boolean) => void;
   toggleDebug:        () => void;
+  /** The type being dragged during an active connection ("prompt" | "image" | "video" | null) */
+  connectingHandleType: string | null;
+  setConnectingHandleType: (type: string | null) => void;
   authModalOpen:           boolean;
   setAuthModalOpen:        (v: boolean) => void;
   resetPasswordModalOpen:  boolean;
@@ -247,8 +250,20 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         onConnect: (connection) =>
           set((s) => {
+            // Detect Motion Control's startFrame (displayed as "Character") for correct edge color
+            let colorKey: string | undefined;
+            if (connection.targetHandle === "startFrame") {
+              const targetNode = s.nodes.find((n) => n.id === connection.target);
+              const videoModelId = (targetNode?.data?.videoModel as string | undefined) ?? "";
+              if (videoModelId === "kling-2.6-motion-control") colorKey = "character";
+            }
             const edges = addEdge(
-              { ...connection, animated: false, style: edgeStyle(connection.targetHandle) },
+              {
+                ...connection,
+                animated: false,
+                style: edgeStyle(connection.targetHandle),
+                ...(colorKey ? { data: { colorKey } } : {}),
+              },
               s.edges
             );
             return {
@@ -352,6 +367,9 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         setIsRunning:     (v) => set({ isRunning: v }),
         toggleDebug:      () => set((s) => ({ debugMode: !s.debugMode })),
+
+        connectingHandleType: null,
+        setConnectingHandleType: (type) => set({ connectingHandleType: type }),
 
         saveViewport: (viewport) =>
           set((s) => ({

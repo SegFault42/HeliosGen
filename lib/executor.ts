@@ -45,16 +45,20 @@ export function resolveInputs(
   endFrameUrl?: string;
   videoRefUrl?: string;
   resources: Array<{ url: string; label: string }>;
+  referenceVideoUrls: string[];
+  referenceAudioUrls: string[];
 } {
   const incoming = edges.filter((e) => e.target === nodeId);
   const result = {
-    imageUrls:       [] as string[],
-    imageNodeLabels: [] as string[],
-    resources:       [] as Array<{ url: string; label: string }>,
-    startFrameUrl:   undefined as string | undefined,
-    endFrameUrl:     undefined as string | undefined,
-    videoRefUrl:     undefined as string | undefined,
-    prompt:          undefined as string | undefined,
+    imageUrls:          [] as string[],
+    imageNodeLabels:    [] as string[],
+    resources:          [] as Array<{ url: string; label: string }>,
+    startFrameUrl:      undefined as string | undefined,
+    endFrameUrl:        undefined as string | undefined,
+    videoRefUrl:        undefined as string | undefined,
+    prompt:             undefined as string | undefined,
+    referenceVideoUrls: [] as string[],
+    referenceAudioUrls: [] as string[],
   };
 
   for (const edge of incoming) {
@@ -104,19 +108,29 @@ export function resolveInputs(
       if (url) result.endFrameUrl = url;
     }
 
-    // "resource" handle — Kling element references (max 3)
+    // "resource" handle — reference images (cap enforced at node level via maxResources)
     if (edge.targetHandle === "resource") {
       const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
       const label = src.data.label as string | undefined;
-      if (url && result.resources.length < 3) {
-        result.resources.push({ url, label: label ?? "element" });
-      }
+      if (url) result.resources.push({ url, label: label ?? "element" });
     }
 
-    // "videoRef" handle — motion-control reference video
+    // "videoRef" handle — motion-control reference video (single)
     if (edge.targetHandle === "videoRef") {
       const url = src.data.videoUrl as string | undefined;
       if (url) result.videoRefUrl = url;
+    }
+
+    // "referenceVideo" handle — multi-video references (e.g. Seedance)
+    if (edge.targetHandle === "referenceVideo") {
+      const url = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
+      if (url) result.referenceVideoUrls.push(url);
+    }
+
+    // "audioRef" handle — audio references (e.g. Seedance)
+    if (edge.targetHandle === "audioRef") {
+      const url = (src.data.audioUrl ?? src.data.r2Url) as string | undefined;
+      if (url) result.referenceAudioUrls.push(url);
     }
 
     // Upstream video generator — carry its prompt downstream

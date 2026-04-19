@@ -27,7 +27,9 @@ export async function POST(req: NextRequest) {
     endFrameUrl:    rawEndFrame,
     videoRefUrl:    rawVideoRef,
     resources       = [] as Resource[],
-    referenceImageUrls: rawRefImages = [] as string[],
+    referenceImageUrls:  rawRefImages     = [] as string[],
+    referenceVideoUrls:  rawRefVideoUrls  = [] as string[],
+    referenceAudioUrls:  rawRefAudioUrls  = [] as string[],
     sound           = false,
     duration        = 5,
     aspectRatio     = "16:9",
@@ -72,6 +74,31 @@ export async function POST(req: NextRequest) {
       mode:                  resolution,   // "720p" or "1080p"
       character_orientation: mode,         // "image" or "video"
     };
+
+  } else if (apiInput.firstFrameKey) {
+    // ── Seedance-style models (separate frame keys + multi-ref arrays) ─────────
+    const [startFrameUrl, endFrameUrl, r2RefImages, r2RefVideos, r2RefAudios] = await Promise.all([
+      rawStartFrame ? ensureR2(rawStartFrame, "references").catch(() => rawStartFrame) : Promise.resolve(undefined),
+      rawEndFrame   ? ensureR2(rawEndFrame,   "references").catch(() => rawEndFrame)   : Promise.resolve(undefined),
+      Promise.all((rawRefImages    as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+      Promise.all((rawRefVideoUrls as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+      Promise.all((rawRefAudioUrls as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+    ]);
+
+    input = {
+      [apiInput.aspectRatioKey!]: aspectRatio,
+      [apiInput.durationKey!]:    clampedDuration,
+    };
+
+    if (prompt?.trim())                                        input.prompt                       = prompt;
+    if (apiInput.firstFrameKey  && startFrameUrl)              input[apiInput.firstFrameKey]       = startFrameUrl;
+    if (apiInput.lastFrameKey   && endFrameUrl)                input[apiInput.lastFrameKey]        = endFrameUrl;
+    if (apiInput.resolutionKey)                                input[apiInput.resolutionKey]       = resolution;
+    if (apiInput.soundKey)                                     input[apiInput.soundKey]            = Boolean(sound);
+    if (apiInput.referenceImagesKey && r2RefImages.length > 0) input[apiInput.referenceImagesKey]  = r2RefImages;
+    if (apiInput.referenceVideosKey && r2RefVideos.length > 0) input[apiInput.referenceVideosKey]  = r2RefVideos;
+    if (apiInput.referenceAudiosKey && r2RefAudios.length > 0) input[apiInput.referenceAudiosKey]  = r2RefAudios;
+    if (apiInput.extra)                                        Object.assign(input, apiInput.extra);
 
   } else if (apiInput.referenceImagesKey) {
     // ── Reference-image-based models (Grok Imagine) ───────────────────────────

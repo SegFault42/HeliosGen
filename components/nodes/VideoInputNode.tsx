@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useCallback, useState, useEffect } from "react";
 import NextImage from "next/image";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Handle, Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
@@ -18,6 +18,12 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const edges           = useWorkflowStore((s) => s.edges);
   const nodes           = useWorkflowStore((s) => s.nodes);
   const { deleteElements } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => updateNodeInternals(id));
+    return () => cancelAnimationFrame(raf);
+  }, [id, data.videoAspectRatio, updateNodeInternals]);
   const fileRef        = useRef<HTMLInputElement>(null);
   const videoRef       = useRef<HTMLVideoElement>(null);
   const topVideoRef    = useRef<HTMLVideoElement>(null);
@@ -80,7 +86,15 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const baseVideoUrlRef = useRef(baseVideoUrl);
 
   useEffect(() => {
-    if (!videoUrl || videoUrl === baseVideoUrlRef.current) return;
+    if (!videoUrl) {
+      // Asset removed — reset crossfade state so the empty state renders
+      setBaseVideoUrl(undefined);
+      baseVideoUrlRef.current = undefined;
+      setTopVideoUrl(undefined);
+      setTopVideoReady(false);
+      return;
+    }
+    if (videoUrl === baseVideoUrlRef.current) return;
     if (!baseVideoUrlRef.current) {
       setBaseVideoUrl(videoUrl);
       baseVideoUrlRef.current = videoUrl;
@@ -637,27 +651,15 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
               })()}
 
               {/* Hover controls row */}
-              <div className="absolute bottom-2 left-0 right-0 flex justify-between items-center px-2.5 opacity-0 group-hover/player:opacity-100 transition-opacity z-10">
-                {!capturedFrameUrl ? (
+              {!capturedFrameUrl && (
+                <div className="absolute bottom-2 left-0 right-0 flex justify-center items-center px-2.5 opacity-0 group-hover/player:opacity-100 transition-opacity z-10">
                   <button
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => fileRef.current?.click()}
-                    className="text-[10px] text-[#8D8E89] hover:text-white transition-colors pointer-events-auto"
+                    className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors pointer-events-auto"
                   >replace</button>
-                ) : <div />}
-                {!capturedFrameUrl && (
-                  <button
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (localUrlRef.current) { URL.revokeObjectURL(localUrlRef.current); localUrlRef.current = null; }
-                      updateNodeData(id, { videoUrl: undefined, videoAspectRatio: undefined, capturedFrameUrl: undefined, trimStart: undefined, trimEnd: undefined });
-                      setUploadErr(null);
-                    }}
-                    className="text-[10px] text-[#8D8E89] hover:text-white transition-colors pointer-events-auto"
-                  >remove</button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Trim button — bottom-right icon pill, above frame preview if present */}
               {!isUploading && (

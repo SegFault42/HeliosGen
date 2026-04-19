@@ -150,7 +150,7 @@ export const IMAGE_MODELS: ImageModel[] = [
 
 // ── Video models ──────────────────────────────────────────────────────────────
 
-export type VideoHandle = "prompt" | "startFrame" | "endFrame" | "resource" | "videoRef";
+export type VideoHandle = "prompt" | "startFrame" | "endFrame" | "resource" | "videoRef" | "referenceVideo" | "audioRef";
 
 export interface VideoModelMode {
   value: string;
@@ -183,6 +183,10 @@ export interface VideoModel {
   defaultResolution?: string;
   /** Max number of resource-handle images accepted by this model (default 3) */
   maxResources?: number;
+  /** Max number of referenceVideo-handle videos accepted by this model (default 3) */
+  maxReferenceVideos?: number;
+  /** Max number of audioRef-handle audios accepted by this model (default 3) */
+  maxReferenceAudios?: number;
   /** How @mention tags are serialised in the final prompt (default: "<<<image N>>>") */
   resourceTagFormat?: "default" | "grok";
   apiInput: {
@@ -221,6 +225,14 @@ export interface VideoModel {
      * Independent of durationMax which controls the generated output length.
      */
     videoRefMaxDuration?: number;
+    /** Field name for the start frame image URL (e.g. "first_frame_url") */
+    firstFrameKey?: string;
+    /** Field name for the end frame image URL (e.g. "last_frame_url") */
+    lastFrameKey?: string;
+    /** Field name for an array of reference video URLs */
+    referenceVideosKey?: string;
+    /** Field name for an array of reference audio URLs */
+    referenceAudiosKey?: string;
     /** Any other static fields to include in the input object */
     extra?: Record<string, unknown>;
   };
@@ -287,6 +299,39 @@ export const VIDEO_MODELS: VideoModel[] = [
       modeKey: "mode",
       resolutionKey: "resolution",
       referenceImagesKey: "image_urls",
+    },
+  },
+  // ── Bytedance ─────────────────────────────────────────────────────────────────
+  {
+    id: "seedance-2-fast",
+    apiId: "bytedance/seedance-2-fast",
+    name: "Seedance 2.0 Fast",
+    provider: "Bytedance",
+    ratios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"],
+    durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    defaultDuration: 5,
+    defaultRatio: "16:9",
+    handles: ["prompt", "startFrame", "endFrame", "resource", "referenceVideo", "audioRef"],
+    sound: true,
+    promptOptional: true,
+    maxResources: 9,
+    maxReferenceVideos: 3,
+    maxReferenceAudios: 3,
+    resolutions: ["480p", "720p"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      durationKey: "duration",
+      durationMin: 4,
+      durationMax: 15,
+      resolutionKey: "resolution",
+      soundKey: "generate_audio",
+      firstFrameKey: "first_frame_url",
+      lastFrameKey: "last_frame_url",
+      referenceImagesKey: "reference_image_urls",
+      referenceVideosKey: "reference_video_urls",
+      referenceAudiosKey: "reference_audio_urls",
+      extra: { web_search: false },
     },
   },
   // ── Kling motion control ─────────────────────────────────────────────────────

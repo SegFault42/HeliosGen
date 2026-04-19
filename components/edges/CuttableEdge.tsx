@@ -17,9 +17,11 @@ export default function CuttableEdge({
   markerEnd,
   data,
 }: EdgeProps) {
-  const dying  = (data as Record<string, unknown> | undefined)?.dying  === true;
-  const error  = (data as Record<string, unknown> | undefined)?.error  === true;
-  const dimmed = (data as Record<string, unknown> | undefined)?.dimmed === true;
+  const edgeData = data as Record<string, unknown> | undefined;
+  const dying    = edgeData?.dying    === true;
+  const error    = edgeData?.error    === true;
+  const dimmed   = edgeData?.dimmed   === true;
+  const colorKey = typeof edgeData?.colorKey === "string" ? edgeData.colorKey : undefined;
 
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -28,7 +30,7 @@ export default function CuttableEdge({
   const pathRef = useRef<SVGPathElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const style = edgeStyle(targetHandleId);
+  const style = edgeStyle(colorKey ?? targetHandleId);
   const color = (style.stroke as string) ?? "#555";
   const strokeWidth = (style.strokeWidth as number) ?? 2;
 

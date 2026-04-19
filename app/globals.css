@@ -186,6 +186,12 @@ body {
 .react-flow__node.selected .node-handle-icon-resource.react-flow__handle { border-color: #fb923c !important; --handle-color: #fb923c; }
 .node-handle-icon-videoref.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-videoref.react-flow__handle { border-color: #22d3ee !important; --handle-color: #22d3ee; }
+.node-handle-icon-refvideo.react-flow__handle.node-handle-connected,
+.react-flow__node.selected .node-handle-icon-refvideo.react-flow__handle { border-color: #38bdf8 !important; --handle-color: #38bdf8; }
+.node-handle-icon-audioref.react-flow__handle.node-handle-connected,
+.react-flow__node.selected .node-handle-icon-audioref.react-flow__handle { border-color: #a78bfa !important; --handle-color: #a78bfa; }
+.node-handle-icon-character.react-flow__handle.node-handle-connected,
+.react-flow__node.selected .node-handle-icon-character.react-flow__handle { border-color: #f472b6 !important; --handle-color: #f472b6; }
 /* Selected + unconnected: dim the whole handle */
 .react-flow__node.selected .node-handle-icon.react-flow__handle:not(.node-handle-connected) { opacity: 0.35 !important; }
 
@@ -197,16 +203,48 @@ body {
   transform: translate(-100%, -50%) !important;
   opacity: 1 !important; pointer-events: auto !important; transition-delay: 0ms !important;
 }
-/* Image output → image + resource inputs */
+/* Image output → image + resource + character inputs */
 .react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-image,
-.react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-resource {
+.react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-resource,
+.react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-character {
   transform: translate(-100%, -50%) !important;
   opacity: 1 !important; pointer-events: auto !important; transition-delay: 0ms !important;
 }
-/* Video output → videoref inputs */
-.react-flow[data-connecting-type="video"] .react-flow__handle-left.node-handle-icon-videoref {
+/* Video output → videoref + refvideo inputs */
+.react-flow[data-connecting-type="video"] .react-flow__handle-left.node-handle-icon-videoref,
+.react-flow[data-connecting-type="video"] .react-flow__handle-left.node-handle-icon-refvideo {
   transform: translate(-100%, -50%) !important;
   opacity: 1 !important; pointer-events: auto !important; transition-delay: 0ms !important;
+}
+
+/* ── Duration slider ─────────────────────────────────────────────────────── */
+.dur-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 3px;
+  border-radius: 99px;
+  background: #333;
+  outline: none;
+  cursor: pointer;
+}
+.dur-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.dur-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
 /* ── Instant hide on deselect (class toggled by JS) ─────────────────────── */
