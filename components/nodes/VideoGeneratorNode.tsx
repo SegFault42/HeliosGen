@@ -184,9 +184,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
   // ── Generation history ────────────────────────────────────────────────────
   type GenEntry = string | null | { error: string };
-  const generations: GenEntry[]  = Array.isArray(data.generations)
+  type GenMeta  = { videoModel: string; aspectRatio: string; duration: number; klingMode: string; grokResolution: string; sound: boolean };
+
+  const generations: GenEntry[] = Array.isArray(data.generations)
     ? (data.generations as GenEntry[])
     : (videoUrl ? [videoUrl] : []);
+  const generationsMeta: (GenMeta | null)[] = Array.isArray(data.generationsMeta)
+    ? (data.generationsMeta as (GenMeta | null)[])
+    : [];
   const currentGenIdx  = Math.min((data.currentGenIdx as number | undefined) ?? Math.max(0, generations.length - 1), Math.max(0, generations.length - 1));
   const generationsRef = useRef(generations);
   generationsRef.current = generations;
@@ -195,12 +200,22 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     const gens    = generationsRef.current;
     const clamped = Math.max(0, Math.min(gens.length - 1, idx));
     const entry   = gens[clamped];
+    // Restore the settings used for this generation slot
+    const meta    = (useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data?.generationsMeta as (GenMeta | null)[] | undefined)?.[clamped];
+    const metaUpdate = meta ? {
+      videoModel:      meta.videoModel,
+      aspectRatio:     meta.aspectRatio,
+      duration:        meta.duration,
+      klingMode:       meta.klingMode,
+      grokResolution:  meta.grokResolution,
+      sound:           meta.sound,
+    } : {};
     if (entry === null) {
-      updateNodeData(id, { currentGenIdx: clamped, videoUrl: undefined, status: "running", errorMsg: undefined });
+      updateNodeData(id, { currentGenIdx: clamped, videoUrl: undefined, status: "running", errorMsg: undefined, ...metaUpdate });
     } else if (typeof entry === "object") {
-      updateNodeData(id, { currentGenIdx: clamped, videoUrl: undefined, status: "error", errorMsg: entry.error });
+      updateNodeData(id, { currentGenIdx: clamped, videoUrl: undefined, status: "error", errorMsg: entry.error, ...metaUpdate });
     } else {
-      updateNodeData(id, { currentGenIdx: clamped, videoUrl: entry, status: "done", errorMsg: undefined });
+      updateNodeData(id, { currentGenIdx: clamped, videoUrl: entry, status: "done", errorMsg: undefined, ...metaUpdate });
     }
   }, [id, updateNodeData]);
 
@@ -466,9 +481,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     }
 
     setLoading(true);
-    const prevGens2 = [...((useWorkflowStore.getState().nodes.find(n => n.id === id)?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
+    const storeNode0   = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+    const prevGens2    = [...((storeNode0?.data?.generations    as GenEntry[]           | undefined) ?? [])] as GenEntry[];
+    const prevMeta2    = [...((storeNode0?.data?.generationsMeta as (GenMeta | null)[]  | undefined) ?? [])];
     const loadingGens2 = [...prevGens2, null] as GenEntry[];
-    updateNodeData(id, { status: "running", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens2, currentGenIdx: loadingGens2.length - 1 });
+    const thisMeta: GenMeta = { videoModel: videoModelId, aspectRatio, duration, klingMode: mode, grokResolution: resolution, sound };
+    const loadingMeta2 = [...prevMeta2, thisMeta];
+    updateNodeData(id, { status: "running", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens2, generationsMeta: loadingMeta2, currentGenIdx: loadingGens2.length - 1 });
 
     try {
       const res = await fetch("/api/generate-video", {
@@ -837,10 +856,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <>
             {/* ── Row 1: model · ratio · duration (+ mode/res when no ratio/dur) ── */}
             <div className="flex items-center flex-wrap gap-1.5 px-3 py-2 border-t border-[#111]">
-              {/* Model selector — locked once a video has been generated */}
+              {/* Model selector */}
               <div className="relative">
                 <Pill
-                  disabled={generations.length > 0}
                   onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}
                 >
                   <span className="text-[11px] text-[#AAAAAA]">{cfg.name}</span>

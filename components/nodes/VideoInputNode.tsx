@@ -17,7 +17,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const edges           = useWorkflowStore((s) => s.edges);
   const nodes           = useWorkflowStore((s) => s.nodes);
-  const { deleteElements } = useReactFlow();
+  const { deleteElements, setNodes } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
 
   useEffect(() => {
@@ -57,6 +57,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const [framePreviewVisible, setFramePreviewVisible] = useState(false);
   const [frameBlurVisible, setFrameBlurVisible]       = useState(true);
   const [trimOpen, setTrimOpen]                 = useState(false);
+  const [viewMode, setViewMode]                 = useState<"video" | "frame">("video");
   const [isPlaying, setIsPlaying]               = useState(false);
   const [videoDuration, setVideoDuration]       = useState(0);
   const [localTrimStart, setLocalTrimStart]     = useState(0);
@@ -221,6 +222,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     }
     if (!imageEdgeId) {
       setPickerOpen(false);
+      setViewMode("video");
       if (capturedFrameRef.current) updateNodeData(id, { capturedFrameUrl: undefined });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -451,6 +453,11 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (pickerOpen || viewMode === "frame") videoRef.current?.pause();
+    else videoRef.current?.play().catch(() => {});
+  }, [pickerOpen, viewMode]);
+
   // Auto-open trimmer when a connected model requires a shorter video
   useEffect(() => {
     const maxDur = data.triggerTrimMaxDuration as number | undefined;
@@ -500,6 +507,9 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
           className="relative w-full h-full overflow-hidden rounded-[7px] group/player"
           onMouseEnter={onHoverPlay}
           onMouseLeave={onHoverPause}
+          onPointerDownCapture={() => {
+            if (!selected) setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === id })));
+          }}
         >
           {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <video
@@ -586,36 +596,109 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
             />
           )}
 
+          {/* Frame view overlay — shown when toggle is set to "frame" */}
+          {viewMode === "frame" && capturedFrameUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={capturedFrameUrl}
+              alt="Captured frame"
+              className="absolute inset-0 w-full h-full block"
+              style={{ objectFit: "fill", zIndex: 5 }}
+            />
+          )}
+
           {/* ── Normal player controls (hidden while picker is open) ── */}
           {!pickerOpen && !trimOpen && (
             <>
-              {/* Timer badge */}
-              <div className="absolute top-2 left-2 h-7 px-2 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity z-10 pointer-events-none">
-                <span className="text-[11px] text-white font-mono tabular-nums">{fmtTime(currentSec)}</span>
+              {/* Video / Frame toggle switch — top-left, visible on hover */}
+              <div
+                className="absolute top-2 left-2 z-10 flex items-center p-1 rounded-full gap-0.5 opacity-0 group-hover/player:opacity-100 transition-opacity"
+                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* Sliding active indicator */}
+                <div style={{
+                  position: "absolute",
+                  top: 4, left: 4,
+                  width: 28, height: 28,
+                  borderRadius: "50%",
+                  background: viewMode === "frame" && capturedFrameUrl ? "transparent" : "rgba(255,255,255,0.18)",
+                  border: "1.5px solid rgba(255,255,255,0.45)",
+                  transform: `translateX(${viewMode === "frame" ? 30 : 0}px)`,
+                  transition: "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  pointerEvents: "none",
+                  zIndex: 20,
+                }} />
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewMode("video"); }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                  title="Show video"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={viewMode === "video" ? "white" : "#777"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke 220ms" }}>
+                    <rect width="15" height="14" x="2" y="5" rx="2" />
+                    <path d="m17 8 5-3v14l-5-3V8Z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (capturedFrameUrl) {
+                      setViewMode("frame");
+                    } else {
+                      const v = videoRef.current;
+                      if (v) { v.pause(); setScrubPos(v.currentTime / (v.duration || 1)); }
+                      setPickerOpen(true);
+                    }
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                  title={capturedFrameUrl ? "Show captured frame" : "Pick a frame"}
+                >
+                  {capturedFrameUrl ? (
+                    <div style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      backgroundImage: `url(${capturedFrameUrl})`,
+                      backgroundSize: "cover", backgroundPosition: "center",
+                      flexShrink: 0,
+                    }} />
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={viewMode === "frame" ? "white" : "#777"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke 220ms" }}>
+                      <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
-              {/* Mute button */}
-              <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10"
-                title={muted ? "Unmute" : "Mute"}
-              >
-                {muted ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
-                  </svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                  </svg>
-                )}
-              </button>
+              {/* Timer badge — only in video mode */}
+              {viewMode === "video" && (
+                <div className="absolute bottom-2 left-2 h-7 px-2 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity z-10 pointer-events-none">
+                  <span className="text-[11px] text-white font-mono tabular-nums">{fmtTime(currentSec)}</span>
+                </div>
+              )}
 
-              {/* Progress bar */}
-              {(() => {
+              {/* Mute button — only in video mode */}
+              {viewMode === "video" && (
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10"
+                  title={muted ? "Unmute" : "Mute"}
+                >
+                  {muted ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    </svg>
+                  )}
+                </button>
+              )}
+
+              {/* Progress bar — only in video mode */}
+              {viewMode === "video" && (() => {
                 const tStart = data.trimStart as number | undefined;
                 const tEnd   = data.trimEnd   as number | undefined;
                 const dur    = videoDuration;
@@ -636,12 +719,8 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                   >
                     {hasTrim ? (
                       <>
-                        {/* Pre-trim — invisible */}
-                        {/* Played portion of selection — bright white */}
                         <div className="absolute inset-y-0" style={{ left: `${startPct}%`, width: `${Math.max(0, progress * 100 - startPct)}%`, background: "rgba(255,255,255,0.85)" }} />
-                        {/* Unplayed portion of selection */}
                         <div className="absolute inset-y-0" style={{ left: `${Math.max(startPct, progress * 100)}%`, width: `${Math.max(0, endPct - Math.max(startPct, progress * 100))}%`, background: "rgba(255,255,255,0.40)" }} />
-                        {/* Post-trim — invisible */}
                       </>
                     ) : (
                       <div className="absolute inset-y-0 left-0 bg-white/70" style={{ width: `${progress * 100}%` }} />
@@ -661,13 +740,12 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                 </div>
               )}
 
-              {/* Trim button — bottom-right icon pill, above frame preview if present */}
-              {!isUploading && (
+              {/* Trim button — only in video mode */}
+              {!isUploading && viewMode === "video" && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); openTrim(); }}
-                  className={`absolute right-2 w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10 ${data.trimStart !== undefined ? "bg-amber-400/80 hover:bg-amber-400" : "bg-black/40 hover:bg-black/60"}`}
-                  style={{ bottom: capturedFrameUrl ? "calc(0.5rem + 1.75rem + 0.375rem)" : "0.5rem" }}
+                  className={`absolute right-2 bottom-2 w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10 ${data.trimStart !== undefined ? "bg-amber-400/80 hover:bg-amber-400" : "bg-black/40 hover:bg-black/60"}`}
                   title="Trim video"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={data.trimStart !== undefined ? "black" : "white"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -695,17 +773,26 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                 </button>
               )}
 
-              {/* Captured frame preview icon — bottom-right, shown on hover */}
-              {capturedFrameUrl && (
+              {/* Retake button — shown on hover when in frame mode */}
+              {capturedFrameUrl && viewMode === "frame" && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); openFramePreview(); }}
-                  className="absolute bottom-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10"
-                  title="View captured frame"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setViewMode("video");
+                    const v = videoRef.current;
+                    if (v) { v.pause(); setScrubPos(v.currentTime / (v.duration || 1)); }
+                    setPickerOpen(true);
+                  }}
+                  className="absolute bottom-2 left-1/2 -translate-x-1/2 h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors opacity-0 group-hover/player:opacity-100 pointer-events-auto z-10"
+                  title="Retake frame"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
-                  </svg>
+                  <span className="flex items-center gap-1">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" /><path d="M20 7h-3.2L15 5H9L7.2 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
+                    </svg>
+                    Retake
+                  </span>
                 </button>
               )}
             </>
@@ -950,7 +1037,9 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
+                      videoRef.current?.play().catch(() => {});
                       if (imageEdgeId) deleteElements({ edges: [{ id: imageEdgeId }] });
+                      else setPickerOpen(false);
                     }}
                     className="nodrag h-7 px-3 rounded-full bg-white/10 text-white text-[11px] flex items-center justify-center cursor-pointer"
                   >
