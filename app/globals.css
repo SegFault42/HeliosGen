@@ -277,6 +277,12 @@ body {
   border-color: #77E544 !important;
   box-shadow: 0 0 0 1px rgba(119, 229, 68, 0.2), 0 2px 16px rgba(42,26,20,0.5);
 }
+.react-flow__node .node-card.node-over-limit,
+.react-flow__node.selected .node-card.node-over-limit,
+.react-flow__node.node-ancestor .node-card.node-over-limit {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px rgba(239,68,68,0.2), 0 2px 14px rgba(239,68,68,0.12) !important;
+}
 .react-flow__edge.selected .react-flow__edge-path {
   filter: brightness(1.4);
 }

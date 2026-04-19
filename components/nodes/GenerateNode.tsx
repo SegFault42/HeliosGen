@@ -154,6 +154,12 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const nodes                = useWorkflowStore((s) => s.nodes);
   const edges                = useWorkflowStore((s) => s.edges);
   const debugMode            = useWorkflowStore((s) => s.debugMode);
+  const parentGroupSelected  = useWorkflowStore((s) => {
+    const self = s.nodes.find((n) => n.id === id);
+    if (!self?.parentId) return false;
+    return s.nodes.find((n) => n.id === self.parentId)?.selected ?? false;
+  });
+  const multiSelected = useWorkflowStore((s) => s.nodes.filter((n) => n.selected).length > 1);
 
   const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -264,11 +270,37 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     }
   }, [data.imageUrl, isSaving]);
 
+  const handleCancel = useCallback(() => {
+    setLoading(false);
+    const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+    const gens = ((storeNode?.data?.generations as GenEntry[] | undefined) ?? [])
+      .filter((g): g is string | { error: string } => g !== null);
+    const newIdx = Math.max(0, gens.length - 1);
+    const lastEntry = gens[newIdx];
+    updateNodeData(id, {
+      status: gens.length > 0 ? "done" : "idle",
+      taskId: undefined,
+      generations: gens,
+      currentGenIdx: newIdx,
+      imageUrl: typeof lastEntry === "string" ? lastEntry : undefined,
+      errorMsg: undefined,
+    });
+  }, [id, updateNodeData]);
+
   const model       = (data.model as string) ?? "nano-banana-2";
   const caps        = MODEL_CAPS[model] ?? DEFAULT_CAPS;
   const modelInfo   = MODELS.find((m) => m.id === model) ?? MODELS[0];
   const quality     = (data.quality as string) ?? "1k";
   const status      = data.status ?? "idle";
+
+  const promptOverLimit = (() => {
+    const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
+    if (!promptEdge) return false;
+    const promptNode = nodes.find((n) => n.id === promptEdge.source);
+    const text = (promptNode?.data?.prompt as string) ?? "";
+    const limit = (IMAGE_MODELS.find((m) => m.id === model))?.apiInput.promptMaxLength ?? Infinity;
+    return text.length > limit;
+  })();
 
   // If current ratio isn't valid for this model, fall back to 1:1
   const rawRatio  = (data.aspectRatio as string) ?? "1:1";
@@ -447,7 +479,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     >
       <CornerResizer minWidth={220} minHeight={80} keepAspectRatio={!!data.imageUrl} />
       <NodeActionBar
-        visible={!!selected}
+        visible={!!selected && !data.locked && !parentGroupSelected && !multiSelected}
         hasContent={!!data.imageUrl}
         isSaving={isSaving}
         onPreview={openLightbox}
@@ -455,6 +487,16 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         onSave={handleSave}
         onDuplicate={handleDuplicate}
       />
+      {data.locked && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ borderRadius: 8 }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+        </div>
+      )}
       <span className="node-above-label">{data.label as string}</span>
 
         {/* ── Icon handles — bottom-anchored, consistent with other nodes ── */}
@@ -522,6 +564,32 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           }}
           onDoubleClick={() => { if (data.imageUrl) openLightbox(); }}
         >
+          {busy && (
+            <>
+              <div
+                className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+                  <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span className="text-[11px] text-[#ccc] font-medium">Generating</span>
+              </div>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+                className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="m6 6 12 12" />
+                </svg>
+                <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
+              </button>
+            </>
+          )}
           {generations.length > 0 ? (
             <div
               style={{
@@ -786,7 +854,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={generate}
-            disabled={busy}
+            disabled={busy || promptOverLimit}
             className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full border border-[#2A1A14] hover:border-[#77E544] text-[#8D8E89] hover:text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <svg width="7" height="8" viewBox="0 0 7 8" fill="currentColor">
@@ -795,8 +863,6 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           </button>
 
         </div>
-
-      {busy && <SpinnerOverlay />}
 
       {/* ── Lightbox — blur-up full-quality view on double-click ─────── */}
       {lightboxOpen && typeof document !== "undefined" && createPortal(

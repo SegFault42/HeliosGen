@@ -6,6 +6,7 @@ import {
 import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node, useViewport } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import CornerResizer from "./CornerResizer";
 
 
@@ -99,8 +100,24 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
 
   const sourceConnected = edges.some((e) => e.source === id);
 
+  // Derive prompt character limit from the connected downstream node's model
+  const promptMaxLength: number | null = (() => {
+    const target = edges
+      .filter((e) => e.source === id)
+      .map((e) => nodes.find((n) => n.id === e.target))
+      .find((n) => n?.type === "generateNode" || n?.type === "videoGeneratorNode");
+    if (!target) return null;
+    if (target.type === "generateNode") {
+      const m = IMAGE_MODELS.find((m) => m.id === ((target.data?.model as string) ?? "nano-banana-2"));
+      return m?.apiInput.promptMaxLength ?? null;
+    }
+    const m = VIDEO_MODELS.find((m) => m.id === ((target.data?.videoModel as string) ?? "kling-3.0"));
+    return m?.apiInput.promptMaxLength ?? null;
+  })();
+
   const storePrompt = (data.prompt as string) ?? "";
   const hasError    = !!data.hasError;
+  const overLimit   = promptMaxLength !== null && storePrompt.length > promptMaxLength;
 
   // localText drives the overlay and placeholder — always in sync with what's
   // actually in the textarea (updated on every keystroke via handleChange).
@@ -351,7 +368,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     <>
     <div
       ref={cardRef}
-      className={`node-card w-full h-full flex flex-col${hasError ? " node-error-blink" : ""}`}
+      className={`node-card w-full h-full flex flex-col${hasError ? " node-error-blink" : ""}${overLimit ? " node-over-limit" : ""}`}
       style={{ minWidth: 260 }}
       onAnimationEnd={() => updateNodeData(id, { hasError: false })}
     >
@@ -371,7 +388,14 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           aria-hidden
           className="absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words overflow-hidden select-none"
         >
-          {renderWithMentions(localText, knownLabels)}
+          {promptMaxLength !== null && localText.length > promptMaxLength ? (
+            <>
+              {renderWithMentions(localText.slice(0, promptMaxLength), knownLabels)}
+              <span style={{ background: "rgba(239,68,68,0.22)", color: "#f87171", borderRadius: 2 }}>
+                {localText.slice(promptMaxLength)}
+              </span>
+            </>
+          ) : renderWithMentions(localText, knownLabels)}
           {"\u200b"}
         </div>
 
@@ -463,6 +487,22 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none z-20"
             style={{ background: "linear-gradient(to top, #0D1012 0%, transparent 100%)" }}
           />
+        )}
+
+        {/* Character count */}
+        {promptMaxLength !== null && (
+          <div
+            aria-hidden
+            className="absolute bottom-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full"
+            style={{
+              fontSize: 9,
+              lineHeight: 1,
+              color: localText.length > promptMaxLength ? "#f87171" : "#fff",
+              background: localText.length > promptMaxLength ? "#2a1010" : "#1a1a1a",
+            }}
+          >
+            {localText.length.toLocaleString()}/{promptMaxLength.toLocaleString()}
+          </div>
         )}
         </div>
       </div>

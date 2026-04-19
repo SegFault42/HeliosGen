@@ -138,6 +138,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const edges = useWorkflowStore((s) => s.edges);
   const debugMode = useWorkflowStore((s) => s.debugMode);
   const connectingHandleType = useWorkflowStore((s) => s.connectingHandleType);
+  const parentGroupSelected = useWorkflowStore((s) => {
+    const self = s.nodes.find((n) => n.id === id);
+    if (!self?.parentId) return false;
+    return s.nodes.find((n) => n.id === self.parentId)?.selected ?? false;
+  });
+  const multiSelected = useWorkflowStore((s) => s.nodes.filter((n) => n.selected).length > 1);
 
   const updateNodeInternals = useUpdateNodeInternals();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -241,6 +247,26 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     }
   }, [data.videoUrl, isSaving]);
 
+  const handleCancel = useCallback(() => {
+    setLoading(false);
+    const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+    const rawGens = (storeNode?.data?.generations as GenEntry[] | undefined) ?? [];
+    const rawMeta = (storeNode?.data?.generationsMeta as (GenMeta | null)[] | undefined) ?? [];
+    const gens = rawGens.filter((g): g is string | { error: string } => g !== null);
+    const meta = rawMeta.filter((_, i) => rawGens[i] !== null);
+    const newIdx = Math.max(0, gens.length - 1);
+    const lastEntry = gens[newIdx];
+    updateNodeData(id, {
+      status: gens.length > 0 ? "done" : "idle",
+      taskId: undefined,
+      generations: gens,
+      generationsMeta: meta,
+      currentGenIdx: newIdx,
+      videoUrl: typeof lastEntry === "string" ? lastEntry : undefined,
+      errorMsg: undefined,
+    });
+  }, [id, updateNodeData]);
+
   // ── Data ──────────────────────────────────────────────────────────────────
   const videoModelId = (data.videoModel as string) ?? "kling-3.0";
   const cfg = VIDEO_MODEL_CFG.find((m) => m.id === videoModelId) ?? VIDEO_MODEL_CFG[0];
@@ -254,6 +280,15 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const prompt = (data.prompt as string) ?? "";
   const busy = loading || status === "running";
   const videoUrl = data.videoUrl as string | undefined;
+
+  const promptOverLimit = (() => {
+    const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
+    if (!promptEdge) return false;
+    const promptNode = nodes.find((n) => n.id === promptEdge.source);
+    const text = (promptNode?.data?.prompt as string) ?? "";
+    const limit = cfg.apiInput.promptMaxLength ?? Infinity;
+    return text.length > limit;
+  })();
 
   // ── Generation history ────────────────────────────────────────────────────
   type GenEntry = string | null | { error: string };
@@ -573,10 +608,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       // Store taskId — the polling useEffect above will wait for completion
       updateNodeData(id, { taskId: json.taskId });
     } catch (e: unknown) {
-      updateNodeData(id, {
-        status: "error",
-        errorMsg: e instanceof Error ? e.message : String(e),
-      });
+      const errMsg = e instanceof Error ? e.message : String(e);
+      const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+      const gens = [...((storeNode?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
+      const slot = (storeNode?.data?.currentGenIdx as number | undefined) ?? Math.max(0, gens.length - 1);
+      gens[slot] = { error: errMsg };
+      updateNodeData(id, { status: "error", errorMsg: errMsg, generations: gens, currentGenIdx: slot });
     } finally {
       setLoading(false);
     }
@@ -599,7 +636,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     >
       <CornerResizer minWidth={280} minHeight={80} keepAspectRatio={!!data.videoUrl} />
       <NodeActionBar
-        visible={!!selected}
+        visible={!!selected && !data.locked && !parentGroupSelected && !multiSelected}
         hasContent={!!data.videoUrl}
         isSaving={isSaving}
         onPreview={openLightbox}
@@ -607,6 +644,16 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         onSave={handleSave}
         onDuplicate={handleDuplicate}
       />
+      {data.locked && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ borderRadius: 8 }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+        </div>
+      )}
 
       <span className="node-above-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <VideoNodeIcon />
@@ -725,6 +772,34 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               </div>
             ))}
           </div>
+
+          {/* Generating badge + cancel — visible while busy */}
+          {busy && (
+            <>
+              <div
+                className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+                  <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                <span className="text-[11px] text-[#ccc] font-medium">Generating</span>
+              </div>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+                className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="m6 6 12 12" />
+                </svg>
+                <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
+              </button>
+            </>
+          )}
 
           {/* Overlay controls — only visible when current slot is a done video */}
           {typeof generations[currentGenIdx] === "string" && <>
@@ -924,7 +999,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={generate}
-              disabled={busy}
+              disabled={busy || promptOverLimit}
               className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-[#E8E8E8] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
             >
               <svg width="9" height="10" viewBox="0 0 9 10" fill="#0A0C0E">

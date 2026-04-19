@@ -29,7 +29,9 @@ import ImageInputNode      from "./nodes/ImageInputNode";
 import VideoInputNode      from "./nodes/VideoInputNode";
 import GenerateNode        from "./nodes/GenerateNode";
 import VideoGeneratorNode  from "./nodes/VideoGeneratorNode";
+import GroupNode           from "./nodes/GroupNode";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
+import SelectionToolbar    from "./SelectionToolbar";
 import AuthButton from "./AuthButton";
 import CreditBalance from "./CreditBalance";
 
@@ -55,6 +57,7 @@ const nodeTypes = {
   videoInputNode:      VideoInputNode,
   generateNode:        GenerateNode,
   videoGeneratorNode:  VideoGeneratorNode,
+  groupNode:           GroupNode,
 };
 
 const edgeTypes = {
@@ -124,6 +127,19 @@ export default function WorkflowCanvas() {
     ({ nodes: selected }: { nodes: Node[] }) => {
       // Update ref synchronously — visible to the render triggered by setAncestorIds below
       selectedIdsRef.current = new Set(selected.map((n) => n.id));
+
+      // When a group node is selected, also select all its members
+      const selectedGroups = selected.filter((n) => n.type === "groupNode");
+      if (selectedGroups.length > 0) {
+        const toSelect: string[] = [];
+        for (const g of selectedGroups) {
+          const memberIds = g.data?.memberIds as string[] | undefined;
+          memberIds?.forEach((mid) => { if (!selectedIdsRef.current.has(mid)) toSelect.push(mid); });
+        }
+        if (toSelect.length > 0) {
+          _onNodesChange(toSelect.map((id) => ({ type: "select" as const, id, selected: true })));
+        }
+      }
 
       if (selected.length === 0) {
         setAncestorIds(new Set());
@@ -241,8 +257,30 @@ export default function WorkflowCanvas() {
       return { ...change, position: { x: snappedX, y: snappedY } };
     });
 
+    // When a group node moves, also move its members by the same delta
+    const extraMemberChanges: NodeChange[] = [];
+    for (const change of snappedChanges) {
+      if (change.type !== "position" || !change.position) continue;
+      const node = nodes.find((n) => n.id === change.id);
+      if (node?.type !== "groupNode") continue;
+      const memberIds = node.data?.memberIds as string[] | undefined;
+      if (!memberIds?.length) continue;
+      const dx = change.position.x - node.position.x;
+      const dy = change.position.y - node.position.y;
+      for (const memberId of memberIds) {
+        const member = nodes.find((n) => n.id === memberId);
+        if (!member) continue;
+        extraMemberChanges.push({
+          type: "position" as const,
+          id: memberId,
+          position: { x: member.position.x + dx, y: member.position.y + dy },
+          dragging: change.dragging,
+        });
+      }
+    }
+
     setSnapGuides(newGuides);
-    _onNodesChange(snappedChanges);
+    _onNodesChange(extraMemberChanges.length > 0 ? [...snappedChanges, ...extraMemberChanges] : snappedChanges);
   }, [nodes, edges, _onNodesChange]);
 
   // ── Sidebar drag-and-drop ────────────────────────────────────────────────────
@@ -957,6 +995,35 @@ export default function WorkflowCanvas() {
     snapTargetRef.current = null;
   }, []);
 
+  // When a member node inside a selected group is clicked or dragged,
+  // break the group selection so only that member moves.
+  const breakGroupSelection = useCallback((node: Node) => {
+    if (node.type === "groupNode") return;
+    const state = useWorkflowStore.getState();
+    const selectedGroups = state.nodes.filter((n) => n.type === "groupNode" && n.selected);
+    const isMember = selectedGroups.some((g) =>
+      (g.data?.memberIds as string[] | undefined)?.includes(node.id)
+    );
+    if (!isMember) return;
+    const newNodes = state.nodes.map((n) =>
+      n.id === node.id ? n : { ...n, selected: false }
+    );
+    useWorkflowStore.setState((s) => ({
+      nodes: newNodes,
+      spaces: s.spaces.map((sp) =>
+        sp.id === s.activeSpaceId ? { ...sp, nodes: newNodes } : sp
+      ),
+    }));
+  }, []);
+
+  const handleNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
+    breakGroupSelection(node);
+  }, [breakGroupSelection]);
+
+  const handleNodeDragStart = useCallback((_e: React.MouseEvent, node: Node) => {
+    breakGroupSelection(node);
+  }, [breakGroupSelection]);
+
   return (
     <div
       ref={wrapperRef}
@@ -967,12 +1034,20 @@ export default function WorkflowCanvas() {
         nodes={(() => {
           const selIds = selectedIdsRef.current;
           const anySelected = selIds.size > 0;
+          // Build set of member IDs belonging to locked groups
+          const lockedMemberIds = new Set<string>();
+          nodes.filter((n) => n.type === "groupNode" && n.data?.locked).forEach((g) => {
+            (g.data?.memberIds as string[] | undefined)?.forEach((mid) => lockedMemberIds.add(mid));
+          });
           return nodes.map((n) => {
             const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id);
             const isDimmed = anySelected && !isHighlighted && !isConnecting;
             const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
+            const isLockedMember = lockedMemberIds.has(n.id);
+            const isLockedGroup  = n.type === "groupNode" && !!n.data?.locked;
             return {
               ...n,
+              draggable: (isLockedMember || isLockedGroup) ? false : undefined,
               className: [n.className, ancestorClass].filter(Boolean).join(" ") || undefined,
               style: {
                 ...n.style,
@@ -999,6 +1074,8 @@ export default function WorkflowCanvas() {
         onEdgesChange={onEdgesChange}
         onEdgeClick={handleEdgeClick}
         onSelectionChange={onSelectionChange}
+        onNodeClick={handleNodeClick}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onConnect={handleConnect}
         onConnectStart={onConnectStart}
@@ -1029,6 +1106,7 @@ export default function WorkflowCanvas() {
       >
         <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
         <ViewportSyncer />
+        <SelectionToolbar />
 
         {dropState && (
           <NodePickerMenu

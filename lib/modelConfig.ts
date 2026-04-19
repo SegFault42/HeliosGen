@@ -233,6 +233,8 @@ export interface VideoModel {
     referenceVideosKey?: string;
     /** Field name for an array of reference audio URLs */
     referenceAudiosKey?: string;
+    /** Max prompt length accepted by the model */
+    promptMaxLength?: number;
     /** Any other static fields to include in the input object */
     extra?: Record<string, unknown>;
   };
@@ -266,6 +268,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       soundKey: "sound",
       useImageUrls: true,
       useKlingElements: true,
+      promptMaxLength: 2500,
       extra: { multi_shots: false },
     },
   },
@@ -299,6 +302,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       modeKey: "mode",
       resolutionKey: "resolution",
       referenceImagesKey: "image_urls",
+      promptMaxLength: 5000,
     },
   },
   // ── Bytedance ─────────────────────────────────────────────────────────────────
@@ -331,6 +335,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       referenceImagesKey: "reference_image_urls",
       referenceVideosKey: "reference_video_urls",
       referenceAudiosKey: "reference_audio_urls",
+      promptMaxLength: 20000,
       extra: { web_search: false },
     },
   },
@@ -363,6 +368,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       resolutionKey: "mode",             // resolution selector → mode (720p / 1080p)
       useMotionControl: true,
       videoRefMaxDuration: 30,           // reference video may not exceed 30 s
+      promptMaxLength: 2500,
     },
   },
 ];
