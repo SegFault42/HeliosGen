@@ -310,6 +310,13 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const cssRatio = `${rw} / ${rh}`;
   const busy     = loading || status === "running";
 
+  const [natW, natH] = (() => {
+    const r = data.imageNaturalRatio as string | undefined;
+    if (!r) return [0, 0];
+    const parts = r.split("/").map((s) => parseInt(s.trim(), 10));
+    return parts.length === 2 ? parts : [0, 0];
+  })();
+
   // ── Generation history ────────────────────────────────────────────────────
   type GenEntry = string | null | { error: string };
   const rawGens     = data.generations;
@@ -340,6 +347,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       updateNodeData(id, { currentGenIdx: clamped, imageUrl: entry, status: "done", errorMsg: undefined });
     }
   }, [id, updateNodeData, generations]);
+
+  // Probe original URL for true pixel dimensions (Next.js Image serves a reduced copy)
+  useEffect(() => {
+    const url = data.imageUrl as string | undefined;
+    if (!url) return;
+    let cancelled = false;
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) updateNodeData(id, { imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}` });
+    };
+    img.src = url;
+    return () => { cancelled = true; };
+  }, [data.imageUrl, id, updateNodeData]);
 
   // Re-sync edge anchor positions on every resize — including during CSS transitions
   useEffect(() => {
@@ -552,7 +572,15 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           </div>
         )}
 
-        <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          style={{ top: 20 }}
+          className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+          title="Image output"
+        >
+          <PhotoIcon />
+        </Handle>
 
         {/* ── Image area — top corners clip to card border-radius ───────── */}
         <div
@@ -624,10 +652,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                       quality={30}
                       sizes="400px"
                       style={{ objectFit: "fill" }}
-                      onLoad={i === currentGenIdx ? (e) => {
-                        const img = e.currentTarget as HTMLImageElement;
-                        const nw = img.naturalWidth, nh = img.naturalHeight;
-                        updateNodeData(id, { imageNaturalRatio: `${nw} / ${nh}` });
+                      onLoad={i === currentGenIdx ? () => {
                         requestAnimationFrame(() => {
                           if (!cardRef.current) return;
                           const w = cardRef.current.offsetWidth;
@@ -661,6 +686,16 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             </div>
           ) : (
             <div className="w-full h-full" />
+          )}
+
+          {natW > 0 && natH > 0 && (
+            <div
+              aria-hidden
+              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover/gen:opacity-100 transition-opacity duration-150"
+              style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
+            >
+              {natW} × {natH}
+            </div>
           )}
 
         </div>

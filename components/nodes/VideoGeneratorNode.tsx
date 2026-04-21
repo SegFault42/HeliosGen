@@ -33,6 +33,7 @@ const CONNECTABLE_FOR_TYPE: Record<string, Set<string>> = {
   prompt:  new Set(["prompt"]),
   image:   new Set(["startFrame", "endFrame", "resource"]),
   video:   new Set(["videoRef", "referenceVideo"]),
+  audio:   new Set(["audioRef"]),
 };
 const HANDLE_BOTTOM_BASE = 52; // px above node bottom edge
 const HANDLE_SPACING     = 38; // px between handles
@@ -46,6 +47,20 @@ const HANDLE_COLORS: Record<string, string> = {
   referenceVideo: "#38bdf8",
   audioRef:       "#a78bfa",
 };
+
+const SOURCE_HANDLE_COLORS: Record<string, string> = {
+  image: "#818cf8",
+  video: "#22d3ee",
+  audio: "#a78bfa",
+};
+
+const SOURCE_HANDLES = [
+  { id: "startFrameOut", type: "image", label: "Start frame",      icon: <SrcFrameStartIcon /> },
+  { id: "endFrameOut",   type: "image", label: "End frame",        icon: <SrcFrameEndIcon /> },
+  { id: "imagePickOut",  type: "image", label: "Image pick",       icon: <SrcImagePickIcon /> },
+  { id: "videoRefOut",   type: "video", label: "Reference video",  icon: <SrcVideoIcon /> },
+  { id: "audioRefOut",   type: "audio", label: "Reference audio",  icon: <SrcAudioIcon /> },
+] as const;
 
 const STATUS_DOT: Record<string, string> = {
   idle: "bg-[#1E1E1E]",
@@ -163,6 +178,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
   const [loading, setLoading] = useState(false);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
+  const [hoveredSourceHandle, setHoveredSourceHandle] = useState<string | null>(null);
   const [errorHandles, setErrorHandles] = useState<Set<string>>(new Set());
   const [modelOpen, setModelOpen] = useState(false);
   const [ratioOpen, setRatioOpen] = useState(false);
@@ -388,6 +404,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     return () => ro.disconnect();
   }, [id, updateNodeSize, updateNodeInternals]);
 
+  // When the model changes the active handle set and their CSS positions change.
+  // React Flow needs updateNodeInternals after the DOM has repainted with the new layout.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => updateNodeInternals(id));
+    return () => cancelAnimationFrame(raf);
+  }, [id, videoModelId, updateNodeInternals]);
+
   // ── Poll job-status while a taskId is pending ────────────────────────────
   useEffect(() => {
     const taskId = data.taskId as string | undefined;
@@ -570,6 +593,47 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       }
     }
 
+    // Extract first/last frames from VideoInputNode sources connected via startFrameOut/endFrameOut
+    let finalStartFrameUrl = upstream.startFrameUrl;
+    let finalEndFrameUrl   = upstream.endFrameUrl;
+    const frameToken = authData.session?.access_token;
+    const frameHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(frameToken ? { Authorization: `Bearer ${frameToken}` } : {}),
+    };
+
+    const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame" && e.sourceHandle === "startFrameOut");
+    if (sfEdge) {
+      const sfSrc = nodes.find((n) => n.id === sfEdge.source);
+      if (sfSrc?.type === "videoInputNode") {
+        const vUrl = sfSrc.data.videoUrl as string | undefined;
+        if (vUrl && !vUrl.startsWith("blob:")) {
+          const timeSeconds = (sfSrc.data.trimStart as number | undefined) ?? 0;
+          try {
+            const r = await fetch("/api/extract-frame", { method: "POST", headers: frameHeaders, body: JSON.stringify({ videoUrl: vUrl, timeSeconds }) });
+            const j = await r.json();
+            if (j.cdnUrl) finalStartFrameUrl = j.cdnUrl;
+          } catch { /* proceed without */ }
+        }
+      }
+    }
+
+    const efEdge = edges.find((e) => e.target === id && e.targetHandle === "endFrame" && e.sourceHandle === "endFrameOut");
+    if (efEdge) {
+      const efSrc = nodes.find((n) => n.id === efEdge.source);
+      if (efSrc?.type === "videoInputNode") {
+        const vUrl = efSrc.data.videoUrl as string | undefined;
+        if (vUrl && !vUrl.startsWith("blob:")) {
+          const trimEnd = efSrc.data.trimEnd as number | undefined;
+          try {
+            const r = await fetch("/api/extract-frame", { method: "POST", headers: frameHeaders, body: JSON.stringify({ videoUrl: vUrl, ...(trimEnd !== undefined ? { timeSeconds: trimEnd } : { lastFrame: true }) }) });
+            const j = await r.json();
+            if (j.cdnUrl) finalEndFrameUrl = j.cdnUrl;
+          } catch { /* proceed without */ }
+        }
+      }
+    }
+
     // Build full payload first so debug log matches what gets sent
     const payload: Record<string, unknown> = {
       videoModel: videoModelId,
@@ -579,8 +643,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       mode,
       resolution,
       sound,
-      startFrameUrl:      upstream.startFrameUrl,
-      endFrameUrl:        upstream.endFrameUrl,
+      startFrameUrl:      finalStartFrameUrl,
+      endFrameUrl:        finalEndFrameUrl,
       videoRefUrl:        finalVideoRefUrl,
       resources:          orderedResources,
       referenceImageUrls: orderedResources.length > 0
@@ -679,6 +743,46 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         <VideoNodeIcon />
         {data.label as string}
       </span>
+
+      {/* ── Source (output) handles — top-right ──────────────────────── */}
+      {SOURCE_HANDLES.map((h, i) => (
+        <Handle
+          key={h.id}
+          type="source"
+          position={Position.Right}
+          id={h.id}
+          style={{ top: 20 + i * 32 }}
+          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+          onMouseEnter={() => setHoveredSourceHandle(h.id)}
+          onMouseLeave={() => setHoveredSourceHandle(null)}
+        >
+          {h.icon}
+        </Handle>
+      ))}
+
+      {/* Source handle tooltip */}
+      {hoveredSourceHandle && (() => {
+        const idx = SOURCE_HANDLES.findIndex((h) => h.id === hoveredSourceHandle);
+        const def = SOURCE_HANDLES[idx];
+        if (!def) return null;
+        const color = SOURCE_HANDLE_COLORS[def.type];
+        return (
+          <div
+            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            style={{
+              top: 20 + idx * 32,
+              right: 0,
+              transform: "translate(calc(100% + 34px), -50%)",
+              background: "#1A1A1A",
+              border: `1px solid ${color}33`,
+              color: "#CCCCCC",
+            }}
+          >
+            <span style={{ color }} className="mr-1.5">●</span>
+            {def.label}
+          </div>
+        );
+      })()}
 
       {/* ── Handles ──────────────────────────────────────────────────── */}
       {handles.map((h) => {
@@ -1374,6 +1478,51 @@ function CharacterIcon() {
     <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="7" cy="4.5" r="2.5" />
       <path d="M1.5 13c0-2.8 2.46-5 5.5-5s5.5 2.2 5.5 5" />
+    </svg>
+  );
+}
+
+function SrcFrameStartIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M4.5 6h5M7 4l2.5 2L7 8" />
+    </svg>
+  );
+}
+
+function SrcFrameEndIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M9.5 6h-5M7 4 4.5 6 7 8" />
+    </svg>
+  );
+}
+
+function SrcImagePickIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <circle cx="4.5" cy="4" r="1.2" fill="white" stroke="none" />
+      <path d="m0.7 9 3.5-3.5 2.5 2.5 2-2 5 4" />
+    </svg>
+  );
+}
+
+function SrcVideoIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+    </svg>
+  );
+}
+
+function SrcAudioIcon() {
+  return (
+    <svg width="12" height="11" viewBox="0 0 13 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 4v4M4.5 2v8M6.5 3.5v5M9 2v8M11 4v4" />
     </svg>
   );
 }

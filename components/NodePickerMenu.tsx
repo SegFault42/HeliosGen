@@ -112,13 +112,17 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
   };
 
   // ── Pending connection line ──────────────────────────────────────────────────
-  // Convert source handle position (right-center of the source node) to screen space
+  // Convert source handle position to screen space using the handle's actual top value.
   const internal = getInternalNode(dropState.sourceNodeId);
   const absX  = internal?.internals?.positionAbsolute?.x ?? 0;
   const absY  = internal?.internals?.positionAbsolute?.y ?? 0;
   const nodeW = internal?.measured?.width  ?? (NODE_SIZE[dropState.sourceNodeType ?? ""] ?? FALLBACK_SIZE).w;
-  const nodeH = internal?.measured?.height ?? (NODE_SIZE[dropState.sourceNodeType ?? ""] ?? FALLBACK_SIZE).h;
-  const src   = flowToScreenPosition({ x: absX + nodeW, y: absY + nodeH / 2 });
+  // All output handles use top: 20 (single-output nodes) or top: 20 + index * 32 (multi-output).
+  // sourceHandleId is null for nodes whose output Handle has no explicit id prop — still top: 20.
+  const MULTI_OUT_IDS = ["startFrameOut", "endFrameOut", "imagePickOut", "videoRefOut", "audioRefOut"];
+  const multiIdx = dropState.sourceHandleId ? MULTI_OUT_IDS.indexOf(dropState.sourceHandleId) : -1;
+  const handleTopY = multiIdx >= 0 ? 20 + multiIdx * 32 : 20;
+  const src   = flowToScreenPosition({ x: absX + nodeW, y: absY + handleTopY });
   const dst   = { x: dropState.screenX, y: dropState.screenY };
 
   // Bezier control points — horizontal pull matching React Flow's default edge style

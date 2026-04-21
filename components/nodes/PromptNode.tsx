@@ -56,6 +56,9 @@ function renderWithMentions(
 
 export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
+  const onNodesChange  = useWorkflowStore((s) => s.onNodesChange);
+  const addNode        = useWorkflowStore((s) => s.addNode);
+  const insertEdge     = useWorkflowStore((s) => s.insertEdge);
   const nodes          = useWorkflowStore((s) => s.nodes);
   const edges          = useWorkflowStore((s) => s.edges);
 
@@ -81,6 +84,15 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const popoverRaf        = useRef<number>();
   const chipElementRef    = useRef<HTMLElement | null>(null);  // the live chip DOM node
   const popoverPosRef     = useRef<HTMLDivElement | null>(null); // outer positioning div
+  const scaleWrapperRef   = useRef<HTMLDivElement | null>(null);
+
+  // ── Expand modal ──────────────────────────────────────────────────────────
+  const [expandOpen,        setExpandOpen]        = useState(false);
+  const [expandMentionQuery, setExpandMentionQuery] = useState<string | null>(null);
+  const [expandSelectedIdx,  setExpandSelectedIdx]  = useState(0);
+  const modalTextareaRef    = useRef<HTMLTextAreaElement | null>(null);
+  const modalHighlightRef   = useRef<HTMLDivElement | null>(null);
+  const modalPendingCursor  = useRef<number | null>(null);
 
   selectedRef.current = selected;
 
@@ -97,6 +109,8 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   }, [selected]);
 
   const { zoom } = useViewport();
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   const sourceConnected = edges.some((e) => e.source === id);
 
@@ -176,13 +190,19 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const filteredMentions =
     mentionQuery !== null
       ? mentionableNodes.filter((n) =>
-          (n.data.label as string)
-            ?.toLowerCase()
-            .includes(mentionQuery.toLowerCase())
+          (n.data.label as string)?.toLowerCase().includes(mentionQuery.toLowerCase())
+        )
+      : mentionableNodes;
+
+  const expandFilteredMentions =
+    expandMentionQuery !== null
+      ? mentionableNodes.filter((n) =>
+          (n.data.label as string)?.toLowerCase().includes(expandMentionQuery.toLowerCase())
         )
       : mentionableNodes;
 
   useEffect(() => { setSelectedIdx(0); }, [filteredMentions.length]);
+  useEffect(() => { setExpandSelectedIdx(0); }, [expandFilteredMentions.length]);
 
   // ── Elevate the RF node z-index while the menu is open ───────────────────
   useEffect(() => {
@@ -255,9 +275,35 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
       const el  = chipElementRef.current;
       const div = popoverPosRef.current;
       if (el && div) {
-        const r = el.getBoundingClientRect();
-        div.style.left = `${r.left + r.width / 2}px`;
-        div.style.top  = `${r.top - 10}px`;
+        const r   = el.getBoundingClientRect();
+        const z   = zoomRef.current;
+        const vw  = window.innerWidth;
+        const vh  = window.innerHeight;
+        const GAP    = 10;
+        const MARGIN = 8;
+
+        // Visual size: layout dimensions × zoom (scale() doesn't affect offsetWidth/Height)
+        const popW = div.offsetWidth  * z;
+        const popH = div.offsetHeight * z;
+
+        // Prefer above the chip; fall back to below if it would clip the top
+        const showBelow = r.top - GAP - popH < MARGIN;
+        let top = showBelow ? r.bottom + GAP : r.top - GAP;
+
+        // Clamp to bottom of viewport when showing below
+        if (showBelow && top + popH > vh - MARGIN) top = vh - MARGIN - popH;
+
+        // Center on chip horizontally, then clamp to viewport edges
+        let left = r.left + r.width / 2;
+        const halfW = popW / 2;
+        if (left - halfW < MARGIN) left = MARGIN + halfW;
+        else if (left + halfW > vw - MARGIN) left = vw - MARGIN - halfW;
+
+        div.style.left      = `${left}px`;
+        div.style.top       = `${top}px`;
+        div.style.transform = `translateX(-50%) translateY(${showBelow ? "0%" : "-100%"})`;
+        const origin = showBelow ? "top center" : "bottom center";
+        if (scaleWrapperRef.current) scaleWrapperRef.current.style.transformOrigin = origin;
       }
       rafId = requestAnimationFrame(tick);
     };
@@ -361,7 +407,113 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     [id, updateNodeData]
   );
 
-  const menuOpen = mentionQuery !== null && filteredMentions.length > 0;
+  const menuOpen        = mentionQuery !== null && filteredMentions.length > 0;
+  const expandMenuOpen  = expandMentionQuery !== null && expandFilteredMentions.length > 0;
+
+  // Sync modal textarea value + cursor after programmatic edits inside the modal
+  useLayoutEffect(() => {
+    const pos = modalPendingCursor.current;
+    if (pos === null) return;
+    modalPendingCursor.current = null;
+    const ta = modalTextareaRef.current;
+    if (!ta) return;
+    ta.selectionStart = pos;
+    ta.selectionEnd   = pos;
+  });
+
+  // When modal opens, seed & focus its textarea
+  useEffect(() => {
+    if (!expandOpen) return;
+    requestAnimationFrame(() => {
+      const ta = modalTextareaRef.current;
+      if (!ta) return;
+      ta.value = (data.prompt as string) ?? "";
+      ta.focus();
+      ta.selectionStart = ta.value.length;
+      ta.selectionEnd   = ta.value.length;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandOpen]);
+
+  // Sync modal highlight scroll
+  const syncModalScroll = useCallback(() => {
+    if (modalHighlightRef.current && modalTextareaRef.current)
+      modalHighlightRef.current.scrollTop = modalTextareaRef.current.scrollTop;
+  }, []);
+
+  const handleModalChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text   = e.target.value;
+    const cursor = e.target.selectionStart ?? text.length;
+    setLocalText(text);
+    updateNodeData(id, { prompt: text, hasError: false });
+    const query = getMentionQuery(text, cursor);
+    setExpandMentionQuery(query);
+    if (query !== null) setExpandSelectedIdx(0);
+  }, [id, updateNodeData]);
+
+  const insertMentionModal = useCallback((label: string) => {
+    const ta = modalTextareaRef.current;
+    if (!ta) return;
+    const text    = ta.value;
+    const cursor  = ta.selectionStart ?? text.length;
+    const before  = text.slice(0, cursor);
+    const after   = text.slice(cursor);
+    const lastAt  = before.lastIndexOf("@");
+    const newText = `${before.slice(0, lastAt)}@${label} ${after}`;
+    const newPos  = lastAt + label.length + 2;
+    ta.value = newText;
+    ta.focus();
+    setLocalText(newText);
+    modalPendingCursor.current = newPos;
+    updateNodeData(id, { prompt: newText });
+    setExpandMentionQuery(null);
+  }, [id, updateNodeData]);
+
+  const handleDelete = useCallback(() => {
+    onNodesChange([{ type: "remove", id }]);
+  }, [id, onNodesChange]);
+
+  // Delete node with Del key when selected but textarea is not focused
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const active = document.activeElement;
+      if (active === textareaRef.current || active === modalTextareaRef.current) return;
+      if ((active as HTMLElement)?.isContentEditable) return;
+      handleDelete();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selected, handleDelete]);
+
+  const handleDuplicate = useCallback(() => {
+    const state = useWorkflowStore.getState();
+    const src = state.nodes.find((n) => n.id === id);
+    if (!src) return;
+    const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    onNodesChange([{ type: "select", id, selected: false }]);
+    addNode({
+      ...src,
+      id: newId,
+      position: { x: src.position.x + 20, y: src.position.y + 20 },
+      selected: true,
+      data: { ...src.data },
+    });
+    state.edges
+      .filter((e) => e.source === id || e.target === id)
+      .forEach((e) => insertEdge({
+        ...e,
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        source: e.source === id ? newId : e.source,
+        target: e.target === id ? newId : e.target,
+      }));
+  }, [id, addNode, insertEdge, onNodesChange]);
+
+  const handleCopyToClipboard = useCallback(() => {
+    const text = (data.prompt as string) ?? "";
+    navigator.clipboard.writeText(text).catch(() => {});
+  }, [data.prompt]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -374,6 +526,55 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     >
       <CornerResizer minWidth={200} minHeight={80} />
       <span className="node-above-label">{data.label as string}</span>
+
+      {/* ── Action bar — shown when selected ─────────────────────────────── */}
+      <div
+        className="absolute z-50 flex items-center gap-0.5 px-1.5 py-1"
+        style={{
+          bottom: "calc(100% + 28px)", left: "50%",
+          borderRadius: 999,
+          background: "rgba(16,16,16,0.96)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)",
+          transform: `translateX(-50%) translateY(${selected ? "0px" : "6px"})`,
+          opacity: selected ? 1 : 0,
+          transition: "opacity 180ms ease, transform 180ms ease",
+          pointerEvents: selected ? "auto" : "none",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {/* Copy to clipboard */}
+        <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); handleCopyToClipboard(); }} title="Copy prompt text"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-[#777] hover:text-white hover:bg-white/10 transition-colors duration-150">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+          </svg>
+        </button>
+        <span className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0" />
+        {/* Duplicate */}
+        <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); handleDuplicate(); }} title="Duplicate node"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-[#777] hover:text-white hover:bg-white/10 transition-colors duration-150">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
+        {/* Expand */}
+        <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setExpandOpen(true); }} title="Expand editor"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-[#777] hover:text-white hover:bg-white/10 transition-colors duration-150">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+        </button>
+        <span className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0" />
+        {/* Delete */}
+        <button onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); handleDelete(); }} title="Delete node"
+          className="w-7 h-7 flex items-center justify-center rounded-full text-[#777] hover:text-red-400 hover:bg-red-400/10 transition-colors duration-150">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+          </svg>
+        </button>
+      </div>
 
       {/* Padding zone — fills remaining height; clicking here drags the node */}
       <div className="flex-1 p-2.5 min-h-0">
@@ -510,8 +711,12 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
       <Handle
         type="source"
         position={Position.Right}
-        className={`node-handle node-handle-prompt${sourceConnected ? " node-handle-connected" : ""}`}
-      />
+        style={{ top: 20 }}
+        className={`node-handle-icon node-handle-icon-out-text${sourceConnected ? " node-handle-connected" : ""}`}
+        title="Text output"
+      >
+        <TextOutIcon />
+      </Handle>
 
       {/* ── Inline @mention menu (scales with canvas zoom) ─────────────── */}
       {menuOpen && (
@@ -574,6 +779,127 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
       )}
     </div>
 
+    {/* ── Expand modal ─────────────────────────────────────────────────── */}
+    {expandOpen && createPortal(
+      <div className="fixed inset-0 z-[9998] flex items-center justify-center p-6">
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/60"
+          style={{ backdropFilter: "blur(4px)" }}
+          onClick={() => { setExpandOpen(false); setExpandMentionQuery(null); }}
+        />
+        {/* Panel */}
+        <div
+          className="relative z-10 flex flex-col rounded-xl border border-white/[0.08]"
+          style={{ width: "min(760px, 100%)", height: "min(520px, 100%)", background: "#0D1012", boxShadow: "0 24px 80px rgba(0,0,0,0.8)" }}
+          onKeyDown={(e) => { if (e.key === "Escape") { setExpandOpen(false); setExpandMentionQuery(null); } }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
+            <span className="text-[11px] text-[#555] uppercase tracking-widest font-medium">{data.label as string}</span>
+            <button
+              onClick={() => { setExpandOpen(false); setExpandMentionQuery(null); }}
+              className="w-6 h-6 flex items-center justify-center rounded text-[#555] hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          {/* Text editor zone */}
+          <div className="relative flex-1 min-h-0">
+            {/* Highlight overlay */}
+            <div
+              ref={modalHighlightRef}
+              aria-hidden
+              className="absolute inset-0 px-4 pt-3 pb-4 text-[14px] text-white leading-[1.7] pointer-events-none whitespace-pre-wrap break-words overflow-hidden select-none"
+            >
+              {renderWithMentions(localText, knownLabels)}
+              {"\u200b"}
+            </div>
+            {/* Placeholder */}
+            {!localText && (
+              <div aria-hidden className="absolute inset-0 px-4 pt-3 pb-4 text-[14px] text-[#444] leading-[1.7] pointer-events-none select-none">
+                Describe what you want to generate…
+              </div>
+            )}
+            {/* Textarea */}
+            <textarea
+              ref={modalTextareaRef}
+              className="relative w-full h-full px-4 pt-3 pb-4 bg-transparent text-[14px] leading-[1.7] resize-none outline-none overflow-y-auto"
+              style={{ color: "transparent", caretColor: "white", overscrollBehavior: "contain" }}
+              onChange={handleModalChange}
+              onScroll={syncModalScroll}
+              onKeyDown={(e) => {
+                const ta = modalTextareaRef.current;
+                // Atomic mention deletion
+                if ((e.key === "Backspace" || e.key === "Delete") && ta && ta.selectionStart === ta.selectionEnd) {
+                  const cursor = ta.selectionStart ?? 0;
+                  const text = ta.value;
+                  for (const label of knownLabels) {
+                    const mention = `@${label}`;
+                    let pos = 0;
+                    while (pos < text.length) {
+                      const idx = text.indexOf(mention, pos);
+                      if (idx === -1) break;
+                      const end = idx + mention.length;
+                      const hit = e.key === "Backspace" ? cursor > idx && cursor <= end : cursor >= idx && cursor < end;
+                      if (hit) {
+                        e.preventDefault();
+                        const newText = text.slice(0, idx) + text.slice(end);
+                        ta.value = newText;
+                        setLocalText(newText);
+                        modalPendingCursor.current = idx;
+                        updateNodeData(id, { prompt: newText });
+                        return;
+                      }
+                      pos = idx + 1;
+                    }
+                  }
+                }
+                if (e.key === "Escape") { setExpandOpen(false); setExpandMentionQuery(null); return; }
+                if (!expandMenuOpen) return;
+                if (e.key === "ArrowDown") { e.preventDefault(); setExpandSelectedIdx((i) => (i + 1) % filteredMentions.length); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setExpandSelectedIdx((i) => (i - 1 + filteredMentions.length) % filteredMentions.length); }
+                else if (e.key === "Enter") { e.preventDefault(); insertMentionModal(expandFilteredMentions[expandSelectedIdx].data.label as string); }
+              }}
+            />
+          </div>
+
+          {/* @mention menu */}
+          {expandMenuOpen && (
+            <div
+              className="shrink-0 border-t border-[#1E1E1E] bg-[#0F1214] overflow-y-auto"
+              style={{ maxHeight: 160 }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="px-3 py-1.5 border-b border-[#1A1A1A]">
+                <p className="text-[9px] text-[#4A4A45] uppercase tracking-widest">Connected nodes</p>
+              </div>
+              {expandFilteredMentions.map((n, idx) => {
+                const label    = n.data.label as string;
+                const imageUrl = (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
+                const videoUrl = n.data.videoUrl as string | undefined;
+                const active   = idx === expandSelectedIdx;
+                return (
+                  <button key={n.id} onClick={() => insertMentionModal(label)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${active ? "bg-[#1A2010]" : "hover:bg-[#161A1E]"}`}>
+                    <div className="w-5 h-5 rounded bg-[#1A1A1A] overflow-hidden shrink-0 flex items-center justify-center">
+                      {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-cover" /> :
+                       videoUrl ? <video src={videoUrl} autoPlay loop muted playsInline className="w-full h-full" style={{ objectFit: "cover" }} /> :
+                       <EmptyThumb />}
+                    </div>
+                    <span className={`text-[11px] font-medium truncate ${active ? "text-[#77E544]" : "text-[#CCC]"}`}>@{label}</span>
+                    {active && <span className="ml-auto text-[9px] text-[#4A4A45] shrink-0">↵</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body
+    )}
+
     {/* ── Chip hover popover — portal outside ReactFlow transforms ─────── */}
     {chipPopover && createPortal(
       <div
@@ -588,7 +914,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
         }}
       >
         {/* Scale with canvas zoom — no transition so it tracks zoom instantly */}
-        <div style={{ transform: `scale(${zoom})`, transformOrigin: "bottom center" }}>
+        <div ref={scaleWrapperRef} style={{ transform: `scale(${zoom})`, transformOrigin: "bottom center" }}>
         <div
           style={{
             opacity:         popoverIn ? 1 : 0,
@@ -637,6 +963,14 @@ function EmptyThumb() {
     <svg width="12" height="10" viewBox="0 0 14 12" fill="none" stroke="#333" strokeWidth="1.2">
       <rect x=".6" y=".6" width="12.8" height="10.8" rx="1.5" />
       <path d="m.6 8.5 3.5-3.5 2.5 2.5 2-2 5 4" />
+    </svg>
+  );
+}
+
+function TextOutIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
+      <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
     </svg>
   );
 }

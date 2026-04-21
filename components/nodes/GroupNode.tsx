@@ -66,8 +66,6 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize  = useWorkflowStore((s) => s.updateNodeSize);
   const onNodesChange   = useWorkflowStore((s) => s.onNodesChange);
-  const insertEdge      = useWorkflowStore((s) => s.insertEdge);
-  const addNode         = useWorkflowStore((s) => s.addNode);
   const { fitBounds }   = useReactFlow();
 
   const color  = (data.color  as string)  ?? "#3b82f6";
@@ -171,48 +169,54 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
     const state = useWorkflowStore.getState();
     const groupNode = state.nodes.find((n) => n.id === id);
     if (!groupNode) return;
+
     const memberIds = (groupNode.data?.memberIds as string[] | undefined) ?? [];
     const members = state.nodes.filter((n) => memberIds.includes(n.id));
 
-    const newGroupId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const newGroupId = genId();
     const idMap: Record<string, string> = { [id]: newGroupId };
-    members.forEach((m) => {
-      idMap[m.id] = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    });
+    members.forEach((m) => { idMap[m.id] = genId(); });
 
     const offset = 20;
     const newMemberIds = members.map((m) => idMap[m.id]);
+    const groupCount = (state.nodeCounters["groupNode"] ?? 0) + 1;
 
-    addNode({
+    const newGroup = {
       ...groupNode,
       id: newGroupId,
       position: { x: groupNode.position.x + offset, y: groupNode.position.y + offset },
       selected: false,
-      data: { ...groupNode.data, locked: false, memberIds: newMemberIds },
-    });
+      data: { ...groupNode.data, locked: false, memberIds: newMemberIds, label: `Group #${groupCount}` },
+    };
 
-    members.forEach((m) => {
-      addNode({
-        ...m,
-        id: idMap[m.id],
-        position: { x: m.position.x + offset, y: m.position.y + offset },
-        selected: false,
-        data: { ...m.data, locked: false },
-      });
-    });
+    const newMembers = members.map((m) => ({
+      ...m,
+      id: idMap[m.id],
+      position: { x: m.position.x + offset, y: m.position.y + offset },
+      selected: false,
+      data: { ...m.data, locked: false },
+    }));
 
-    // Copy edges between members
-    state.edges
+    const newEdges = state.edges
       .filter((e) => idMap[e.source] && idMap[e.target])
-      .forEach((e) => {
-        insertEdge({
-          ...e,
-          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-          source: idMap[e.source],
-          target: idMap[e.target],
-        });
-      });
-  }, [id, addNode, insertEdge]);
+      .map((e) => ({ ...e, id: genId(), source: idMap[e.source], target: idMap[e.target] }));
+
+    const nodes = [...state.nodes, newGroup, ...newMembers];
+    const edges = [...state.edges, ...newEdges];
+    const nodeCounters = { ...state.nodeCounters, groupNode: groupCount };
+
+    useWorkflowStore.setState((s) => ({
+      nodes,
+      edges,
+      nodeCounters,
+      spaces: s.spaces.map((sp) =>
+        sp.id === s.activeSpaceId
+          ? { ...sp, nodes, edges, nodeCounters, updatedAt: Date.now() }
+          : sp
+      ),
+    }));
+  }, [id]);
 
   type ResizePos = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "top" | "right" | "bottom" | "left";
 

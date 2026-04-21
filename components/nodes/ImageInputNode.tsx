@@ -222,6 +222,13 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
   // CSS aspect-ratio accepts "width / height" string directly (e.g. "1920 / 1080")
   const ratio    = (data.imageNaturalRatio as string | undefined) ?? "1 / 1";
 
+  const [natW, natH] = (() => {
+    const r = data.imageNaturalRatio as string | undefined;
+    if (!r) return [0, 0];
+    const parts = r.split("/").map((s) => parseInt(s.trim(), 10));
+    return parts.length === 2 ? parts : [0, 0];
+  })();
+
   if (hasImage) {
     return (
       // Outer: node-card for border/hover/selected styling + overflow:visible for corner handles.
@@ -317,6 +324,17 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           )}
 
 
+          {/* Resolution badge */}
+          {natW > 0 && natH > 0 && (
+            <div
+              aria-hidden
+              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
+            >
+              {natW} × {natH}
+            </div>
+          )}
+
           {/* Hover overlay */}
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
@@ -333,7 +351,15 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         </div>
 
         {/* Handle rendered last so it sits above the image div in stacking order */}
-        <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
+        <Handle
+          type="source"
+          position={Position.Right}
+          style={{ top: 20 }}
+          className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+          title="Image output"
+        >
+          <ImageOutIcon />
+        </Handle>
 
         <input
           ref={fileRef}
@@ -405,7 +431,15 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
-      <Handle type="source" position={Position.Right} className={`node-handle node-handle-source${sourceConnected ? " node-handle-connected" : ""}`} />
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ top: 20 }}
+        className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+        title="Image output"
+      >
+        <ImageOutIcon />
+      </Handle>
 
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div
@@ -441,5 +475,15 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         }}
       />
     </div>
+  );
+}
+
+function ImageOutIcon() {
+  return (
+    <svg width="14" height="12" viewBox="0 0 16 13" fill="none" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="1" width="14" height="11" rx="2" />
+      <circle cx="5" cy="4.5" r="1.3" fill="white" stroke="none" />
+      <path d="m1 10 4-4 2.5 2.5 2-2 5.5 3.5" />
+    </svg>
   );
 }

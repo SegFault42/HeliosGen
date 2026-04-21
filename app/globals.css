@@ -168,16 +168,22 @@ body {
   cursor: crosshair;
 }
 /* Hidden: offset outward */
-.react-flow__handle-left.node-handle-icon { transform: translate(calc(-100% - 10px), -50%) !important; }
+.react-flow__handle-left.node-handle-icon  { transform: translate(calc(-100% - 10px), -50%) !important; }
+.react-flow__handle-right.node-handle-icon { transform: translate(calc(100% + 10px),  -50%) !important; }
 /* Visible: normal position — delay reset so hover-in is instant */
 /* Left (input) icon handles: suppress hover during connection dragging */
 .react-flow:not([data-connecting-type]) .react-flow__node:hover .react-flow__handle-left.node-handle-icon,
-.react-flow__node.selected .react-flow__handle-left.node-handle-icon { transform: translate(-100%, -50%) !important; opacity: 1; pointer-events: auto; transition-delay: 0ms; }
+.react-flow__node.selected .react-flow__handle-left.node-handle-icon  { transform: translate(-100%, -50%) !important; opacity: 1; pointer-events: auto; transition-delay: 0ms; }
+/* Right (output) icon handles: always show on hover/selected */
+.react-flow__node:hover .react-flow__handle-right.node-handle-icon,
+.react-flow__node.selected .react-flow__handle-right.node-handle-icon { transform: translate(100%,  -50%) !important; opacity: 1; pointer-events: auto; transition-delay: 0ms; }
 /* Handle hover scale */
-.react-flow__handle-left.node-handle-icon:hover { transform: translate(-100%, -50%) scale(1.15) !important; }
+.react-flow__handle-left.node-handle-icon:hover  { transform: translate(-100%, -50%) scale(1.15) !important; }
+.react-flow__handle-right.node-handle-icon:hover { transform: translate(100%,  -50%) scale(1.15) !important; }
 /* Connected: always visible at normal position, role border color */
-.react-flow__handle-left.node-handle-icon.node-handle-connected { transform: translate(-100%, -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
-/* Connected or selected: full role color */
+.react-flow__handle-left.node-handle-icon.node-handle-connected  { transform: translate(-100%, -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+.react-flow__handle-right.node-handle-icon.node-handle-connected { transform: translate(100%,  -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+/* Connected or selected: full role color — input handles */
 .node-handle-icon-prompt.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-prompt.react-flow__handle   { border-color: #77E544 !important; --handle-color: #77E544; }
 .node-handle-icon-image.react-flow__handle.node-handle-connected,
@@ -192,8 +198,21 @@ body {
 .react-flow__node.selected .node-handle-icon-audioref.react-flow__handle { border-color: #a78bfa !important; --handle-color: #a78bfa; }
 .node-handle-icon-character.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-character.react-flow__handle { border-color: #f472b6 !important; --handle-color: #f472b6; }
-/* Selected + unconnected: dim the whole handle */
-.react-flow__node.selected .node-handle-icon.react-flow__handle:not(.node-handle-connected) { opacity: 0.35 !important; }
+/* Output handle colors — always visible when the handle is shown (hover/selected/connected) */
+.react-flow__node:hover .node-handle-icon-out-text.react-flow__handle,
+.react-flow__node.selected .node-handle-icon-out-text.react-flow__handle,
+.node-handle-icon-out-text.react-flow__handle.node-handle-connected   { border-color: #77E544 !important; }
+.react-flow__node:hover .node-handle-icon-out-image.react-flow__handle,
+.react-flow__node.selected .node-handle-icon-out-image.react-flow__handle,
+.node-handle-icon-out-image.react-flow__handle.node-handle-connected  { border-color: #818cf8 !important; }
+.react-flow__node:hover .node-handle-icon-out-video.react-flow__handle,
+.react-flow__node.selected .node-handle-icon-out-video.react-flow__handle,
+.node-handle-icon-out-video.react-flow__handle.node-handle-connected  { border-color: #22d3ee !important; }
+.react-flow__node:hover .node-handle-icon-out-audio.react-flow__handle,
+.react-flow__node.selected .node-handle-icon-out-audio.react-flow__handle,
+.node-handle-icon-out-audio.react-flow__handle.node-handle-connected  { border-color: #a78bfa !important; }
+/* Selected + unconnected: dim input (left) handles only; output handles keep full opacity */
+.react-flow__node.selected .react-flow__handle-left.node-handle-icon.react-flow__handle:not(.node-handle-connected) { opacity: 0.35 !important; }
 
 /* ── Show only compatible input handles while connecting ─────────────────── */
 /* data-connecting-type is set by JS onConnectStart on the .react-flow element */
@@ -213,6 +232,11 @@ body {
 /* Video output → videoref + refvideo inputs */
 .react-flow[data-connecting-type="video"] .react-flow__handle-left.node-handle-icon-videoref,
 .react-flow[data-connecting-type="video"] .react-flow__handle-left.node-handle-icon-refvideo {
+  transform: translate(-100%, -50%) !important;
+  opacity: 1 !important; pointer-events: auto !important; transition-delay: 0ms !important;
+}
+/* Audio output → audioref inputs */
+.react-flow[data-connecting-type="audio"] .react-flow__handle-left.node-handle-icon-audioref {
   transform: translate(-100%, -50%) !important;
   opacity: 1 !important; pointer-events: auto !important; transition-delay: 0ms !important;
 }

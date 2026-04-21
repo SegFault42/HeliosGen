@@ -176,34 +176,10 @@ export default function WorkflowCanvas() {
   }, [onEdgesChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    // ── Paired-prompt deletion ─────────────────────────────────────────────────
-    const removedIds = changes
-      .filter((c): c is Extract<NodeChange, { type: "remove" }> => c.type === "remove")
-      .map((c) => c.id);
-
-    const removedGenIds = removedIds.filter(
-      (id) => nodes.find((n) => n.id === id)?.type === "generateNode"
-    );
-
-    const pairedPromptIds = edges
-      .filter(
-        (e) =>
-          removedGenIds.includes(e.target) &&
-          e.targetHandle === "prompt" &&
-          e.deletable === false
-      )
-      .map((e) => e.source)
-      .filter((id) => !removedIds.includes(id));
-
-    const extra: Extract<NodeChange, { type: "remove" }>[] =
-      pairedPromptIds.map((id) => ({ type: "remove", id }));
-
-    const allChanges = extra.length > 0 ? [...changes, ...extra] : changes;
-
     // ── Alignment snap (edge-to-edge + center magnetic effect) ─────────────────
     const newGuides: SnapGuide[] = [];
 
-    const snappedChanges = allChanges.map((change) => {
+    const snappedChanges = changes.map((change) => {
       if (change.type !== "position" || !change.position) return change;
 
       // On drag-stop: lock in the last snapped position
@@ -420,32 +396,6 @@ export default function WorkflowCanvas() {
       y: (e.clientY - rect.top  - panY) / zoom,
     };
 
-    if (type === "generateNode") {
-      const genId    = `gen-${uid()}`;
-      const promptId = `prompt-${uid()}`;
-
-      const freshNodes = useWorkflowStore.getState().nodes;
-      addNode({
-        id: promptId, type: "promptNode",
-        position: { x: position.x - 320, y: position.y + 20 },
-        deletable: false,
-        style: { width: NODE_SIZE.promptNode.w, height: NODE_SIZE.promptNode.h },
-        data: { label: nodeLabel("promptNode", freshNodes) },
-      });
-      addNode({
-        id: genId, type: "generateNode",
-        position,
-        style: { width: NODE_SIZE.generateNode.w, height: NODE_SIZE.generateNode.h },
-        data: { label: nodeLabel("generateNode", freshNodes), status: "idle", model: "nano-banana-2", aspectRatio: "1:1" },
-      });
-      insertEdge({
-        id: `edge-${promptId}-${genId}`,
-        source: promptId, target: genId, targetHandle: "prompt",
-        deletable: false, reconnectable: false, animated: false,
-        style: edgeStyle("prompt"),
-      });
-      return;
-    }
 
     const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
     // Read nodes fresh from the store (not from stale closure)
@@ -472,14 +422,10 @@ export default function WorkflowCanvas() {
     if (selected.length === 0) return;
     const selectedIds = new Set(selected.map((n) => n.id));
 
-    // For every selected generateNode, pull in its locked paired prompt node too
+    // Always include group member nodes even if auto-selection hasn't processed yet
     for (const n of selected) {
-      if (n.type !== "generateNode") continue;
-      const pairedEdge = edges.find(
-        (e) => e.target === n.id && e.targetHandle === "prompt" && e.deletable === false
-      );
-      if (pairedEdge && !selectedIds.has(pairedEdge.source)) {
-        selectedIds.add(pairedEdge.source);
+      if (n.type === "groupNode") {
+        ((n.data?.memberIds as string[] | undefined) ?? []).forEach((mid) => selectedIds.add(mid));
       }
     }
 
@@ -518,8 +464,17 @@ export default function WorkflowCanvas() {
 
     const idMap = new Map<string, string>();
     for (const n of copied) {
-      const newId = `${n.type}-${uid()}`;
-      idMap.set(n.id, newId);
+      idMap.set(n.id, `${n.type}-${uid()}`);
+    }
+
+    for (const n of copied) {
+      const newId = idMap.get(n.id)!;
+      const data: NodeData = { ...n.data, status: n.data.status === "running" ? "idle" : n.data.status };
+      if (n.type === "groupNode") {
+        data.memberIds = ((n.data.memberIds as string[] | undefined) ?? []).map(
+          (mid) => idMap.get(mid) ?? mid
+        );
+      }
       addNode({
         ...n,
         id: newId,
@@ -528,7 +483,7 @@ export default function WorkflowCanvas() {
           x: cursorCanvas.x + (n.position.x - groupCenter.x),
           y: cursorCanvas.y + (n.position.y - groupCenter.y),
         },
-        data: { ...n.data, status: n.data.status === "running" ? "idle" : n.data.status },
+        data,
       });
     }
 
@@ -638,6 +593,9 @@ export default function WorkflowCanvas() {
   // prompt handle: only promptNode; 1 connection max. image handle: up to 14 (nano-banana-2 limit).
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
+      // Prevent self-loops
+      if (connection.source === connection.target) return false;
+
       const source = nodes.find((n) => n.id === connection.source);
       const target = nodes.find((n) => n.id === connection.target);
 
@@ -737,9 +695,13 @@ export default function WorkflowCanvas() {
     const rf     = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
     if (!handle || !rf) return;
     let type = "unknown";
-    if (handle.classList.contains("node-handle-prompt")) type = "prompt";
-    else if (handle.classList.contains("node-handle-source")) type = "image";
-    else if (handle.classList.contains("node-handle-video"))  type = "video";
+    if      (handle.classList.contains("node-handle-icon-out-text"))  type = "prompt";
+    else if (handle.classList.contains("node-handle-icon-out-image")) type = "image";
+    else if (handle.classList.contains("node-handle-icon-out-video")) type = "video";
+    else if (handle.classList.contains("node-handle-icon-out-audio")) type = "audio";
+    else if (handle.classList.contains("node-handle-prompt"))         type = "prompt";
+    else if (handle.classList.contains("node-handle-source"))         type = "image";
+    else if (handle.classList.contains("node-handle-video"))          type = "video";
     rf.setAttribute("data-connecting-type", type);
     setConnectingHandleType(type);
     setIsConnecting(true);
@@ -939,32 +901,6 @@ export default function WorkflowCanvas() {
     const cx = (rect.width  / 2 - panX) / zoom;
     const cy = (rect.height / 2 - panY) / zoom;
     const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
-
-    if (type === "generateNode") {
-      const genId    = `gen-${uid()}`;
-      const promptId = `prompt-${uid()}`;
-      const freshNodes = useWorkflowStore.getState().nodes;
-      addNode({
-        id: promptId, type: "promptNode",
-        position: { x: cx - size.w / 2 - 320, y: cy - size.h / 2 + 20 },
-        deletable: false,
-        style: { width: NODE_SIZE.promptNode.w, height: NODE_SIZE.promptNode.h },
-        data: { label: nodeLabel("promptNode", freshNodes) },
-      });
-      addNode({
-        id: genId, type: "generateNode",
-        position: { x: cx - size.w / 2, y: cy - size.h / 2 },
-        style: { width: size.w, height: size.h },
-        data: { label: nodeLabel("generateNode", freshNodes), status: "idle", model: "nano-banana-2", aspectRatio: "1:1" },
-      });
-      insertEdge({
-        id: `edge-${promptId}-${genId}`,
-        source: promptId, target: genId, targetHandle: "prompt",
-        deletable: false, reconnectable: false, animated: false,
-        style: edgeStyle("prompt"),
-      });
-      return;
-    }
 
     const currentNodes = useWorkflowStore.getState().nodes;
     addNode({

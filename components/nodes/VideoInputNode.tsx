@@ -13,6 +13,20 @@ type VideoInputNodeType = Node<NodeData, "videoInputNode">;
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
 
+const VIDEO_SRC_COLORS: Record<string, string> = {
+  image: "#818cf8",
+  video: "#22d3ee",
+  audio: "#a78bfa",
+};
+
+const VIDEO_SOURCE_HANDLES = [
+  { id: "startFrameOut", type: "image", label: "Start frame",     icon: <VidSrcFrameStartIcon /> },
+  { id: "endFrameOut",   type: "image", label: "End frame",       icon: <VidSrcFrameEndIcon /> },
+  { id: "imagePickOut",  type: "image", label: "Image pick",      icon: <VidSrcImagePickIcon /> },
+  { id: "videoRefOut",   type: "video", label: "Reference video", icon: <VidSrcVideoIcon /> },
+  { id: "audioRefOut",   type: "audio", label: "Reference audio", icon: <VidSrcAudioIcon /> },
+] as const;
+
 export default function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const edges           = useWorkflowStore((s) => s.edges);
@@ -43,6 +57,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     }
   }, [selected]);
 
+  const [hoveredSrcHandle, setHoveredSrcHandle] = useState<string | null>(null);
   const [uploading, setUploading]   = useState(false);
   const [uploadErr, setUploadErr]   = useState<string | null>(null);
   const [muted, setMuted]           = useState(true);
@@ -112,12 +127,14 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const fmtTime = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-  // Is this node wired to any downstream image handle?
+  // Is this node wired to any downstream image handle via the image-pick output (not startFrameOut/endFrameOut)?
   const imageEdge = edges.find(
-    (e) => e.source === id && IMAGE_HANDLES.has(e.targetHandle as string)
+    (e) => e.source === id &&
+           IMAGE_HANDLES.has(e.targetHandle as string) &&
+           e.sourceHandle !== "startFrameOut" &&
+           e.sourceHandle !== "endFrameOut"
   );
   const connectedToImageHandle = !!imageEdge;
-  const sourceConnected = edges.some((e) => e.source === id);
   const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
   const capturedFrameRef  = useRef(capturedFrameUrl);
   capturedFrameRef.current = capturedFrameUrl;
@@ -501,7 +518,35 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       >
         <CornerResizer minWidth={160} minHeight={80} keepAspectRatio />
         <span className="node-above-label">{data.label as string}</span>
-        <Handle type="source" position={Position.Right} className={`node-handle node-handle-video${sourceConnected ? " node-handle-connected" : ""}`} />
+        {VIDEO_SOURCE_HANDLES.map((h, i) => (
+          <Handle
+            key={h.id}
+            type="source"
+            position={Position.Right}
+            id={h.id}
+            style={{ top: 20 + i * 32 }}
+            className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+            onMouseEnter={() => setHoveredSrcHandle(h.id)}
+            onMouseLeave={() => setHoveredSrcHandle(null)}
+          >
+            {h.icon}
+          </Handle>
+        ))}
+
+        {hoveredSrcHandle && (() => {
+          const idx = VIDEO_SOURCE_HANDLES.findIndex((h) => h.id === hoveredSrcHandle);
+          const def = VIDEO_SOURCE_HANDLES[idx];
+          if (!def) return null;
+          const color = VIDEO_SRC_COLORS[def.type];
+          return (
+            <div
+              className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+              style={{ top: 20 + idx * 32, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
+            >
+              <span style={{ color }} className="mr-1.5">●</span>{def.label}
+            </div>
+          );
+        })()}
 
         <div
           className="relative w-full h-full overflow-hidden rounded-[7px] group/player"
@@ -1084,7 +1129,35 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
-      <Handle type="source" position={Position.Right} className={`node-handle node-handle-video${sourceConnected ? " node-handle-connected" : ""}`} />
+      {VIDEO_SOURCE_HANDLES.map((h, i) => (
+        <Handle
+          key={h.id}
+          type="source"
+          position={Position.Right}
+          id={h.id}
+          style={{ top: 20 + i * 32 }}
+          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+          onMouseEnter={() => setHoveredSrcHandle(h.id)}
+          onMouseLeave={() => setHoveredSrcHandle(null)}
+        >
+          {h.icon}
+        </Handle>
+      ))}
+
+      {hoveredSrcHandle && (() => {
+        const idx = VIDEO_SOURCE_HANDLES.findIndex((h) => h.id === hoveredSrcHandle);
+        const def = VIDEO_SOURCE_HANDLES[idx];
+        if (!def) return null;
+        const color = VIDEO_SRC_COLORS[def.type];
+        return (
+          <div
+            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            style={{ top: 20 + idx * 32, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
+          >
+            <span style={{ color }} className="mr-1.5">●</span>{def.label}
+          </div>
+        );
+      })()}
 
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div
@@ -1106,5 +1179,50 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       <input ref={fileRef} type="file" accept="video/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); e.target.value = ""; }} />
     </div>
+  );
+}
+
+function VidSrcFrameStartIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M4.5 6h5M7 4l2.5 2L7 8" />
+    </svg>
+  );
+}
+
+function VidSrcFrameEndIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M9.5 6h-5M7 4 4.5 6 7 8" />
+    </svg>
+  );
+}
+
+function VidSrcImagePickIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <circle cx="4.5" cy="4" r="1.2" fill="white" stroke="none" />
+      <path d="m0.7 9 3.5-3.5 2.5 2.5 2-2 5 4" />
+    </svg>
+  );
+}
+
+function VidSrcVideoIcon() {
+  return (
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+    </svg>
+  );
+}
+
+function VidSrcAudioIcon() {
+  return (
+    <svg width="12" height="11" viewBox="0 0 13 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 4v4M4.5 2v8M6.5 3.5v5M9 2v8M11 4v4" />
+    </svg>
   );
 }

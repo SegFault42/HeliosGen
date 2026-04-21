@@ -4,15 +4,18 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   useReactFlow,
+  useNodes,
   type EdgeProps,
 } from "@xyflow/react";
-import { edgeStyle } from "@/lib/edgeStyles";
+import { edgeStyle, getSourceHandleColor } from "@/lib/edgeStyles";
 
 export default function CuttableEdge({
   id,
+  source,
   sourceX, sourceY,
   targetX, targetY,
   sourcePosition, targetPosition,
+  sourceHandleId,
   targetHandleId,
   markerEnd,
   data,
@@ -30,9 +33,23 @@ export default function CuttableEdge({
   const pathRef = useRef<SVGPathElement>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const style = edgeStyle(colorKey ?? targetHandleId);
-  const color = (style.stroke as string) ?? "#555";
-  const strokeWidth = (style.strokeWidth as number) ?? 2;
+  const nodes = useNodes();
+  const srcNode = nodes.find((n) => n.id === source);
+
+  const tgtStyle   = edgeStyle(colorKey ?? targetHandleId);
+  const tgtColor   = (tgtStyle.stroke as string) ?? "#555";
+  const srcColor   = getSourceHandleColor(srcNode?.type, sourceHandleId);
+  const strokeWidth = (tgtStyle.strokeWidth as number) ?? 2;
+
+  // Per-edge gradient ID — unique within the SVG document
+  const gradId     = `eg-${id}`;
+  const useGradient = srcColor !== tgtColor;
+  // stroke value: URL ref for gradient, solid color otherwise
+  const strokeValue = useGradient ? `url(#${gradId})` : tgtColor;
+  // --edge-color used by the error-blink keyframe; must be a resolvable stroke value
+  const edgeColorVar = strokeValue;
+  // Scissor badge uses mid-point color (average of both ends for simplicity)
+  const badgeColor = useGradient ? tgtColor : tgtColor;
 
   const [edgePath] = getBezierPath({
     sourceX, sourceY, sourcePosition,
@@ -88,6 +105,21 @@ export default function CuttableEdge({
 
   return (
     <>
+      {/* Gradient definition — userSpaceOnUse so it follows the edge direction */}
+      {useGradient && (
+        <defs>
+          <linearGradient
+            id={gradId}
+            gradientUnits="userSpaceOnUse"
+            x1={sourceX} y1={sourceY}
+            x2={targetX} y2={targetY}
+          >
+            <stop offset="0%"   stopColor={srcColor} />
+            <stop offset="100%" stopColor={tgtColor} />
+          </linearGradient>
+        </defs>
+      )}
+
       {/* Visible edge line — animates out right-to-left when dying */}
       <path
         ref={pathRef}
@@ -98,8 +130,8 @@ export default function CuttableEdge({
         strokeDasharray={pathLength > 0 ? pathLength : undefined}
         strokeDashoffset={dying ? pathLength : 0}
         style={{
-          stroke: color,
-          ["--edge-color" as string]: color,
+          stroke: strokeValue,
+          ["--edge-color" as string]: edgeColorVar,
           pointerEvents: "none",
           opacity: dimmed ? 0.15 : 1,
           transition: [
@@ -139,14 +171,14 @@ export default function CuttableEdge({
             height: 28,
             borderRadius: "50%",
             background: "#0D1012",
-            border: `2px solid ${color}`,
+            border: `2px solid ${badgeColor}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
-            boxShadow: `0 2px 12px rgba(0,0,0,0.6), 0 0 8px ${color}44`,
+            boxShadow: `0 2px 12px rgba(0,0,0,0.6), 0 0 8px ${badgeColor}44`,
           }}>
-            <ScissorIcon color={color} />
+            <ScissorIcon color={badgeColor} />
           </div>
         </div>
       </EdgeLabelRenderer>

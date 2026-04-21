@@ -23,3 +23,23 @@ export function edgeStyle(targetHandle?: string | null | undefined): CSSProperti
   const strokeWidth = IMAGE_HANDLES.has(key) ? 2.5 : 2;
   return { stroke: color, strokeWidth };
 }
+
+/** Returns the stroke color for a source (output) handle. */
+export function getSourceHandleColor(nodeType: string | undefined, sourceHandleId: string | null | undefined): string {
+  switch (sourceHandleId) {
+    case "startFrameOut":
+    case "endFrameOut":
+    case "imagePickOut":  return "#818cf8";
+    case "videoRefOut":   return "#22d3ee";
+    case "audioRefOut":   return "#a78bfa";
+  }
+  // Legacy / single-output nodes — derive from node type
+  switch (nodeType) {
+    case "promptNode":        return "#77E544";
+    case "imageInputNode":    return "#818cf8";
+    case "generateNode":      return "#818cf8";
+    case "videoInputNode":    return "#22d3ee";
+    case "videoGeneratorNode":return "#22d3ee";
+    default:                  return EDGE_COLORS.default;
+  }
+}

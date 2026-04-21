@@ -269,7 +269,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       useImageUrls: true,
       useKlingElements: true,
       promptMaxLength: 2500,
-      extra: { multi_shots: false, multi_prompt: [] },
+      extra: { multi_shots: false, multi_prompt: [], kling_elements: [] },
     },
   },
   // ── X (Grok) ─────────────────────────────────────────────────────────────────
