@@ -131,6 +131,7 @@ interface WorkflowStore {
   insertEdge:         (edge: Edge) => void;
   removeEdgesForHandle: (nodeId: string, handleId: string) => void;
   killEdgesForHandles:  (nodeId: string, handleIds: string[]) => void;
+  remapTargetHandle:    (nodeId: string, fromHandle: string, toHandle: string) => void;
   flashEdgeError:       (edgeId: string) => void;
   updateNodeData:     (id: string, data: Partial<NodeData>) => void;
   updateNodeSize:     (id: string, width: number, height: number) => void;
@@ -329,6 +330,16 @@ export const useWorkflowStore = create<WorkflowStore>()(
             });
           }, 450);
         },
+
+        remapTargetHandle: (nodeId, fromHandle, toHandle) =>
+          set((s) => {
+            const edges = s.edges.map((e) =>
+              e.target === nodeId && e.targetHandle === fromHandle
+                ? { ...e, targetHandle: toHandle }
+                : e
+            );
+            return { edges, spaces: syncSpace(s.spaces, s.activeSpaceId, s.nodes, edges, s.nodeCounters) };
+          }),
 
         flashEdgeError: (edgeId) => {
           const setError = (val: boolean) =>

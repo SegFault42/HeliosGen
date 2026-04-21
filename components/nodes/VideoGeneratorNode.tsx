@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
@@ -144,7 +145,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const killEdgesForHandles = useWorkflowStore((s) => s.killEdgesForHandles);
+  const killEdgesForHandles  = useWorkflowStore((s) => s.killEdgesForHandles);
+  const remapTargetHandle    = useWorkflowStore((s) => s.remapTargetHandle);
   const flashEdgeError = useWorkflowStore((s) => s.flashEdgeError);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
@@ -942,7 +944,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           {/* Overlay controls — only visible when current slot is a done video */}
           {typeof generations[currentGenIdx] === "string" && <>
           {/* Timer badge — top-left, visible on hover */}
-          <div className="absolute top-2 left-2 h-7 px-2 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity z-10 pointer-events-none">
+          <div className="absolute top-2 left-2 h-7 px-2 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity z-10 pointer-events-none node-slide-reveal">
             <span className="text-[11px] text-white font-mono tabular-nums">{fmtTime(currentSec)}</span>
           </div>
 
@@ -950,7 +952,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
-            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10"
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-10 node-slide-reveal"
             title={muted ? "Unmute" : "Mute"}
           >
             {muted ? (
@@ -1087,7 +1089,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                       <span className="text-[8px] font-semibold leading-none">i</span>
                     </div>
                     <div
-                      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-[10px] leading-[1.6] text-[#AAAAAA] opacity-0 group-hover/orient-info:opacity-100 transition-opacity z-50"
+                      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-[10px] leading-[1.6] text-[#AAAAAA] opacity-0 group-hover/orient-info:opacity-100 transition-opacity z-50 node-slide-reveal"
                       style={{ background: "#111317", border: "1px solid #2A2A2A" }}
                     >
                       When Character Orientation matches the video, complex motions perform better; when it matches the image, camera movements are better supported.
@@ -1097,15 +1099,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               )}
             </div>
 
-            {modeOpen && (
-              <FloatMenu>
-                {cfg.modes.map((m) => (
-                  <FloatItem key={m.value} active={mode === m.value} onClick={() => { updateNodeData(id, { klingMode: m.value }); setModeOpen(false); }}>
-                    {m.label}
-                  </FloatItem>
-                ))}
-              </FloatMenu>
-            )}
+            <FloatMenu open={modeOpen}>
+              {cfg.modes.map((m) => (
+                <FloatItem key={m.value} active={mode === m.value} onClick={() => { updateNodeData(id, { klingMode: m.value }); setModeOpen(false); }}>
+                  {m.label}
+                </FloatItem>
+              ))}
+            </FloatMenu>
           </div>
         ) : null;
 
@@ -1116,15 +1116,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               <span className="text-[11px] text-[#AAAAAA]">{resolution}</span>
               <ChevronIcon open={grokResOpen} />
             </Pill>
-            {grokResOpen && (
-              <FloatMenu>
-                {cfg.resolutions.map((r) => (
-                  <FloatItem key={r} active={resolution === r} onClick={() => { updateNodeData(id, { grokResolution: r }); setGrokResOpen(false); }}>
-                    {r}
-                  </FloatItem>
-                ))}
-              </FloatMenu>
-            )}
+            <FloatMenu open={grokResOpen}>
+              {cfg.resolutions.map((r) => (
+                <FloatItem key={r} active={resolution === r} onClick={() => { updateNodeData(id, { grokResolution: r }); setGrokResOpen(false); }}>
+                  {r}
+                </FloatItem>
+              ))}
+            </FloatMenu>
           </div>
         ) : null;
 
@@ -1155,33 +1153,43 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 <span className="text-[11px] text-[#AAAAAA]">{cfg.name}</span>
                 <ChevronIcon open={modelOpen} />
               </Pill>
-              {modelOpen && (
-                <FloatMenu>
-                  {VIDEO_MODEL_CFG.map((m) => (
-                    <button
-                      key={m.id}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={() => {
-                        const validRatio = m.ratios.includes(aspectRatio) ? aspectRatio : m.defaultRatio;
-                        const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
-                        updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur });
-                        const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
-                        const wasMotionControl = cfg.id === "kling-2.6-motion-control";
-                        const isMotionControl  = m.id   === "kling-2.6-motion-control";
-                        if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
-                          removedHandles.push("startFrame");
-                        }
-                        if (removedHandles.length) killEdgesForHandles(id, removedHandles);
-                        setModelOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-[11px] hover:bg-[#161A1E] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#8D8E89]"}`}
-                    >
-                      <span>{m.name}</span>
-                      <span className="text-[#4A4A45]">{m.provider}</span>
-                    </button>
-                  ))}
-                </FloatMenu>
-              )}
+              <FloatMenu open={modelOpen}>
+                {VIDEO_MODEL_CFG.map((m) => (
+                  <button
+                    key={m.id}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      const validRatio = m.ratios.includes(aspectRatio) ? aspectRatio : m.defaultRatio;
+                      const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
+                      updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur });
+                      const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
+                      const wasMotionControl = cfg.id === "kling-2.6-motion-control";
+                      const isMotionControl  = m.id   === "kling-2.6-motion-control";
+                      if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
+                        removedHandles.push("startFrame");
+                      }
+                      // Migrate videoRef ↔ referenceVideo edges instead of killing them
+                      const oldHasVideoRef  = (cfg.handles as string[]).includes("videoRef");
+                      const newHasVideoRef  = (m.handles   as string[]).includes("videoRef");
+                      const oldHasRefVideo  = (cfg.handles as string[]).includes("referenceVideo");
+                      const newHasRefVideo  = (m.handles   as string[]).includes("referenceVideo");
+                      if (oldHasVideoRef && !newHasVideoRef && newHasRefVideo) {
+                        remapTargetHandle(id, "videoRef", "referenceVideo");
+                        removedHandles.splice(removedHandles.indexOf("videoRef"), 1);
+                      } else if (oldHasRefVideo && !newHasRefVideo && newHasVideoRef) {
+                        remapTargetHandle(id, "referenceVideo", "videoRef");
+                        removedHandles.splice(removedHandles.indexOf("referenceVideo"), 1);
+                      }
+                      if (removedHandles.length) killEdgesForHandles(id, removedHandles);
+                      setModelOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-[11px] hover:bg-[#161A1E] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#8D8E89]"}`}
+                  >
+                    <span>{m.name}</span>
+                    <span className="text-[#4A4A45]">{m.provider}</span>
+                  </button>
+                ))}
+              </FloatMenu>
             </div>
 
             {/* Ratio */}
@@ -1192,15 +1200,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   <span className="text-[11px] text-[#AAAAAA]">{aspectRatio}</span>
                   <ChevronIcon open={ratioOpen} />
                 </Pill>
-                {ratioOpen && (
-                  <FloatMenu>
-                    {(ratios as readonly string[]).map((r) => (
-                      <FloatItem key={r} active={aspectRatio === r} onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}>
-                        {r}
-                      </FloatItem>
-                    ))}
-                  </FloatMenu>
-                )}
+                <FloatMenu open={ratioOpen}>
+                  {(ratios as readonly string[]).map((r) => (
+                    <FloatItem key={r} active={aspectRatio === r} onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}>
+                      {r}
+                    </FloatItem>
+                  ))}
+                </FloatMenu>
               </div>
             )}
 
@@ -1211,10 +1217,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   <span className="text-[11px] text-[#AAAAAA] tabular-nums">{duration}s</span>
                   <ChevronIcon open={durOpen} />
                 </Pill>
-                {durOpen && (
+                <FloatMenu open={durOpen} fullWidth>
                   <div
-                    className="absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl z-50 shadow-2xl p-3"
-                    style={{ minWidth: 240 }}
+                    className="p-3"
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
@@ -1240,7 +1245,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                       />
                     </div>
                   </div>
-                )}
+                </FloatMenu>
               </div>
             )}
 
@@ -1349,9 +1354,11 @@ function Pill({
   );
 }
 
-function FloatMenu({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
+function FloatMenu({ children, fullWidth = false, open }: { children: React.ReactNode; fullWidth?: boolean; open: boolean }) {
+  const { visible, className } = useAnimatedPopup(open);
+  if (!visible) return null;
   return (
-    <div className={`absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl overflow-hidden z-50 shadow-2xl ${fullWidth ? "w-full" : "min-w-max"}`}>
+    <div className={`absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl overflow-hidden z-50 shadow-2xl ${fullWidth ? "w-full" : "min-w-max"} ${className}`}>
       {children}
     </div>
   );

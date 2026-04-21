@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
@@ -182,6 +183,9 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const [modelOpen, setModelOpen]     = useState(false);
   const [ratioOpen, setRatioOpen]     = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
+  const modelPopup   = useAnimatedPopup(modelOpen && !data.imageUrl);
+  const ratioPopup   = useAnimatedPopup(ratioOpen);
+  const qualityPopup = useAnimatedPopup(qualityOpen);
   const [loading, setLoading]         = useState(false);
   const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
   const [lightboxOpen, setLightboxOpen]       = useState(false);
@@ -691,7 +695,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           {natW > 0 && natH > 0 && (
             <div
               aria-hidden
-              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover/gen:opacity-100 transition-opacity duration-150"
+              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover/gen:opacity-100 transition-opacity duration-150 node-slide-reveal"
               style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
             >
               {natW} × {natH}
@@ -764,8 +768,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               {!data.imageUrl && <ChevronIcon open={modelOpen} />}
             </button>
 
-            {modelOpen && !data.imageUrl && (
-              <div className="absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl">
+            {modelPopup.visible && (
+              <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${modelPopup.className}`}>
                 {MODELS.map((m) => (
                   <button
                     key={m.id}
@@ -809,8 +813,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               <ChevronIcon open={ratioOpen} />
             </button>
 
-            {ratioOpen && (
-              <div className="absolute bottom-full right-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl">
+            {ratioPopup.visible && (
+              <div className={`absolute bottom-full right-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${ratioPopup.className}`}>
                 {caps.ratios.map((r) => {
                   const { rw: iw, rh: ih, x, y } = ratioRect(r);
                   const active = r === aspectRatio;
@@ -857,8 +861,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                   <ChevronIcon open={qualityOpen} />
                 </button>
 
-                {qualityOpen && (
-                  <div className="absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl">
+                {qualityPopup.visible && (
+                  <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${qualityPopup.className}`}>
                     {[
                       { id: "1k", label: "1K", meta: "Standard" },
                       { id: "2k", label: "2K", meta: "High" },

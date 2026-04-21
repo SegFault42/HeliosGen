@@ -328,7 +328,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           {natW > 0 && natH > 0 && (
             <div
               aria-hidden
-              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-150 node-slide-reveal"
               style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
             >
               {natW} × {natH}
@@ -339,7 +339,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           </div>
-          <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity node-slide-reveal">
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => fileRef.current?.click()}

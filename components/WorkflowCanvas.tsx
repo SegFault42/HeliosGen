@@ -117,10 +117,13 @@ export default function WorkflowCanvas() {
   updateNodeDataRef.current = updateNodeData;
 
   const [dyingEdgeIds, setDyingEdgeIds]       = useState<Set<string>>(new Set());
+  const [dyingNodeIds, setDyingNodeIds]       = useState<Set<string>>(new Set());
   const [ancestorIds, setAncestorIds]         = useState<Set<string>>(new Set());
   const [ancestorEdgeIds, setAncestorEdgeIds] = useState<Set<string>>(new Set());
   // Ref so the nodes map always reads the latest selected IDs in the same render
   const selectedIdsRef = useRef<Set<string>>(new Set());
+  // Edge IDs that will be removed by our delayed node-delete handler — suppress RF's auto-remove
+  const suppressedEdgeRemovesRef = useRef<Set<string>>(new Set());
 
   // Walk edges upstream from selected nodes, collecting all ancestor node + edge IDs
   const onSelectionChange = useCallback(
@@ -167,6 +170,13 @@ export default function WorkflowCanvas() {
     [edges],
   );
 
+  const handleEdgesChange = useCallback((changes: Parameters<typeof onEdgesChange>[0]) => {
+    const filtered = changes.filter(
+      (c) => c.type !== "remove" || !suppressedEdgeRemovesRef.current.has(c.id)
+    );
+    if (filtered.length > 0) onEdgesChange(filtered);
+  }, [onEdgesChange]);
+
   const handleEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     setDyingEdgeIds((prev) => new Set([...prev, edge.id]));
     setTimeout(() => {
@@ -176,10 +186,37 @@ export default function WorkflowCanvas() {
   }, [onEdgesChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
+    // ── Node deletion animation ──────────────────────────────────────────────────
+    const removeChanges = changes.filter((c) => c.type === "remove");
+    if (removeChanges.length > 0) {
+      const removingIds = new Set(removeChanges.map((c) => c.id));
+      const connectedEdgeIds = edges
+        .filter((e) => removingIds.has(e.source) || removingIds.has(e.target))
+        .map((e) => e.id);
+
+      // Suppress RF's auto-fired edge removes so we control the timing
+      connectedEdgeIds.forEach((id) => suppressedEdgeRemovesRef.current.add(id));
+
+      setDyingNodeIds((prev) => new Set([...prev, ...removingIds]));
+      setDyingEdgeIds((prev) => new Set([...prev, ...connectedEdgeIds]));
+
+      setTimeout(() => {
+        _onNodesChange(removeChanges);
+        onEdgesChange(connectedEdgeIds.map((id) => ({ type: "remove" as const, id })));
+        connectedEdgeIds.forEach((id) => suppressedEdgeRemovesRef.current.delete(id));
+        setDyingNodeIds((prev) => { const s = new Set(prev); removingIds.forEach((id) => s.delete(id)); return s; });
+        setDyingEdgeIds((prev) => { const s = new Set(prev); connectedEdgeIds.forEach((id) => s.delete(id)); return s; });
+      }, 300);
+    }
+
+    // Only pass non-remove changes through the snap logic
+    const nonRemoveChanges = changes.filter((c) => c.type !== "remove");
+    if (nonRemoveChanges.length === 0) return;
+
     // ── Alignment snap (edge-to-edge + center magnetic effect) ─────────────────
     const newGuides: SnapGuide[] = [];
 
-    const snappedChanges = changes.map((change) => {
+    const snappedChanges = nonRemoveChanges.map((change) => {
       if (change.type !== "position" || !change.position) return change;
 
       // On drag-stop: lock in the last snapped position
@@ -705,6 +742,7 @@ export default function WorkflowCanvas() {
     rf.setAttribute("data-connecting-type", type);
     setConnectingHandleType(type);
     setIsConnecting(true);
+    handle.classList.add("node-handle-connecting");
   }, [setConnectingHandleType]);
 
   // Show node-picker when an edge is dragged and released on empty canvas
@@ -714,9 +752,10 @@ export default function WorkflowCanvas() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       connectionState: any,
     ) => {
-      // Remove connecting-type tag
+      // Remove connecting-type tag and handle highlight
       const rf = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
       rf?.removeAttribute("data-connecting-type");
+      document.querySelectorAll(".node-handle-connecting").forEach((el) => el.classList.remove("node-handle-connecting"));
       setConnectingHandleType(null);
       setIsConnecting(false);
 
@@ -738,6 +777,7 @@ export default function WorkflowCanvas() {
         sourceNodeId:   connectionState.fromNode.id,
         sourceNodeType: connectionState.fromNode.type,
         sourceHandleId: connectionState.fromHandle?.id ?? null,
+        isInputHandle:  connectionState.fromHandle?.type === "target",
       });
     },
     [],
@@ -981,14 +1021,16 @@ export default function WorkflowCanvas() {
             const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
             const isLockedMember = lockedMemberIds.has(n.id);
             const isLockedGroup  = n.type === "groupNode" && !!n.data?.locked;
+            const isDying        = dyingNodeIds.has(n.id);
+            const dyingClass     = isDying ? "node-dying" : null;
             return {
               ...n,
               draggable: (isLockedMember || isLockedGroup) ? false : undefined,
-              className: [n.className, ancestorClass].filter(Boolean).join(" ") || undefined,
+              className: [n.className, ancestorClass, dyingClass].filter(Boolean).join(" ") || undefined,
               style: {
                 ...n.style,
-                opacity:    isDimmed ? 0.25 : undefined,
-                transition: anySelected ? "opacity 150ms" : undefined,
+                opacity:    isDying ? undefined : (isDimmed ? 0.25 : undefined),
+                transition: isDying ? undefined : (anySelected ? "opacity 150ms" : undefined),
               },
             };
           });
@@ -1007,7 +1049,7 @@ export default function WorkflowCanvas() {
           });
         })()}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onEdgeClick={handleEdgeClick}
         onSelectionChange={onSelectionChange}
         onNodeClick={handleNodeClick}

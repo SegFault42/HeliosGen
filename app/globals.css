@@ -214,6 +214,24 @@ body {
 /* Selected + unconnected: dim input (left) handles only; output handles keep full opacity */
 .react-flow__node.selected .react-flow__handle-left.node-handle-icon.react-flow__handle:not(.node-handle-connected) { opacity: 0.35 !important; }
 
+/* ── Keep the dragged handle visible while a connection is in progress ───── */
+.react-flow__handle-left.node-handle-icon.node-handle-connecting  { transform: translate(-100%, -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+.react-flow__handle-right.node-handle-icon.node-handle-connecting { transform: translate(100%,  -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+.react-flow__handle-left.node-handle.node-handle-connecting       { transform: translate(-100%, -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+.react-flow__handle-right.node-handle.node-handle-connecting      { transform: translate(100%,  -50%) !important; opacity: 1 !important; pointer-events: auto !important; }
+/* Connecting handle: show its type color */
+.node-handle-icon-prompt.react-flow__handle.node-handle-connecting    { border-color: #77E544 !important; }
+.node-handle-icon-image.react-flow__handle.node-handle-connecting     { border-color: #818cf8 !important; }
+.node-handle-icon-resource.react-flow__handle.node-handle-connecting  { border-color: #fb923c !important; }
+.node-handle-icon-videoref.react-flow__handle.node-handle-connecting  { border-color: #22d3ee !important; }
+.node-handle-icon-refvideo.react-flow__handle.node-handle-connecting  { border-color: #38bdf8 !important; }
+.node-handle-icon-audioref.react-flow__handle.node-handle-connecting  { border-color: #a78bfa !important; }
+.node-handle-icon-character.react-flow__handle.node-handle-connecting { border-color: #f472b6 !important; }
+.node-handle-icon-out-text.react-flow__handle.node-handle-connecting  { border-color: #77E544 !important; }
+.node-handle-icon-out-image.react-flow__handle.node-handle-connecting { border-color: #818cf8 !important; }
+.node-handle-icon-out-video.react-flow__handle.node-handle-connecting { border-color: #22d3ee !important; }
+.node-handle-icon-out-audio.react-flow__handle.node-handle-connecting { border-color: #a78bfa !important; }
+
 /* ── Show only compatible input handles while connecting ─────────────────── */
 /* data-connecting-type is set by JS onConnectStart on the .react-flow element */
 
@@ -471,6 +489,47 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Node delete animation ───────────────────────────────────────────────── */
+/* Use individual `scale` property — does NOT conflict with RF's translate() transform */
+@keyframes node-delete {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.node-dying {
+  animation: node-delete 200ms ease forwards !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+.node-dying .node-slide-reveal {
+  transform: translateY(0) !important;
+  transition: none !important;
+}
+
+/* ── Hover-revealed elements slide up from below ─────────────────────────── */
+.node-slide-reveal {
+  transform: translateY(5px);
+  transition: opacity 150ms ease, transform 150ms ease !important;
+}
+.group:hover .node-slide-reveal,
+.group\/player:hover .node-slide-reveal,
+.group\/gen:hover .node-slide-reveal,
+.group\/orient-info:hover .node-slide-reveal {
+  transform: translateY(0);
+}
+
+/* ── Float menu slide (bottom → top) ─────────────────────────────────────── */
+@keyframes float-menu-in {
+  from { opacity: 0; translate: 0 6px; }
+  to   { opacity: 1; translate: 0 0; }
+}
+@keyframes float-menu-out {
+  from { opacity: 1; translate: 0 0; }
+  to   { opacity: 0; translate: 0 6px; }
+}
+.float-menu-enter { animation: float-menu-in  140ms cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.float-menu-exit  { animation: float-menu-out 110ms ease forwards; }
 
 /* ── Edge error blink ────────────────────────────────────────────────────── */
 @keyframes edge-error-blink {
