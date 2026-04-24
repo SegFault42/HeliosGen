@@ -12,7 +12,7 @@ body {
 
 /* ── Node design system ──────────────────────────────── */
 .node-card {
-  background: #0D1012;
+  background: #191919;
   border: 1px solid #333333;
   border-radius: 8px;
   overflow: visible;
@@ -488,6 +488,16 @@ body {
 /* ── Spinner ─────────────────────────────────────────────────────────────── */
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ── Node action bar / group toolbar enter animation ─────────────────────── */
+@keyframes node-action-bar-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.node-action-bar-enter {
+  animation: node-action-bar-enter 160ms ease forwards;
 }
 
 /* ── Node delete animation ───────────────────────────────────────────────── */

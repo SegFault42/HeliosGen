@@ -113,25 +113,34 @@ function resolveMentions(
   spans.sort((a, b) => a.start - b.start);
   if (spans.length === 0) return { resolvedPrompt: prompt, orderedUrls: imageUrls };
 
-  const orderedUrls: string[] = [];
+  const spanUrls: (string | null)[] = [];
   const usedIdxs = new Set<number>();
 
   for (const span of spans) {
+    let url: string | null = null;
     if (span.labelIdx !== null && !usedIdxs.has(span.labelIdx) && imageUrls[span.labelIdx]) {
-      orderedUrls.push(imageUrls[span.labelIdx]);
+      url = imageUrls[span.labelIdx];
       usedIdxs.add(span.labelIdx);
     } else {
       const next = imageUrls.findIndex((_, j) => !usedIdxs.has(j));
-      if (next !== -1) { orderedUrls.push(imageUrls[next]); usedIdxs.add(next); }
-      else if (imageUrls.length > 0) orderedUrls.push(imageUrls[0]);
+      if (next !== -1) { url = imageUrls[next]; usedIdxs.add(next); }
+      // No fallback to imageUrls[0] — unresolvable @mentions stay as plain text
     }
+    spanUrls.push(url);
   }
+
+  const orderedUrls = spanUrls.filter((u): u is string => u !== null);
 
   let resolvedPrompt = "";
   let lastEnd = 0;
+  let imageNum = 1;
   for (let i = 0; i < spans.length; i++) {
     resolvedPrompt += prompt.slice(lastEnd, spans[i].start);
-    resolvedPrompt += tagFormat === "grok" ? `@image${i + 1} ` : `<<<image ${i + 1}>>>`;
+    if (spanUrls[i] !== null) {
+      resolvedPrompt += tagFormat === "grok" ? `@image${imageNum++} ` : `<<<image ${imageNum++}>>>`;
+    } else {
+      resolvedPrompt += prompt.slice(spans[i].start, spans[i].end);
+    }
     lastEnd = spans[i].end;
   }
   resolvedPrompt += prompt.slice(lastEnd);
@@ -564,6 +573,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       if (hasError) return;
     }
 
+    // For non-motion-control models: if startFrame is wired but source has no image yet, block
+    if (!cfg.apiInput.useMotionControl) {
+      const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame");
+      if (sfEdge && !upstream.startFrameUrl) {
+        const srcNode = nodes.find((n) => n.id === sfEdge.source);
+        if (srcNode) updateNodeData(srcNode.id, { hasError: true });
+        flashEdgeError(sfEdge.id);
+        return;
+      }
+    }
+
     // Trim videoRef if the source node has trim points applied
     let finalVideoRefUrl = upstream.videoRefUrl;
     if (finalVideoRefUrl) {
@@ -686,7 +706,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     try {
       const res = await fetch("/api/generate-video", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authData.session!.access_token}` },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
@@ -914,7 +934,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           </div>
 
           {/* Generating badge + cancel — visible while busy */}
-          {busy && (
+          {busy && generations[currentGenIdx] === null && (
             <>
               <div
                 className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"

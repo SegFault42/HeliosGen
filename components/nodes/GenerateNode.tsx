@@ -18,11 +18,12 @@ import { IMAGE_MODELS } from "@/lib/modelConfig";
 const MODELS     = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
 const MODEL_CAPS = Object.fromEntries(
   IMAGE_MODELS.map((m) => [m.id, {
-    supportsImages:  m.supportsImages,
-    supportsQuality: m.supportsQuality,
-    ratios:          m.ratios,
-    maxImages:       m.maxImages,
-    qualityOptions:  m.apiInput.qualityOptions,
+    supportsImages:      m.supportsImages,
+    supportsQuality:     m.supportsQuality,
+    ratios:              m.ratios,
+    maxImages:           m.maxImages,
+    qualityOptions:      m.apiInput.qualityOptions,
+    azureQualityOptions: m.azureQualityOptions,
   }])
 );
 const DEFAULT_CAPS = MODEL_CAPS["nano-banana-2"];
@@ -32,6 +33,8 @@ const DEFAULT_CAPS = MODEL_CAPS["nano-banana-2"];
 // (each model defines its own subset — see MODEL_CAPS above)
 
 function ratioRect(value: string) {
+  // "auto" doesn't have a fixed ratio — render as a square preview
+  if (value === "auto") return { rw: 14, rh: 14, x: 3, y: 0 };
   const [w, h] = value.split(":").map(Number);
   const maxW = 20, maxH = 14;
   const scale = Math.min(maxW / w, maxH / h);
@@ -108,32 +111,39 @@ function resolveMentions(
   // No @mentions in prompt — pass all images through as-is
   if (spans.length === 0) return { resolvedPrompt: prompt, orderedUrls: imageUrls };
 
-  // Assign orderedUrls in prompt appearance order
-  const orderedUrls: string[] = [];
+  // Assign orderedUrls in prompt appearance order; track per-span URL (null = unresolvable)
+  const spanUrls: (string | null)[] = [];
   const usedIdxs = new Set<number>();
 
   for (const span of spans) {
+    let url: string | null = null;
     if (span.labelIdx !== null && !usedIdxs.has(span.labelIdx) && imageUrls[span.labelIdx]) {
-      orderedUrls.push(imageUrls[span.labelIdx]);
+      url = imageUrls[span.labelIdx];
       usedIdxs.add(span.labelIdx);
     } else {
-      // Fallback or already-used label — next unused URL, else repeat first
       const next = imageUrls.findIndex((_, j) => !usedIdxs.has(j));
       if (next !== -1) {
-        orderedUrls.push(imageUrls[next]);
+        url = imageUrls[next];
         usedIdxs.add(next);
-      } else if (imageUrls.length > 0) {
-        orderedUrls.push(imageUrls[0]);
       }
+      // No fallback to imageUrls[0] — unresolvable @mentions stay as plain text
     }
+    spanUrls.push(url);
   }
 
-  // Build resolved prompt by substituting spans with <<<image N>>>
+  const orderedUrls = spanUrls.filter((u): u is string => u !== null);
+
+  // Build resolved prompt: spans with a URL become <<<image N>>>, others keep original text
   let resolvedPrompt = "";
   let lastEnd = 0;
+  let imageNum = 1;
   for (let i = 0; i < spans.length; i++) {
     resolvedPrompt += prompt.slice(lastEnd, spans[i].start);
-    resolvedPrompt += `<<<image ${i + 1}>>>`;
+    if (spanUrls[i] !== null) {
+      resolvedPrompt += `<<<image ${imageNum++}>>>`;
+    } else {
+      resolvedPrompt += prompt.slice(spans[i].start, spans[i].end);
+    }
     lastEnd = spans[i].end;
   }
   resolvedPrompt += prompt.slice(lastEnd);
@@ -183,9 +193,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const [modelOpen, setModelOpen]     = useState(false);
   const [ratioOpen, setRatioOpen]     = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
-  const modelPopup   = useAnimatedPopup(modelOpen && !data.imageUrl);
-  const ratioPopup   = useAnimatedPopup(ratioOpen);
-  const qualityPopup = useAnimatedPopup(qualityOpen);
+  const [azureQualityOpen, setAzureQualityOpen] = useState(false);
+  const modelPopup        = useAnimatedPopup(modelOpen && !data.imageUrl);
+  const ratioPopup        = useAnimatedPopup(ratioOpen);
+  const qualityPopup      = useAnimatedPopup(qualityOpen);
+  const azureQualityPopup = useAnimatedPopup(azureQualityOpen);
   const [loading, setLoading]         = useState(false);
   const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
   const [lightboxOpen, setLightboxOpen]       = useState(false);
@@ -297,6 +309,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const quality     = (data.quality as string) ?? "1k";
   const status      = data.status ?? "idle";
 
+  const [isAzureProvider, setIsAzureProvider] = useState(false);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const providers = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}");
+        setIsAzureProvider((providers[model] ?? "kie") === "azure");
+      } catch { setIsAzureProvider(false); }
+    };
+    read();
+    window.addEventListener("storage", read);
+    return () => window.removeEventListener("storage", read);
+  }, [model]);
+
   const promptOverLimit = (() => {
     const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
     if (!promptEdge) return false;
@@ -306,11 +331,14 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     return text.length > limit;
   })();
 
-  // If current ratio isn't valid for this model, fall back to 1:1
-  const rawRatio  = (data.aspectRatio as string) ?? "1:1";
-  const aspectRatio = caps.ratios.includes(rawRatio) ? rawRatio : "1:1";
+  // If current ratio isn't valid for this model, fall back to first valid ratio (or 1:1)
+  const rawRatio    = (data.aspectRatio as string) ?? "1:1";
+  const aspectRatio = caps.ratios.includes(rawRatio)
+    ? rawRatio
+    : (caps.ratios[0] ?? "1:1");
 
-  const [rw, rh] = aspectRatio.split(":").map(Number);
+  // "auto" has no fixed pixel dimensions — treat as 1:1 for the CSS ratio
+  const [rw, rh] = aspectRatio === "auto" ? [1, 1] : aspectRatio.split(":").map(Number);
   const cssRatio = `${rw} / ${rh}`;
   const busy     = loading || status === "running";
 
@@ -381,6 +409,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     setModelOpen(false);
     setRatioOpen(false);
     setQualityOpen(false);
+    setAzureQualityOpen(false);
   };
 
   // ── Poll /api/job-status while a taskId is pending ──────────────────────────
@@ -414,8 +443,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           const storeNode = useWorkflowStore.getState().nodes.find(n => n.id === id);
           const gens = [...((storeNode?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
           const slot = storeNode?.data?.currentGenIdx as number ?? gens.length - 1;
-          gens[slot] = { error: "Job lost (server restarted)" };
-          updateNodeData(id, { status: "error", errorMsg: "Job lost (server restarted)", taskId: undefined, generations: gens, currentGenIdx: slot });
+          gens[slot] = { error: "Job expired or unknown" };
+          updateNodeData(id, { status: "error", errorMsg: "Job expired or unknown", taskId: undefined, generations: gens, currentGenIdx: slot });
           clearInterval(interval);
         }
         // "pending" → keep polling
@@ -440,13 +469,64 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     const { data } = await createClient().auth.getSession();
     if (!data.session) { setAuthModalOpen(true); return; }
 
-    const upstream  = resolveInputs(id, nodes as Node<NodeData>[], edges);
+    // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
+    // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
+    const videoImageEdges = edges.filter(
+      (e) => e.target === id && e.targetHandle === "image" &&
+        nodes.find((n) => n.id === e.source)?.type === "videoInputNode"
+    );
+    for (const edge of videoImageEdges) {
+      const src = nodes.find((n) => n.id === edge.source);
+      if (!src || (src.data.capturedFrameUrl as string | undefined)) continue;
+      const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
+      if (!videoUrl || videoUrl.startsWith("blob:")) continue;
+      const trimStart = src.data.trimStart as number | undefined;
+      const trimEnd   = src.data.trimEnd   as number | undefined;
+      const extractBody = trimEnd !== undefined
+        ? { videoUrl, timeSeconds: trimEnd }
+        : { videoUrl, timeSeconds: trimStart ?? 0 };
+      try {
+        const r = await fetch("/api/extract-frame", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+          body: JSON.stringify(extractBody),
+        });
+        const j = await r.json();
+        if (j.cdnUrl) updateNodeData(src.id, { capturedFrameUrl: j.cdnUrl });
+      } catch { /* proceed without */ }
+    }
+
+    // Use fresh store state so any newly extracted frames are included
+    const upstream  = resolveInputs(id, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
     const { resolvedPrompt, orderedUrls } = resolveMentions(
       upstream.prompt ?? "",
       upstream.imageNodeLabels,
       upstream.imageUrls,
     );
-    const payload = { model, prompt: resolvedPrompt, imageUrls: orderedUrls, aspectRatio, quality };
+
+    // Read Azure settings from localStorage (client-side, safe in useCallback)
+    const azureBaseUrl = (() => {
+      try { return localStorage.getItem("aiui-azure-base-url") ?? ""; }
+      catch { return ""; }
+    })();
+    const azureDeployment = (() => {
+      try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[model] ?? ""; }
+      catch { return ""; }
+    })();
+    const isAzure = !!(azureBaseUrl && azureDeployment && (() => {
+      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "azure"; }
+      catch { return false; }
+    })());
+    const azureQuality = (data.azureQuality as string | undefined) ?? "auto";
+
+    const payload = {
+      model,
+      prompt: resolvedPrompt,
+      imageUrls: orderedUrls,
+      aspectRatio,
+      quality,
+      ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality } : {}),
+    };
 
     if (!resolvedPrompt.trim()) {
       if (connectedPromptNodeId) {
@@ -472,12 +552,13 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     try {
       const res  = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session!.access_token}` },
         body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error);
-      // Store taskId — the useEffect above will poll until done
+
+      // Both Kie and Azure now return { taskId } — polling useEffect handles the rest
       updateNodeData(id, { taskId: json.taskId });
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -489,7 +570,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     } finally {
       setLoading(false);
     }
-  }, [id, nodes, edges, model, aspectRatio, quality, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError]);
+  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError]);
 
   // node-card has position:relative — handles and label position relative to it
   return (
@@ -596,7 +677,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           }}
           onDoubleClick={() => { if (data.imageUrl) openLightbox(); }}
         >
-          {busy && (
+          {busy && generations[currentGenIdx] === null && (
             <>
               <div
                 className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
@@ -852,7 +933,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               <div className="relative shrink-0">
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); }}
+                  onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setAzureQualityOpen(false); }}
                   className="flex items-center gap-1"
                 >
                   <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors uppercase">
@@ -886,6 +967,57 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             </>
           )}
 
+          {/* Azure quality — shown only when model has Azure options AND Azure provider is selected */}
+          {caps.azureQualityOptions && isAzureProvider && (
+            <>
+              {/* Divider */}
+              <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
+
+              <div className="relative shrink-0">
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); }}
+                  className="flex items-center gap-1"
+                  title="Quality (Azure Foundry)"
+                >
+                  <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors capitalize">
+                    {(data.azureQuality as string | undefined) ?? "auto"}
+                  </span>
+                  <ChevronIcon open={azureQualityOpen} />
+                </button>
+
+                {azureQualityPopup.visible && (
+                  <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${azureQualityPopup.className}`}>
+                    <div className="px-3 py-1.5 border-b border-[#1E1410]">
+                      <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Azure Quality</span>
+                    </div>
+                    {[
+                      { id: "auto",   meta: "Model default" },
+                      { id: "low",    meta: "Faster, cheaper" },
+                      { id: "medium", meta: "Balanced" },
+                      { id: "high",   meta: "Best quality" },
+                    ].map((q) => {
+                      const active = ((data.azureQuality as string | undefined) ?? "auto") === q.id;
+                      return (
+                        <button
+                          key={q.id}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => { updateNodeData(id, { azureQuality: q.id }); setAzureQualityOpen(false); }}
+                          className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${
+                            active ? "text-white" : "text-[#8D8E89]"
+                          }`}
+                        >
+                          <span className="capitalize font-medium">{q.id}</span>
+                          <span className="text-[#4A4A45]">{q.meta}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
           {/* Divider */}
           <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
 
@@ -902,6 +1034,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           </button>
 
         </div>
+
 
       {/* ── Lightbox — blur-up full-quality view on double-click ─────── */}
       {lightboxOpen && typeof document !== "undefined" && createPortal(

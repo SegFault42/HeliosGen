@@ -69,6 +69,9 @@ export function resolveInputs(
     if (src.type === "promptNode") {
       result.prompt = src.data.prompt as string | undefined;
     }
+    if (src.type === "assistantNode") {
+      result.prompt = src.data.outputText as string | undefined;
+    }
 
     // "image" handle — multi-image input for generateNode (up to 14)
     if (edge.targetHandle === "image") {

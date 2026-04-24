@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { NodeProps, Node, useReactFlow, NodeResizeControl } from "@xyflow/react";
+import { NodeProps, Node, useReactFlow, NodeResizeControl, NodeToolbar, Position } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 
 export type GroupNodeType = Node<NodeData, "groupNode">;
@@ -276,20 +276,15 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
       {locked && <LockBadge color={color} />}
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
+      <NodeToolbar isVisible={toolbarVisible} position={Position.Top} offset={16}>
       <div
-        className="absolute z-50 flex items-center gap-0.5 px-1.5 py-1"
+        className="flex items-center gap-0.5 px-1.5 py-1 node-action-bar-enter"
         style={{
-          bottom: "calc(100% + 28px)",
-          left: "50%",
           borderRadius: 999,
           background: "rgba(16, 16, 16, 0.96)",
           backdropFilter: "blur(12px)",
           border: "1px solid rgba(255,255,255,0.07)",
           boxShadow: "0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)",
-          transform: `translateX(-50%) translateY(${toolbarVisible ? "0px" : "6px"})`,
-          opacity: toolbarVisible ? 1 : 0,
-          transition: "opacity 180ms ease, transform 180ms ease",
-          pointerEvents: toolbarVisible ? "auto" : "none",
           whiteSpace: "nowrap",
         }}
       >
@@ -399,6 +394,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
           </>
         )}
       </div>
+      </NodeToolbar>
     </div>
   );
 }

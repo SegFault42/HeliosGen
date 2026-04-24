@@ -56,6 +56,16 @@ const NODE_META: Record<
       </svg>
     ),
   },
+  assistantNode: {
+    accent: "#60a5fa",
+    bg: "#07141f",
+    bigIcon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path d="M8 10h8M8 14h5" />
+      </svg>
+    ),
+  },
   videoGeneratorNode: {
     accent: "#a78bfa",
     bg: "#1c0d3a",
@@ -79,7 +89,7 @@ const SECTIONS: Array<{
   {
     id: "generators",
     label: "GENERATORS",
-    nodeTypes: ["generateNode", "videoGeneratorNode"],
+    nodeTypes: ["generateNode", "videoGeneratorNode", "assistantNode"],
   },
   {
     id: "resources",

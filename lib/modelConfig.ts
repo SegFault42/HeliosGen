@@ -53,6 +53,28 @@ export interface ImageModel {
     /** Any other static fields to include in the input object */
     extra?: Record<string, unknown>;
   };
+  /**
+   * When set, the route switches the model field to this alternative apiId
+   * when NO reference images are provided (text-to-image variant).
+   * The imageInputKey is omitted from the payload in that case.
+   */
+  textOnlyApiId?: string;
+  /**
+   * When set and provider is "azure", these quality values are offered
+   * instead of the standard 1k/2k/4k picker.
+   */
+  azureQualityOptions?: string[];
+  /**
+   * Maps app-level aspect ratio strings to Azure size strings (e.g. "1792x1024").
+   * Fallback is "1024x1024" when a ratio is not listed.
+   */
+  azureSizeMap?: Record<string, string>;
+  /**
+   * Azure OpenAI API version to use for this model.
+   * Defaults to "2024-02-01" (DALL-E 3). Newer models (e.g. gpt-image-2) require
+   * a later preview version such as "2025-04-01-preview".
+   */
+  azureApiVersion?: string;
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
@@ -143,6 +165,40 @@ export const IMAGE_MODELS: ImageModel[] = [
       qualityMap: { "1k": "basic", "2k": "basic", "4k": "high" },
       qualityOptions: ["2k", "4k"],
       promptMaxLength: 3000,
+      extra: { nsfw_checker: false },
+    },
+  },
+  // ── OpenAI GPT Image 2 ────────────────────────────────────────────────────────
+  {
+    id: "gpt-image-2",
+    // apiId used when images ARE attached (image-to-image)
+    apiId: "gpt-image-2-image-to-image",
+    // apiId used when NO images are attached (text-to-image)
+    textOnlyApiId: "gpt-image-2-text-to-image",
+    name: "GPT Image 2",
+    provider: "OpenAI",
+    // Kie supports: auto, 1:1, 9:16, 16:9, 4:3, 3:4
+    ratios: ["auto", "1:1", "16:9", "9:16", "4:3", "3:4"],
+    supportsImages: true,
+    maxImages: 16,
+    supportsQuality: true,
+    // Azure-specific quality options (sent as the "quality" field)
+    azureQualityOptions: ["auto", "low", "medium", "high"],
+    azureApiVersion: "2025-04-01-preview",
+    azureSizeMap: {
+      "auto": "auto",
+      "1:1":  "1024x1024",
+      "16:9": "2048x1152",
+      "9:16": "1152x2048",
+      "4:3":  "1536x1024",
+      "3:4":  "1024x1536",
+    },
+    apiInput: {
+      aspectRatioKey:  "aspect_ratio",
+      imageInputKey:   "input_urls",
+      qualityKey:      "resolution",
+      qualityOptions:  ["1k", "2k", "4k"],
+      promptMaxLength: 20000,
       extra: { nsfw_checker: false },
     },
   },

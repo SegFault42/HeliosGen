@@ -17,24 +17,31 @@ function extractUrl(resultJson?: string): string | undefined {
   }
 }
 
-// If callback was missed, poll kie.ai directly and update the store
-async function syncFromKie(taskId: string, token: string): Promise<void> {
+// Query Kie.ai and update jobStore. Returns the latest JobResult (or undefined
+// if the task is genuinely unknown to Kie).
+async function syncFromKie(
+  taskId: string,
+  token: string,
+  type?: "image" | "video",
+): Promise<"pending" | "done" | "error" | "unknown"> {
   try {
     const r = await fetch(`${RECORD_INFO}?taskId=${taskId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!r.ok) return;
+    if (!r.ok) return "unknown";
     const d = await r.json();
-    if (d.code !== 200) return;
+    if (d.code !== 200) return "unknown";
 
     const state = String(d.data?.state ?? "").toLowerCase();
 
     if (state === "success") {
       const kieUrl = extractUrl(d.data?.resultJson);
       if (kieUrl) {
-        const existing = jobStore.get(taskId);
-        const isVideo = existing?.status === "pending" && (existing as { type?: string }).type === "video";
-        const folder  = isVideo ? "videos" : "images";
+        // Detect whether this is a video by the URL extension or recorded type
+        const isVideo =
+          type === "video" ||
+          kieUrl.match(/\.(mp4|webm|mov)(\?|$)/i) !== null;
+        const folder = isVideo ? "videos" : "images";
 
         let r2Url = kieUrl;
         try {
@@ -45,20 +52,45 @@ async function syncFromKie(taskId: string, token: string): Promise<void> {
 
         if (isVideo) {
           jobStore.set(taskId, { status: "done", videoUrl: r2Url });
-          supabaseAdmin.from("generations").update({ status: "done", video_url: r2Url }).eq("task_id", taskId)
-            .then(({ error }) => { if (error) console.error("[job-status] supabase update error:", error.message); });
+          supabaseAdmin
+            .from("generations")
+            .update({ status: "done", video_url: r2Url })
+            .eq("task_id", taskId)
+            .then(({ error }) => {
+              if (error) console.error("[job-status] supabase update error:", error.message);
+            });
         } else {
           jobStore.set(taskId, { status: "done", imageUrl: r2Url });
-          supabaseAdmin.from("generations").update({ status: "done", image_url: r2Url }).eq("task_id", taskId)
-            .then(({ error }) => { if (error) console.error("[job-status] supabase update error:", error.message); });
+          supabaseAdmin
+            .from("generations")
+            .update({ status: "done", image_url: r2Url })
+            .eq("task_id", taskId)
+            .then(({ error }) => {
+              if (error) console.error("[job-status] supabase update error:", error.message);
+            });
         }
+        return "done";
       }
-    } else if (state === "fail") {
-      jobStore.set(taskId, { status: "error", error: d.data?.failMsg || "Generation failed" });
+      return "unknown";
     }
-    // waiting / queuing / generating → leave as pending
+
+    if (state === "fail") {
+      const errMsg = d.data?.failMsg || "Generation failed";
+      jobStore.set(taskId, { status: "error", error: errMsg });
+      return "error";
+    }
+
+    // "waiting" | "queuing" | "generating" | any in-progress state
+    if (["waiting", "queuing", "generating", "processing"].includes(state) || state !== "") {
+      // Re-register as pending so future polls from the callback path work
+      const existing = jobStore.get(taskId);
+      if (!existing) jobStore.set(taskId, { status: "pending", type: type ?? "image" });
+      return "pending";
+    }
+
+    return "unknown";
   } catch {
-    // network error — leave store as-is
+    return "unknown";
   }
 }
 
@@ -68,17 +100,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "taskId is required" }, { status: 400 });
   }
 
+  const token = process.env.KIE_API_TOKEN;
   const result = jobStore.get(taskId);
-  if (!result) {
-    return NextResponse.json({ status: "not_found" });
+
+  // ── Task known to local store ──────────────────────────────────────────────
+  if (result) {
+    if (result.status === "pending") {
+      // Sync from Kie in case the webhook callback was missed
+      if (token) await syncFromKie(taskId, token, (result as { type?: "image" | "video" }).type);
+      return NextResponse.json(jobStore.get(taskId) ?? result);
+    }
+    return NextResponse.json(result);
   }
 
-  // Still pending — check kie.ai directly in case the callback was missed
-  if (result.status === "pending") {
-    const token = process.env.KIE_API_TOKEN;
-    if (token) await syncFromKie(taskId, token);
-    return NextResponse.json(jobStore.get(taskId) ?? result);
+  // ── Task not in local store (server restarted / cold start after refresh) ──
+  // For Kie jobs: query Kie.ai directly to recover the state.
+  // For Azure jobs (azure-* prefix): unrecoverable if not in jobStore
+  //   (Azure has no status endpoint; jobStore is file-backed so this is rare).
+  if (token && !taskId.startsWith("azure-")) {
+    const kieState = await syncFromKie(taskId, token);
+
+    if (kieState === "done" || kieState === "error") {
+      return NextResponse.json(jobStore.get(taskId)!);
+    }
+
+    if (kieState === "pending") {
+      // Still running on Kie's side — tell the client to keep polling
+      return NextResponse.json({ status: "pending" });
+    }
   }
 
-  return NextResponse.json(result);
+  // Genuinely unknown (bad taskId, already expired on Kie's side, etc.)
+  return NextResponse.json({ status: "not_found" });
 }

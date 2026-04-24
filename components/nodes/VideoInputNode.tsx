@@ -136,8 +136,20 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   );
   const connectedToImageHandle = !!imageEdge;
   const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
-  const capturedFrameRef  = useRef(capturedFrameUrl);
-  capturedFrameRef.current = capturedFrameUrl;
+  const isExtractingFrame = !!(data.extractingFrame as boolean | undefined);
+  const capturedFrameRef     = useRef(capturedFrameUrl);
+  capturedFrameRef.current   = capturedFrameUrl;
+  const prevCapturedRef      = useRef(capturedFrameUrl);
+
+  // Auto-switch to frame view whenever a new capturedFrameUrl arrives
+  useEffect(() => {
+    const prev = prevCapturedRef.current;
+    prevCapturedRef.current = capturedFrameUrl;
+    if (capturedFrameUrl && capturedFrameUrl !== prev) {
+      setViewMode("frame");
+      setPickerOpen(false);
+    }
+  }, [capturedFrameUrl]);
 
   // ── Frame picker ────────────────────────────────────────────────────────────
 
@@ -563,7 +575,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
             className="w-full h-full block"
             style={{
               objectFit: "fill",
-              animation: isUploading ? "upload-pulse 1.6s ease-in-out infinite" : undefined,
+              animation: (isUploading || isExtractingFrame) ? "upload-pulse 1.6s ease-in-out infinite" : undefined,
             }}
             autoPlay
             muted={trimOpen ? false : (muted || !hovering)}
@@ -1103,6 +1115,19 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                 <path d="M11 3A8 8 0 0 1 19 11" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
               <span className="text-[10px] text-[#22d3ee]">Uploading…</span>
+            </div>
+          )}
+
+          {/* Frame extraction badge */}
+          {isExtractingFrame && !uploading && !pickerOpen && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+              <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
+                <svg width="11" height="11" viewBox="0 0 22 22" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
+                  <circle cx="11" cy="11" r="8" stroke="#333" strokeWidth="2.5" />
+                  <path d="M11 3A8 8 0 0 1 19 11" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+                <span className="text-[10px] text-[#818cf8]">Extracting…</span>
+              </div>
             </div>
           )}
 

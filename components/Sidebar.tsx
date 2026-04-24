@@ -4,6 +4,62 @@ import { useWorkflowStore, Space } from "@/lib/store";
 import { NODES, NodeCategory } from "@/lib/nodeTypes";
 import { useSpaceSync, timeAgo, SyncStatus } from "@/lib/useSpaceSync";
 
+/* ── Same accent colours & icons as AddNodeMenu ────────────────────────────── */
+const NODE_META: Record<string, { accent: string; bg: string; bigIcon: React.ReactNode }> = {
+  promptNode: {
+    accent: "#4ade80",
+    bg: "#052e16",
+    bigIcon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  imageInputNode: {
+    accent: "#fb923c",
+    bg: "#431407",
+    bigIcon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+      </svg>
+    ),
+  },
+  videoInputNode: {
+    accent: "#60a5fa",
+    bg: "#0c1a3b",
+    bigIcon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="14" x="3" y="5" rx="2" />
+        <path d="m16 10-4-2.5v5L16 10z" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+  generateNode: {
+    accent: "#77E544",
+    bg: "#0d1f06",
+    bigIcon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="m3 9 4-4 4 4 4-4 4 4" />
+        <path d="M3 15h18" />
+      </svg>
+    ),
+  },
+  videoGeneratorNode: {
+    accent: "#a78bfa",
+    bg: "#1c0d3a",
+    bigIcon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="18" height="14" x="3" y="5" rx="2" />
+        <path d="m16 10-4-2.5v5L16 10z" fill="currentColor" stroke="none" />
+        <path d="M7 12h4M9 10v4" />
+      </svg>
+    ),
+  },
+};
+
 // ── Spaces panel ──────────────────────────────────────────────────────────────
 
 function SpacesPanel({ syncNow }: { syncNow: () => void }) {
@@ -144,24 +200,47 @@ export default function Sidebar() {
                 {cat}
               </p>
               <div className="px-2 pb-2 space-y-px">
-                {group.map((n) => (
-                  <div
-                    key={n.type}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, n.type)}
-                    className="w-full text-left px-3 py-2.5 rounded hover:bg-[#0D1012] transition-colors group cursor-grab active:cursor-grabbing"
-                  >
-                    <div className="flex items-center gap-2.5 text-[#8D8E89] group-hover:text-[#77E544] transition-colors">
-                      {n.icon}
-                      <span className="text-[13px] text-white group-hover:text-white font-medium transition-colors">
-                        {n.label}
-                      </span>
+                {group.map((n) => {
+                  const meta = NODE_META[n.type];
+                  return (
+                    <div
+                      key={n.type}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, n.type)}
+                      className="w-full text-left px-2 py-2 rounded hover:bg-[#0D1012] transition-colors group cursor-grab active:cursor-grabbing"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {/* Colored icon badge — matches AddNodeMenu style */}
+                        <span
+                          style={{
+                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "30px",
+                            height: "30px",
+                            borderRadius: "8px",
+                            background: meta?.bg ?? "rgba(255,255,255,0.06)",
+                            color: meta?.accent ?? "#aaa",
+                            border: `1px solid ${meta?.accent ?? "#333"}28`,
+                            transition: "box-shadow 150ms ease",
+                          }}
+                          className="group-hover:shadow-[0_0_0_1px_var(--accent)]"
+                        >
+                          {meta?.bigIcon ?? n.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="text-[12px] text-white font-medium leading-tight block">
+                            {n.label}
+                          </span>
+                          <p className="text-[10px] text-[#8D8E89] mt-0.5 leading-tight truncate">
+                            {n.description}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-[#8D8E89] mt-0.5 pl-[22px]">
-                      {n.description}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

@@ -29,13 +29,14 @@ import ImageInputNode      from "./nodes/ImageInputNode";
 import VideoInputNode      from "./nodes/VideoInputNode";
 import GenerateNode        from "./nodes/GenerateNode";
 import VideoGeneratorNode  from "./nodes/VideoGeneratorNode";
+import AssistantNode       from "./nodes/AssistantNode";
 import GroupNode           from "./nodes/GroupNode";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
 import SelectionToolbar    from "./SelectionToolbar";
 import CanvasToolbar       from "./CanvasToolbar";
 import AddNodeMenu         from "./AddNodeMenu";
-import AuthButton from "./AuthButton";
-import CreditBalance from "./CreditBalance";
+import TopBar from "./TopBar";
+import SettingsModal from "./SettingsModal";
 
 async function getAccessToken(): Promise<string | undefined> {
   try {
@@ -59,6 +60,7 @@ const nodeTypes = {
   videoInputNode:      VideoInputNode,
   generateNode:        GenerateNode,
   videoGeneratorNode:  VideoGeneratorNode,
+  assistantNode:       AssistantNode,
   groupNode:           GroupNode,
 };
 
@@ -102,7 +104,9 @@ function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
     promptNode:         "TEXT",
     generateNode:       "IMAGE GEN",
     videoGeneratorNode: "VIDEO GEN",
+    assistantNode:      "ASSISTANT",
   };
+  if (type === "assistantNode") return "ASSISTANT";
   return `${names[type] ?? type} #${count}`;
 }
 
@@ -176,16 +180,40 @@ export default function WorkflowCanvas() {
     const filtered = changes.filter(
       (c) => c.type !== "remove" || !suppressedEdgeRemovesRef.current.has(c.id)
     );
+
+    // Clear capturedFrameUrl from VideoInputNodes when their frame-bearing edge is removed
+    for (const c of filtered) {
+      if (c.type !== "remove") continue;
+      const edge = edges.find((e) => e.id === c.id);
+      if (!edge) continue;
+      const isFrameEdge =
+        (edge.targetHandle === "image"      && nodes.find((n) => n.id === edge.target)?.type === "generateNode") ||
+        (edge.targetHandle === "startFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode") ||
+        (edge.targetHandle === "endFrame"   && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode");
+      if (!isFrameEdge) continue;
+      const srcNode = nodes.find((n) => n.id === edge.source);
+      if (srcNode?.type !== "videoInputNode") continue;
+      // Only clear if no other frame-bearing edges from this VideoInputNode remain
+      const remaining = edges.filter((e) =>
+        e.id !== edge.id &&
+        e.source === edge.source &&
+        (e.targetHandle === "image" || e.targetHandle === "startFrame" || e.targetHandle === "endFrame")
+      );
+      if (remaining.length === 0) {
+        updateNodeData(edge.source, { capturedFrameUrl: undefined });
+      }
+    }
+
     if (filtered.length > 0) onEdgesChange(filtered);
-  }, [onEdgesChange]);
+  }, [onEdgesChange, edges, nodes, updateNodeData]);
 
   const handleEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     setDyingEdgeIds((prev) => new Set([...prev, edge.id]));
     setTimeout(() => {
-      onEdgesChange([{ type: "remove", id: edge.id }]);
+      handleEdgesChange([{ type: "remove", id: edge.id }]);
       setDyingEdgeIds((prev) => { const s = new Set(prev); s.delete(edge.id); return s; });
     }, 450);
-  }, [onEdgesChange]);
+  }, [handleEdgesChange]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // ── Node deletion animation ──────────────────────────────────────────────────
@@ -271,6 +299,39 @@ export default function WorkflowCanvas() {
 
       return { ...change, position: { x: snappedX, y: snappedY } };
     });
+
+    // ── Alignment guides during resize ────────────────────────────────────────
+    let hasEndedResize = false;
+    for (const change of nonRemoveChanges) {
+      if (change.type !== "dimensions" || !change.dimensions) continue;
+      if (!change.resizing) { hasEndedResize = true; continue; }
+
+      const resized = nodes.find((n) => n.id === change.id);
+      if (!resized) continue;
+
+      const { x, y } = resized.position;
+      const dw = change.dimensions.width;
+      const dh = change.dimensions.height;
+
+      for (const other of nodes) {
+        if (other.id === change.id) continue;
+        const ow = other.measured?.width  ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).w;
+        const oh = other.measured?.height ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).h;
+
+        for (const dx of [x, x + dw]) {
+          for (const ox of [other.position.x, other.position.x + ow]) {
+            if (Math.abs(dx - ox) < SNAP_THRESHOLD) newGuides.push({ type: "v", canvasPos: ox });
+          }
+        }
+
+        for (const dy of [y, y + dh]) {
+          for (const oy of [other.position.y, other.position.y + oh]) {
+            if (Math.abs(dy - oy) < SNAP_THRESHOLD) newGuides.push({ type: "h", canvasPos: oy });
+          }
+        }
+      }
+    }
+    if (hasEndedResize && newGuides.length === 0) setSnapGuides([]);
 
     // When a group node moves, also move its members by the same delta
     const extraMemberChanges: NodeChange[] = [];
@@ -578,9 +639,61 @@ export default function WorkflowCanvas() {
     return () => document.removeEventListener("keydown", onKey);
   }, [handleCopy, handlePaste, addNode]);
 
-  // ── Auto-trim: check video duration vs model max on new connections ──────────
+  // ── Auto-trim + frame-extract on new connections ─────────────────────────────
   const handleConnect = useCallback((connection: Connection) => {
     onConnect(connection);
+
+    // Extract frame immediately when a VideoInputNode is wired to an image-consuming handle.
+    // Exception: imagePickOut → user picks manually via the frame picker, no auto-extraction.
+    const th = connection.targetHandle;
+    const sh = connection.sourceHandle;
+    if ((th === "image" || th === "startFrame" || th === "endFrame") && sh !== "imagePickOut") {
+      const srcNode = nodes.find((n) => n.id === connection.source);
+      const tgtNode = nodes.find((n) => n.id === connection.target);
+      const validTarget =
+        (th === "image"      && tgtNode?.type === "generateNode") ||
+        (th === "startFrame" && tgtNode?.type === "videoGeneratorNode") ||
+        (th === "endFrame"   && tgtNode?.type === "videoGeneratorNode");
+      if (srcNode?.type === "videoInputNode" && validTarget) {
+        const videoUrl = (srcNode.data.videoUrl ?? srcNode.data.r2Url) as string | undefined;
+        // For startFrame/endFrame always re-extract (user is declaring which frame they want).
+        // For image handle, skip if already extracted to avoid redundant uploads.
+        const alreadyExtracted = !!(srcNode.data.capturedFrameUrl as string | undefined);
+        if (videoUrl && !videoUrl.startsWith("blob:") && (th !== "image" || !alreadyExtracted)) {
+          const trimEnd   = srcNode.data.trimEnd   as number | undefined;
+          const trimStart = srcNode.data.trimStart as number | undefined;
+          // startFrame → first frame of trim range (or video start)
+          // endFrame   → last frame of trim range (or video end via lastFrame:true)
+          // image      → use trimEnd heuristic (end frame if trim set, else start)
+          let extractBody: Record<string, unknown>;
+          if (th === "startFrame") {
+            extractBody = { videoUrl, timeSeconds: trimStart ?? 0 };
+          } else if (th === "endFrame") {
+            extractBody = trimEnd !== undefined
+              ? { videoUrl, timeSeconds: trimEnd }
+              : { videoUrl, lastFrame: true };
+          } else {
+            extractBody = trimEnd !== undefined
+              ? { videoUrl, timeSeconds: trimEnd }
+              : { videoUrl, timeSeconds: trimStart ?? 0 };
+          }
+          const srcId = srcNode.id;
+          updateNodeDataRef.current(srcId, { extractingFrame: true });
+          getAccessToken().then((token) => {
+            if (!token) { updateNodeDataRef.current(srcId, { extractingFrame: false }); return; }
+            fetch("/api/extract-frame", {
+              method: "POST",
+              headers: authHeaders(token),
+              body: JSON.stringify(extractBody),
+            }).then((r) => r.json()).then((j) => {
+              if (j.cdnUrl) updateNodeDataRef.current(srcId, { capturedFrameUrl: j.cdnUrl });
+            }).catch(() => {}).finally(() => {
+              updateNodeDataRef.current(srcId, { extractingFrame: false });
+            });
+          });
+        }
+      }
+    }
 
     const h = connection.targetHandle;
     if (h !== "resource" && h !== "videoRef") return;
@@ -624,6 +737,9 @@ export default function WorkflowCanvas() {
   // ── Add-node menu (+ button) ─────────────────────────────────────────
   const [addMenuAnchor, setAddMenuAnchor] = useState<DOMRect | null>(null);
 
+  // ── Settings modal ────────────────────────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   // ── Alignment snap guides ─────────────────────────────────────────────────────
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
@@ -641,8 +757,12 @@ export default function WorkflowCanvas() {
       const source = nodes.find((n) => n.id === connection.source);
       const target = nodes.find((n) => n.id === connection.target);
 
-      // Prompt handles only accept text (prompt) nodes
-      if (connection.targetHandle === "prompt" && source?.type !== "promptNode") return false;
+      // Prompt handles only accept text-producing nodes
+      if (
+        connection.targetHandle === "prompt" &&
+        source?.type !== "promptNode" &&
+        source?.type !== "assistantNode"
+      ) return false;
 
       // videoRef handle only accepts video nodes
       if (connection.targetHandle === "videoRef") {
@@ -808,7 +928,34 @@ export default function WorkflowCanvas() {
 
       // ── Image generator ─────────────────────────────────────────────────────
       if (node.type === "generateNode") {
-        const upstream    = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
+        // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
+        // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
+        const videoImageEdges = edges.filter(
+          (e) => e.target === nodeId && e.targetHandle === "image" &&
+            useWorkflowStore.getState().nodes.find((n) => n.id === e.source)?.type === "videoInputNode"
+        );
+        for (const edge of videoImageEdges) {
+          const src = useWorkflowStore.getState().nodes.find((n) => n.id === edge.source);
+          if (!src || (src.data.capturedFrameUrl as string | undefined)) continue;
+          const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
+          if (!videoUrl || videoUrl.startsWith("blob:")) continue;
+          const trimStart = src.data.trimStart as number | undefined;
+          const trimEnd   = src.data.trimEnd   as number | undefined;
+          const extractBody = trimEnd !== undefined
+            ? { videoUrl, timeSeconds: trimEnd }
+            : { videoUrl, timeSeconds: trimStart ?? 0 };
+          try {
+            const r = await fetch("/api/extract-frame", {
+              method: "POST",
+              headers: authHeaders(token),
+              body: JSON.stringify(extractBody),
+            });
+            const j = await r.json();
+            if (j.cdnUrl) updateNodeData(src.id, { capturedFrameUrl: j.cdnUrl });
+          } catch { /* proceed without */ }
+        }
+
+        const upstream    = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
         const prompt      = upstream.prompt;
         const imageUrls   = upstream.imageUrls;
         const aspectRatio = node.data.aspectRatio ?? "1:1";
@@ -881,9 +1028,71 @@ export default function WorkflowCanvas() {
         }
       }
 
+      // ── Assistant (text-to-text LLM) ────────────────────────────────────────
+      if (node.type === "assistantNode") {
+        const upstream = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
+        const prompt   = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
+
+        if (!prompt.trim()) {
+          push(`[${node.id}] skipped — prompt is empty`, false);
+          continue;
+        }
+
+        if (debugMode) {
+          console.log(`[DEBUG] assistantNode=${node.id}`, { prompt, model: node.data.model });
+          push(`[DEBUG] ${node.id} — logged to console`);
+          continue;
+        }
+
+        push(`[${node.id}] generating text…`);
+        updateNodeData(nodeId, { status: "running", outputText: "", errorMsg: undefined });
+
+        try {
+          const res = await fetch("/api/assistant", {
+            method:  "POST",
+            headers: authHeaders(token),
+            body:    JSON.stringify({
+              prompt,
+              model: node.data.model ?? "claude-sonnet-4-6",
+              systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
+            }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: "Generation failed" }));
+            throw new Error(err.error ?? "Generation failed");
+          }
+
+          const reader  = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let accumulated = "";
+          outer: while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            for (const line of decoder.decode(value, { stream: true }).split("\n")) {
+              if (!line.startsWith("data: ")) continue;
+              const payload = line.slice(6).trim();
+              if (payload === "[DONE]") break outer;
+              try {
+                const parsed = JSON.parse(payload);
+                if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+                  const delta = parsed.delta.text ?? "";
+                  if (delta) { accumulated += delta; updateNodeData(nodeId, { outputText: accumulated }); }
+                }
+              } catch { /* skip */ }
+            }
+          }
+          updateNodeData(nodeId, { status: "done", outputText: accumulated });
+          push(`[${node.id}] done`);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          updateNodeData(nodeId, { status: "error", errorMsg: msg });
+          push(`[${node.id}] error: ${msg}`, false);
+        }
+      }
+
       // ── Video generator (Kling 3.0) ─────────────────────────────────────────
       if (node.type === "videoGeneratorNode") {
-        const upstream    = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
+        const upstream    = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
         const prompt      = upstream.prompt ?? "";
         const duration    = node.data.duration    ?? 5;
         const aspectRatio = node.data.aspectRatio ?? "16:9";
@@ -1005,12 +1214,27 @@ export default function WorkflowCanvas() {
     breakGroupSelection(node);
   }, [breakGroupSelection]);
 
+  const canRun = !isRunning && nodes.some(
+    (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
+  );
+
   return (
-    <div
-      ref={wrapperRef}
-      className="relative flex-1 flex flex-col min-w-0 h-full"
-      onMouseMove={(e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
-    >
+    <div className="relative flex-1 flex flex-col min-w-0 h-full">
+      <TopBar
+        isRunning={isRunning}
+        canRun={canRun}
+        onRunAll={runAll}
+        hasNodes={nodes.length > 0}
+        onClear={clear}
+        debugMode={debugMode}
+        onToggleDebug={toggleDebug}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+      <div
+        ref={wrapperRef}
+        className="relative flex-1 flex flex-col min-h-0 min-w-0"
+        onMouseMove={(e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
+      >
       <ReactFlow
         nodes={(() => {
           const selIds = selectedIdsRef.current;
@@ -1111,39 +1335,6 @@ export default function WorkflowCanvas() {
           className="[&>button]:!bg-[#0D1012] [&>button]:!border-[#1A100C] [&>button]:!text-[#8D8E89] [&>button:hover]:!text-white"
         />
 
-        <Panel position="top-right" className="flex items-center gap-2 m-3">
-          <CreditBalance />
-          <AuthButton />
-
-          {/* Debug toggle */}
-          <button
-            onClick={toggleDebug}
-            className={`toolbar-btn flex items-center gap-1.5 ${debugMode ? "!border-amber-500/60 !text-amber-400" : ""}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${debugMode ? "bg-amber-400" : "bg-[#333333]"}`} />
-            Debug
-          </button>
-
-          {nodes.length > 0 && (
-            <button onClick={clear} disabled={isRunning} className="toolbar-btn">
-              Clear
-            </button>
-          )}
-          <button
-            onClick={runAll}
-            disabled={isRunning || !nodes.some((n) => n.type === "generateNode" || n.type === "videoGeneratorNode")}
-            className="toolbar-btn-primary"
-          >
-            {isRunning ? (
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 border border-[#2A1A14] border-t-[#0A0C0E] rounded-full animate-spin" />
-                Running
-              </span>
-            ) : (
-              "Run all"
-            )}
-          </button>
-        </Panel>
       </ReactFlow>
 
       {/* ── Left-middle toolbar ───────────────────────────────────────────── */}
@@ -1151,7 +1342,11 @@ export default function WorkflowCanvas() {
         onAddNode={(rect) => setAddMenuAnchor(rect)}
         onUndo={() => document.execCommand("undo")}
         onRedo={() => document.execCommand("redo")}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
+
+      {/* ── Settings modal ───────────────────────────────────────────────── */}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
       {/* ── Alignment guide lines ────────────────────────────────────────────── */}
       {snapGuides.length > 0 && (
@@ -1314,6 +1509,7 @@ export default function WorkflowCanvas() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

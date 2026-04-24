@@ -176,13 +176,15 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const knownLabels = mentionableNodes.map((n) => n.data.label as string).filter(Boolean);
 
   const mentionPreviews = new Map<string, MentionPreview>(
-    mentionableNodes.map((n) => [
-      n.data.label as string,
-      {
-        imageUrl: (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined,
-        videoUrl: n.data.videoUrl as string | undefined,
-      },
-    ])
+    mentionableNodes.map((n) => {
+      const captured = n.data.capturedFrameUrl as string | undefined;
+      return [
+        n.data.label as string,
+        n.type === "videoInputNode"
+          ? { imageUrl: captured, videoUrl: captured ? undefined : n.data.videoUrl as string | undefined }
+          : { imageUrl: (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined, videoUrl: n.data.videoUrl as string | undefined },
+      ];
+    })
   );
   const mentionPreviewsRef = useRef(mentionPreviews);
   mentionPreviewsRef.current = mentionPreviews;
@@ -732,11 +734,13 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           </div>
           {filteredMentions.map((n, idx) => {
             const label    = n.data.label as string;
-            const imageUrl =
-              (n.data.r2Url      as string | undefined) ??
-              (n.data.inputImage as string | undefined) ??
-              (n.data.imageUrl   as string | undefined);
-            const videoUrl = n.data.videoUrl as string | undefined;
+            const captured = n.data.capturedFrameUrl as string | undefined;
+            const imageUrl = n.type === "videoInputNode"
+              ? captured
+              : (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
+            const videoUrl = n.type === "videoInputNode"
+              ? (captured ? undefined : n.data.videoUrl as string | undefined)
+              : n.data.videoUrl as string | undefined;
             const active   = idx === selectedIdx;
 
             return (
@@ -877,8 +881,13 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
               </div>
               {expandFilteredMentions.map((n, idx) => {
                 const label    = n.data.label as string;
-                const imageUrl = (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
-                const videoUrl = n.data.videoUrl as string | undefined;
+                const captured = n.data.capturedFrameUrl as string | undefined;
+                const imageUrl = n.type === "videoInputNode"
+                  ? captured
+                  : (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
+                const videoUrl = n.type === "videoInputNode"
+                  ? (captured ? undefined : n.data.videoUrl as string | undefined)
+                  : n.data.videoUrl as string | undefined;
                 const active   = idx === expandSelectedIdx;
                 return (
                   <button key={n.id} onClick={() => insertMentionModal(label)}
