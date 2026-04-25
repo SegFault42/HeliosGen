@@ -1,10 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
 import Sidebar from "@/components/Sidebar";
-import AuthModal from "@/components/AuthModal";
-import ResetPasswordModal from "@/components/ResetPasswordModal";
 
-// ReactFlow must be client-only (uses browser APIs)
 const WorkflowCanvas = dynamic(() => import("@/components/WorkflowCanvas"), {
   ssr: false,
   loading: () => (
@@ -16,11 +13,9 @@ const WorkflowCanvas = dynamic(() => import("@/components/WorkflowCanvas"), {
 
 export default function Home() {
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden min-h-0">
       <Sidebar />
       <WorkflowCanvas />
-      <AuthModal />
-      <ResetPasswordModal />
     </div>
   );
 }
