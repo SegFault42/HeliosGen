@@ -118,11 +118,16 @@ export default function WorkflowCanvas() {
     updateNodeData, isRunning, setIsRunning, debugMode, toggleDebug,
     setConnectingHandleType,
     saveViewport,
+    pushUndoSnapshot, undo, redo,
+    undoStack, redoStack,
   } = useWorkflowStore();
   const updateNodeDataRef = useRef(updateNodeData);
   updateNodeDataRef.current = updateNodeData;
 
   const [activeTool, setActiveTool] = useState<"select" | "hand">("select");
+
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
 
   const [dyingEdgeIds, setDyingEdgeIds]       = useState<Set<string>>(new Set());
   const [dyingNodeIds, setDyingNodeIds]       = useState<Set<string>>(new Set());
@@ -132,6 +137,20 @@ export default function WorkflowCanvas() {
   const selectedIdsRef = useRef<Set<string>>(new Set());
   // Edge IDs that will be removed by our delayed node-delete handler — suppress RF's auto-remove
   const suppressedEdgeRemovesRef = useRef<Set<string>>(new Set());
+
+  const handleUndo = useCallback(() => {
+    undo();
+    setDyingNodeIds(new Set());
+    setDyingEdgeIds(new Set());
+    suppressedEdgeRemovesRef.current = new Set();
+  }, [undo]);
+
+  const handleRedo = useCallback(() => {
+    redo();
+    setDyingNodeIds(new Set());
+    setDyingEdgeIds(new Set());
+    suppressedEdgeRemovesRef.current = new Set();
+  }, [redo]);
 
   // Walk edges upstream from selected nodes, collecting all ancestor node + edge IDs
   const onSelectionChange = useCallback(
@@ -210,17 +229,19 @@ export default function WorkflowCanvas() {
   }, [onEdgesChange, edges, nodes, updateNodeData]);
 
   const handleEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    pushUndoSnapshot();
     setDyingEdgeIds((prev) => new Set([...prev, edge.id]));
     setTimeout(() => {
       handleEdgesChange([{ type: "remove", id: edge.id }]);
       setDyingEdgeIds((prev) => { const s = new Set(prev); s.delete(edge.id); return s; });
     }, 450);
-  }, [handleEdgesChange]);
+  }, [handleEdgesChange, pushUndoSnapshot]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     // ── Node deletion animation ──────────────────────────────────────────────────
     const removeChanges = changes.filter((c) => c.type === "remove");
     if (removeChanges.length > 0) {
+      pushUndoSnapshot();
       const removingIds = new Set(removeChanges.map((c) => c.id));
       const connectedEdgeIds = edges
         .filter((e) => removingIds.has(e.source) || removingIds.has(e.target))
@@ -359,7 +380,7 @@ export default function WorkflowCanvas() {
 
     setSnapGuides(newGuides);
     _onNodesChange(extraMemberChanges.length > 0 ? [...snappedChanges, ...extraMemberChanges] : snappedChanges);
-  }, [nodes, edges, _onNodesChange]);
+  }, [nodes, edges, _onNodesChange, pushUndoSnapshot]);
 
   // ── Sidebar drag-and-drop ────────────────────────────────────────────────────
   const wrapperRef  = useRef<HTMLDivElement>(null);
@@ -609,6 +630,11 @@ export default function WorkflowCanvas() {
       }
 
       const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo(); else handleUndo();
+      }
+      if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); handleRedo(); }
       if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
       if (mod && e.key === "v") {
         e.preventDefault();
@@ -644,7 +670,7 @@ export default function WorkflowCanvas() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [handleCopy, handlePaste, addNode]);
+  }, [handleCopy, handlePaste, handleUndo, handleRedo, addNode]);
 
   // ── Auto-trim + frame-extract on new connections ─────────────────────────────
   const handleConnect = useCallback((connection: Connection) => {
@@ -1218,8 +1244,9 @@ export default function WorkflowCanvas() {
   }, [breakGroupSelection]);
 
   const handleNodeDragStart = useCallback((_e: React.MouseEvent, node: Node) => {
+    pushUndoSnapshot();
     breakGroupSelection(node);
-  }, [breakGroupSelection]);
+  }, [breakGroupSelection, pushUndoSnapshot]);
 
   const canRun = !isRunning && nodes.some(
     (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
@@ -1350,8 +1377,10 @@ export default function WorkflowCanvas() {
         activeTool={activeTool}
         onToolChange={(tool) => setActiveTool(tool as "select" | "hand")}
         onAddNode={(rect) => setAddMenuAnchor(rect)}
-        onUndo={() => document.execCommand("undo")}
-        onRedo={() => document.execCommand("redo")}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 

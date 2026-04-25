@@ -383,16 +383,16 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
         </div>
       </div>
 
-      {/* ── Text output handle — same as PromptNode ────────────────────── */}
+      {/* ── Assistant output handle ───────────────────────────────────── */}
       <Handle
         type="source"
         position={Position.Right}
         id="textOut"
         style={{ top: 20 }}
-        className={`node-handle-icon node-handle-icon-out-text${sourceConnected ? " node-handle-connected" : ""}`}
-        title="Text output"
+        className={`node-handle-icon node-handle-icon-out-text node-handle-icon-out-assistant${sourceConnected ? " node-handle-connected" : ""}`}
+        title="Assistant output"
       >
-        <TextOutIcon />
+        <BrainIcon />
       </Handle>
     </div>
   );
@@ -409,10 +409,11 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-function TextOutIcon() {
+function BrainIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
-      <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
     </svg>
   );
 }

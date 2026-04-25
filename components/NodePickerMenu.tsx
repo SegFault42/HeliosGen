@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useReactFlow, Node, Edge } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { edgeStyle, EDGE_COLORS } from "@/lib/edgeStyles";
-import { NODES, NODE_SIZE, FALLBACK_SIZE } from "@/lib/nodeTypes";
+import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META } from "@/lib/nodeTypes";
 import { VIDEO_MODELS, IMAGE_MODELS } from "@/lib/modelConfig";
 
 // Extract the aspect ratio as a float from any source node type
@@ -34,7 +34,7 @@ function closestRatio(ratioFloat: number, candidates: string[]): string | null {
 // Node types whose OUTPUT can feed a given input handle
 function sourceNodeTypesFor(targetHandle: string | null): string[] {
   switch (targetHandle) {
-    case "prompt":                         return ["promptNode"];
+    case "prompt":                         return ["promptNode", "assistantNode"];
     case "image":
     case "startFrame":
     case "endFrame":
@@ -76,6 +76,7 @@ const NODE_DISPLAY_NAMES: Record<string, string> = {
   promptNode:         "TEXT",
   generateNode:       "IMAGE GEN",
   videoGeneratorNode: "VIDEO GEN",
+  assistantNode:      "ASSISTANT",
 };
 
 export interface DropState {
@@ -293,7 +294,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
     ? EDGE_COLORS[dropState.sourceHandleId ?? "default"] ?? EDGE_COLORS.default
     : EDGE_COLORS[targetHandleFor(dropState.sourceNodeType, linkable[0]?.type ?? "", dropState.sourceHandleId) ?? "default"] ?? EDGE_COLORS.default;
 
-  const menuW = 208;
+  const menuW = 224;
   const menuH = linkable.length * 58 + 36;
   const left  = isInput
     ? Math.max(dropState.screenX - menuW - 16, 16)
@@ -331,7 +332,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
       <div
         ref={menuRef}
         style={{ position: "fixed", left, top, zIndex: 1000 }}
-        className="w-52 bg-[#0F1214] border border-[#2A2A2A] rounded-lg shadow-2xl overflow-hidden"
+        className="w-56 bg-[#0F1214] border border-[#2A2A2A] rounded-lg shadow-2xl overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="px-3 py-2 border-b border-[#1E1E1E]">
@@ -340,24 +341,44 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
           </p>
         </div>
 
-        {linkable.map((n) => (
-          <button
-            key={n.type}
-            onClick={() => handleSelect(n.type)}
-            onMouseDown={(e) => e.stopPropagation()}
-            className="w-full text-left px-3 py-2.5 hover:bg-[#161A1E] transition-colors group"
-          >
-            <div className="flex items-center gap-2.5 text-[#8D8E89] group-hover:text-[#77E544] transition-colors">
-              {n.icon}
-              <span className="text-[13px] text-white font-medium leading-none">
-                {n.label}
-              </span>
-            </div>
-            <p className="text-[10px] text-[#4A4A45] mt-1 pl-[22px] leading-none">
-              {n.description}
-            </p>
-          </button>
-        ))}
+        {linkable.map((n) => {
+          const meta = NODE_META[n.type];
+          return (
+            <button
+              key={n.type}
+              onClick={() => handleSelect(n.type)}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-full text-left px-3 py-2.5 hover:bg-[#161A1E] transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <span
+                  style={{
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "30px",
+                    height: "30px",
+                    borderRadius: "8px",
+                    background: meta?.bg ?? "rgba(255,255,255,0.06)",
+                    color: meta?.accent ?? "#aaa",
+                    border: `1px solid ${meta?.accent ?? "#333"}28`,
+                  }}
+                >
+                  {meta?.bigIcon ?? n.icon}
+                </span>
+                <span className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-[13px] text-white font-medium leading-none">
+                    {n.label}
+                  </span>
+                  <span className="text-[10px] text-[#4A4A45] leading-none">
+                    {n.description}
+                  </span>
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </>
   );

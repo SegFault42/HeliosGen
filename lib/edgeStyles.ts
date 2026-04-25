@@ -36,6 +36,7 @@ export function getSourceHandleColor(nodeType: string | undefined, sourceHandleI
   // Legacy / single-output nodes — derive from node type
   switch (nodeType) {
     case "promptNode":        return "#77E544";
+    case "assistantNode":     return "#FBBF24";
     case "imageInputNode":    return "#818cf8";
     case "generateNode":      return "#818cf8";
     case "videoInputNode":    return "#22d3ee";

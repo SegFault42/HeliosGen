@@ -480,10 +480,10 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
 function ImageOutIcon() {
   return (
-    <svg width="14" height="12" viewBox="0 0 16 13" fill="none" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="1" width="14" height="11" rx="2" />
-      <circle cx="5" cy="4.5" r="1.3" fill="white" stroke="none" />
-      <path d="m1 10 4-4 2.5 2.5 2-2 5.5 3.5" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
 }

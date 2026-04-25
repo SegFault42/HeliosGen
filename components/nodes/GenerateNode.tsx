@@ -23,6 +23,7 @@ const MODEL_CAPS = Object.fromEntries(
     ratios:              m.ratios,
     maxImages:           m.maxImages,
     qualityOptions:      m.apiInput.qualityOptions,
+    qualityKey:          m.apiInput.qualityKey,
     azureQualityOptions: m.azureQualityOptions,
   }])
 );
@@ -303,6 +304,20 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     });
   }, [id, updateNodeData]);
 
+  const handleDeleteSlot = useCallback((idx: number) => {
+    const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+    const gens = ((storeNode?.data?.generations as GenEntry[] | undefined) ?? []);
+    const next = gens.filter((_, i) => i !== idx);
+    const newIdx = Math.max(0, Math.min(idx, next.length - 1));
+    const newEntry = next[newIdx];
+    updateNodeData(id, {
+      generations: next,
+      currentGenIdx: next.length > 0 ? newIdx : 0,
+      status: next.length > 0 ? "done" : "idle",
+      imageUrl: typeof newEntry === "string" ? newEntry : undefined,
+    });
+  }, [id, updateNodeData]);
+
   const model       = (data.model as string) ?? "nano-banana-2";
   const caps        = MODEL_CAPS[model] ?? DEFAULT_CAPS;
   const modelInfo   = MODELS.find((m) => m.id === model) ?? MODELS[0];
@@ -319,7 +334,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     };
     read();
     window.addEventListener("storage", read);
-    return () => window.removeEventListener("storage", read);
+    window.addEventListener("aiui-providers-changed", read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener("aiui-providers-changed", read);
+    };
   }, [model]);
 
   const promptOverLimit = (() => {
@@ -727,6 +746,20 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                         <circle cx="12" cy="16" r="1" fill="#c04040"/>
                       </svg>
                       <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                      <button
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
+                        className="absolute bottom-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-all group/del hover:bg-red-900/60 hover:border-red-500/40"
+                        style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-white/70 group-hover/del:stroke-red-400 transition-colors">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4h6v2" />
+                        </svg>
+                        <span className="text-[11px] font-medium text-[#ccc] group-hover/del:text-red-400 transition-colors">Delete</span>
+                      </button>
                     </div>
                   ) : (
                     <Image
@@ -929,13 +962,16 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               {/* Divider */}
               <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
 
-              {/* Quality dropdown */}
+              {/* Quality / Resolution dropdown */}
               <div className="relative shrink-0">
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setAzureQualityOpen(false); }}
                   className="flex items-center gap-1"
                 >
+                  {caps.qualityKey === "resolution" && (
+                    <span className="text-[11px] text-[#4A4A45]">Res</span>
+                  )}
                   <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors uppercase">
                     {quality}
                   </span>
@@ -944,6 +980,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
                 {qualityPopup.visible && (
                   <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${qualityPopup.className}`}>
+                    {caps.qualityKey === "resolution" && (
+                      <div className="px-3 py-1.5 border-b border-[#1E1410]">
+                        <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Resolution</span>
+                      </div>
+                    )}
                     {[
                       { id: "1k", label: "1K", meta: "Standard" },
                       { id: "2k", label: "2K", meta: "High" },
@@ -1026,11 +1067,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             onMouseDown={(e) => e.stopPropagation()}
             onClick={generate}
             disabled={busy || promptOverLimit}
-            className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full border border-[#2A1A14] hover:border-[#77E544] text-[#8D8E89] hover:text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[rgba(119,229,68,0.13)]"
+            style={{ border: "1px solid #2a4a0f", background: "rgba(119,229,68,0.07)" }}
           >
-            <svg width="7" height="8" viewBox="0 0 7 8" fill="currentColor">
-              <path d="M6.5 3.634a.5.5 0 0 1 0 .732L1 7.83A.5.5 0 0 1 .25 7.464V.536A.5.5 0 0 1 1 .17l5.5 3.464Z"/>
-            </svg>
+            <svg width="7" height="7" viewBox="0 0 8 8" fill="currentColor"><polygon points="1,0.5 7.5,4 1,7.5" /></svg>
+            Generate
           </button>
 
         </div>
@@ -1102,18 +1143,18 @@ function SpinnerOverlay() {
 
 function PromptIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="white">
-      <path d="M2 2h12v2.5H9.5V14h-3V4.5H2V2z" />
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
+      <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
     </svg>
   );
 }
 
 function PhotoIcon() {
   return (
-    <svg width="15" height="13" viewBox="0 0 18 15" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="1" width="16" height="13" rx="2" />
-      <circle cx="5.5" cy="5" r="1.5" fill="white" stroke="none" />
-      <path d="m1 11 4.5-4.5 3 3 2.5-2.5 6 4" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
 }

@@ -29,6 +29,7 @@ export function loadModelProviders(): Record<string, ProviderId> {
 export function saveModelProviders(map: Record<string, ProviderId>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent("aiui-providers-changed"));
   } catch { /* noop */ }
 }
 
@@ -491,11 +492,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleProviderChange = (modelId: string, v: ProviderId) => {
-    setModelProviders((prev) => {
-      const next = { ...prev, [modelId]: v };
-      saveModelProviders(next);
-      return next;
-    });
+    const next = { ...modelProviders, [modelId]: v };
+    saveModelProviders(next);
+    setModelProviders(next);
   };
 
   const handleDeploymentChange = (modelId: string, v: string) => {

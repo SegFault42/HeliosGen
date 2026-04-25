@@ -211,6 +211,10 @@ body {
 .react-flow__node:hover .node-handle-icon-out-audio.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-audio.react-flow__handle,
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connected  { border-color: #a78bfa !important; }
+/* Assistant output — yellow, overrides the inherited out-text green */
+.react-flow__node:hover .node-handle-icon-out-assistant.react-flow__handle,
+.react-flow__node.selected .node-handle-icon-out-assistant.react-flow__handle,
+.node-handle-icon-out-assistant.react-flow__handle.node-handle-connected { border-color: #FBBF24 !important; }
 /* Selected + unconnected: dim input (left) handles only; output handles keep full opacity */
 .react-flow__node.selected .react-flow__handle-left.node-handle-icon.react-flow__handle:not(.node-handle-connected) { opacity: 0.35 !important; }
 
@@ -228,6 +232,7 @@ body {
 .node-handle-icon-audioref.react-flow__handle.node-handle-connecting  { border-color: #a78bfa !important; }
 .node-handle-icon-character.react-flow__handle.node-handle-connecting { border-color: #f472b6 !important; }
 .node-handle-icon-out-text.react-flow__handle.node-handle-connecting  { border-color: #77E544 !important; }
+.node-handle-icon-out-assistant.react-flow__handle.node-handle-connecting { border-color: #FBBF24 !important; }
 .node-handle-icon-out-image.react-flow__handle.node-handle-connecting { border-color: #818cf8 !important; }
 .node-handle-icon-out-video.react-flow__handle.node-handle-connecting { border-color: #22d3ee !important; }
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connecting { border-color: #a78bfa !important; }

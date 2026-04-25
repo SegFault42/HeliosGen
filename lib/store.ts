@@ -53,6 +53,7 @@ export interface NodeData extends Record<string, unknown> {
 
 /** Human-readable label for each node type, including the counter */
 export function getNodeLabel(type: string, n: number): string {
+  if (type === "assistantNode") return "ASSISTANT";
   const map: Record<string, string> = {
     promptNode:          `Text #${n}`,
     imageInputNode:      `Image #${n}`,
@@ -103,6 +104,12 @@ function syncSpace(
   );
 }
 
+// ── Undo / Redo snapshot ───────────────────────────────────────────────────────
+
+interface Snapshot { nodes: Node<NodeData>[]; edges: Edge[] }
+
+const MAX_UNDO = 50;
+
 // ── Store interface ────────────────────────────────────────────────────────────
 
 interface WorkflowStore {
@@ -116,6 +123,13 @@ interface WorkflowStore {
   isRunning:    boolean;
   debugMode:    boolean;
   nodeCounters: Record<string, number>;
+
+  // ── Undo / Redo
+  undoStack: Snapshot[];
+  redoStack: Snapshot[];
+  pushUndoSnapshot: () => void;
+  undo: () => void;
+  redo: () => void;
 
   // ── Space actions
   createSpace: (name: string) => void;
@@ -165,12 +179,46 @@ export const useWorkflowStore = create<WorkflowStore>()(
         debugMode:    false,
         nodeCounters: {},
 
+        undoStack: [],
+        redoStack: [],
+
+        pushUndoSnapshot: () =>
+          set((s) => ({
+            undoStack: [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }],
+            redoStack: [],
+          })),
+
+        undo: () =>
+          set((s) => {
+            if (s.undoStack.length === 0) return {};
+            const snap = s.undoStack[s.undoStack.length - 1];
+            return {
+              nodes:     snap.nodes,
+              edges:     snap.edges,
+              undoStack: s.undoStack.slice(0, -1),
+              redoStack: [...s.redoStack, { nodes: s.nodes, edges: s.edges }],
+              spaces:    syncSpace(s.spaces, s.activeSpaceId, snap.nodes, snap.edges, s.nodeCounters),
+            };
+          }),
+
+        redo: () =>
+          set((s) => {
+            if (s.redoStack.length === 0) return {};
+            const snap = s.redoStack[s.redoStack.length - 1];
+            return {
+              nodes:     snap.nodes,
+              edges:     snap.edges,
+              undoStack: [...s.undoStack, { nodes: s.nodes, edges: s.edges }],
+              redoStack: s.redoStack.slice(0, -1),
+              spaces:    syncSpace(s.spaces, s.activeSpaceId, snap.nodes, snap.edges, s.nodeCounters),
+            };
+          }),
+
         // ── Space actions ──────────────────────────────────────────────────
 
         createSpace: (name) =>
           set((s) => {
             const sp = makeSpace(name);
-            // Save current live state into the active space before switching
             const spaces = [
               ...syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters),
               sp,
@@ -181,6 +229,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
               nodes:         [],
               edges:         [],
               nodeCounters:  {},
+              undoStack:     [],
+              redoStack:     [],
             };
           }),
 
@@ -189,7 +239,6 @@ export const useWorkflowStore = create<WorkflowStore>()(
             if (id === s.activeSpaceId) return {};
             const target = s.spaces.find((sp) => sp.id === id);
             if (!target) return {};
-            // Save current live state first
             const spaces = syncSpace(s.spaces, s.activeSpaceId, s.nodes, s.edges, s.nodeCounters);
             return {
               spaces,
@@ -197,6 +246,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
               nodes:         target.nodes,
               edges:         target.edges,
               nodeCounters:  target.nodeCounters,
+              undoStack:     [],
+              redoStack:     [],
             };
           }),
 
@@ -251,7 +302,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         onConnect: (connection) =>
           set((s) => {
-            // Detect Motion Control's startFrame (displayed as "Character") for correct edge color
+            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
             let colorKey: string | undefined;
             if (connection.targetHandle === "startFrame") {
               const targetNode = s.nodes.find((n) => n.id === connection.target);
@@ -269,12 +320,15 @@ export const useWorkflowStore = create<WorkflowStore>()(
             );
             return {
               edges,
+              undoStack,
+              redoStack: [],
               spaces: syncSpace(s.spaces, s.activeSpaceId, s.nodes, edges, s.nodeCounters),
             };
           }),
 
         addNode: (node) =>
           set((s) => {
+            const undoStack    = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
             const type         = node.type ?? "unknown";
             const count        = (s.nodeCounters[type] ?? 0) + 1;
             const label        = getNodeLabel(type, count);
@@ -283,15 +337,20 @@ export const useWorkflowStore = create<WorkflowStore>()(
             return {
               nodes,
               nodeCounters,
+              undoStack,
+              redoStack: [],
               spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, s.edges, nodeCounters),
             };
           }),
 
         insertEdge: (edge) =>
           set((s) => {
+            const undoStack = [...s.undoStack.slice(-(MAX_UNDO - 1)), { nodes: s.nodes, edges: s.edges }];
             const edges = [...s.edges, edge];
             return {
               edges,
+              undoStack,
+              redoStack: [],
               spaces: syncSpace(s.spaces, s.activeSpaceId, s.nodes, edges, s.nodeCounters),
             };
           }),

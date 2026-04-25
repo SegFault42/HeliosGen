@@ -896,16 +896,16 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                     <button
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => { e.stopPropagation(); deleteGen(i); }}
-                      className="absolute bottom-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
+                      className="absolute bottom-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-all group/del hover:bg-red-900/60 hover:border-red-500/40"
                       style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-white/70 group-hover/del:stroke-red-400 transition-colors">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
                         <path d="M10 11v6M14 11v6" />
                         <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                       </svg>
-                      <span className="text-[11px] text-[#ccc] font-medium">Delete</span>
+                      <span className="text-[11px] font-medium text-[#ccc] group-hover/del:text-red-400 transition-colors">Delete</span>
                     </button>
                   </div>
                 ) : (
@@ -1154,11 +1154,11 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               onMouseDown={(e) => e.stopPropagation()}
               onClick={generate}
               disabled={busy || promptOverLimit}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-white hover:bg-[#E8E8E8] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+              className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[rgba(119,229,68,0.13)]"
+              style={{ border: "1px solid #2a4a0f", background: "rgba(119,229,68,0.07)" }}
             >
-              <svg width="9" height="10" viewBox="0 0 9 10" fill="#0A0C0E">
-                <path d="M8.5 4.634a.5.5 0 0 1 0 .732l-7.5 4.5A.5.5 0 0 1 .25 9.5v-9A.5.5 0 0 1 1 .17l7.5 4.464Z" />
-              </svg>
+              <svg width="7" height="7" viewBox="0 0 8 8" fill="currentColor"><polygon points="1,0.5 7.5,4 1,7.5" /></svg>
+              Generate
             </button>
           </>
         );
@@ -1283,13 +1283,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 >
                   <ToggleSwitch on={sound} />
                   <span className="text-[11px] text-[#AAAAAA]">Sound</span>
-                </button>
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className="w-6 h-6 flex items-center justify-center rounded-full text-[#444] hover:text-[#888] transition-colors"
-                  style={{ background: "#111317" }}
-                >
-                  <GearIcon />
                 </button>
               </>
             )}
@@ -1422,15 +1415,6 @@ function ToggleSwitch({ on }: { on: boolean }) {
   );
 }
 
-function GearIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
 
 function VideoNodeIcon() {
   return (
@@ -1442,7 +1426,11 @@ function VideoNodeIcon() {
 }
 
 function PromptIcon() {
-  return <svg width="12" height="12" viewBox="0 0 16 16" fill="white"><path d="M2 2h12v2.5H9.5V14h-3V4.5H2V2z" /></svg>;
+  return (
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
+      <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
+    </svg>
+  );
 }
 
 function VideoRefIcon() {
@@ -1474,10 +1462,10 @@ function FrameEndIcon() {
 
 function ResourceIcon() {
   return (
-    <svg width="15" height="13" viewBox="0 0 18 15" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="1" y="1" width="16" height="13" rx="2" />
-      <circle cx="5.5" cy="5" r="1.5" fill="white" stroke="none" />
-      <path d="m1 11 4.5-4.5 3 3 2.5-2.5 6 4" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
 }
