@@ -3,14 +3,16 @@ import { jobStore } from "@/lib/jobStore";
 import { mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-function extractUrl(resultJson?: string): string | undefined {
-  if (!resultJson) return undefined;
+function extractUrls(resultJson?: string): string[] {
+  if (!resultJson) return [];
   try {
     const parsed = JSON.parse(resultJson);
     const urls = parsed.resultUrls ?? parsed.resultUrl;
-    return Array.isArray(urls) ? urls[0] : urls;
+    if (Array.isArray(urls)) return urls.filter(Boolean);
+    if (urls) return [urls];
+    return [];
   } catch {
-    return undefined;
+    return [];
   }
 }
 
@@ -30,35 +32,36 @@ export async function POST(req: NextRequest) {
   }
 
   if (state === "success") {
-    const kieUrl = extractUrl(data.resultJson) ?? data.output?.[0] ?? data.output;
-    if (kieUrl) {
-      // Determine job type from jobStore (set at task creation)
+    const kieUrls = extractUrls(data.resultJson);
+    if (kieUrls.length === 0 && (data.output?.[0] ?? data.output)) {
+      kieUrls.push(data.output?.[0] ?? data.output);
+    }
+    if (kieUrls.length > 0) {
       const existing = jobStore.get(taskId);
-      const isVideo = existing?.status === "pending" && (existing as { type?: string }).type === "video";
-      const folder  = isVideo ? "videos" : "images";
+      const isVideo  = existing?.status === "pending" && (existing as { type?: string }).type === "video";
+      const folder   = isVideo ? "videos" : "images";
 
-      // Mirror to R2 (async — don't block the 200 response to kie.ai)
-      mirrorToR2(kieUrl, folder)
-        .then((r2Url) => {
+      Promise.all(kieUrls.map((u) => mirrorToR2(u, folder)))
+        .then((r2Urls) => {
           if (isVideo) {
-            jobStore.set(taskId, { status: "done", videoUrl: r2Url });
-            return supabaseAdmin.from("generations").update({ status: "done", video_url: r2Url }).eq("task_id", taskId);
+            jobStore.set(taskId, { status: "done", videoUrl: r2Urls[0] });
+            return supabaseAdmin.from("generations").update({ status: "done", video_url: r2Urls[0] }).eq("task_id", taskId);
           } else {
-            jobStore.set(taskId, { status: "done", imageUrl: r2Url });
-            return supabaseAdmin.from("generations").update({ status: "done", image_url: r2Url }).eq("task_id", taskId);
+            jobStore.set(taskId, { status: "done", imageUrl: r2Urls[0], imageUrls: r2Urls });
+            return supabaseAdmin.from("generations").update({ status: "done", image_url: r2Urls[0], image_urls: r2Urls }).eq("task_id", taskId);
           }
         })
         .then(({ error }) => {
           if (error) console.error("[callback] supabase update error:", error.message);
         })
         .catch((err) => {
-          console.error("[callback] R2 upload failed, storing kie.ai URL:", err.message);
+          console.error("[callback] R2 upload failed, storing kie.ai URLs:", err.message);
           if (isVideo) {
-            jobStore.set(taskId, { status: "done", videoUrl: kieUrl });
-            supabaseAdmin.from("generations").update({ status: "done", video_url: kieUrl }).eq("task_id", taskId).then(() => {});
+            jobStore.set(taskId, { status: "done", videoUrl: kieUrls[0] });
+            supabaseAdmin.from("generations").update({ status: "done", video_url: kieUrls[0] }).eq("task_id", taskId).then(() => {});
           } else {
-            jobStore.set(taskId, { status: "done", imageUrl: kieUrl });
-            supabaseAdmin.from("generations").update({ status: "done", image_url: kieUrl }).eq("task_id", taskId).then(() => {});
+            jobStore.set(taskId, { status: "done", imageUrl: kieUrls[0], imageUrls: kieUrls });
+            supabaseAdmin.from("generations").update({ status: "done", image_url: kieUrls[0], image_urls: kieUrls }).eq("task_id", taskId).then(() => {});
           }
         });
     } else {

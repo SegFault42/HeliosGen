@@ -5,15 +5,17 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const RECORD_INFO = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
-// Parse resultJson string → first URL
-function extractUrl(resultJson?: string): string | undefined {
-  if (!resultJson) return undefined;
+// Parse resultJson string → all URLs
+function extractUrls(resultJson?: string): string[] {
+  if (!resultJson) return [];
   try {
     const parsed = JSON.parse(resultJson);
     const urls = parsed.resultUrls ?? parsed.resultUrl;
-    return Array.isArray(urls) ? urls[0] : urls;
+    if (Array.isArray(urls)) return urls.filter(Boolean);
+    if (urls) return [urls];
+    return [];
   } catch {
-    return undefined;
+    return [];
   }
 }
 
@@ -35,35 +37,34 @@ async function syncFromKie(
     const state = String(d.data?.state ?? "").toLowerCase();
 
     if (state === "success") {
-      const kieUrl = extractUrl(d.data?.resultJson);
-      if (kieUrl) {
-        // Detect whether this is a video by the URL extension or recorded type
+      const kieUrls = extractUrls(d.data?.resultJson);
+      if (kieUrls.length > 0) {
         const isVideo =
           type === "video" ||
-          kieUrl.match(/\.(mp4|webm|mov)(\?|$)/i) !== null;
+          kieUrls[0].match(/\.(mp4|webm|mov)(\?|$)/i) !== null;
         const folder = isVideo ? "videos" : "images";
 
-        let r2Url = kieUrl;
+        let r2Urls = kieUrls;
         try {
-          r2Url = await mirrorToR2(kieUrl, folder);
+          r2Urls = await Promise.all(kieUrls.map((u) => mirrorToR2(u, folder)));
         } catch (err) {
-          console.error("[job-status] R2 mirror failed, using kie.ai URL:", err);
+          console.error("[job-status] R2 mirror failed, using kie.ai URLs:", err);
         }
 
         if (isVideo) {
-          jobStore.set(taskId, { status: "done", videoUrl: r2Url });
+          jobStore.set(taskId, { status: "done", videoUrl: r2Urls[0] });
           supabaseAdmin
             .from("generations")
-            .update({ status: "done", video_url: r2Url })
+            .update({ status: "done", video_url: r2Urls[0] })
             .eq("task_id", taskId)
             .then(({ error }) => {
               if (error) console.error("[job-status] supabase update error:", error.message);
             });
         } else {
-          jobStore.set(taskId, { status: "done", imageUrl: r2Url });
+          jobStore.set(taskId, { status: "done", imageUrl: r2Urls[0], imageUrls: r2Urls });
           supabaseAdmin
             .from("generations")
-            .update({ status: "done", image_url: r2Url })
+            .update({ status: "done", image_url: r2Urls[0], image_urls: r2Urls })
             .eq("task_id", taskId)
             .then(({ error }) => {
               if (error) console.error("[job-status] supabase update error:", error.message);

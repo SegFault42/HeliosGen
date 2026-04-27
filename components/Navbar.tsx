@@ -9,21 +9,21 @@ import type { User } from "@supabase/supabase-js";
 // ── Inner (uses useSearchParams) ──────────────────────────────────────────────
 
 function NavbarInner() {
-  const pathname     = usePathname();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const tab          = searchParams.get("tab") ?? "images";
+  const tab = searchParams.get("tab") ?? "images";
 
-  const [user, setUser]         = useState<User | null>(null);
-  const [balance, setBalance]   = useState<number | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef   = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
 
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const debugMode        = useWorkflowStore((s) => s.debugMode);
-  const toggleDebug      = useWorkflowStore((s) => s.toggleDebug);
-  const setSettingsOpen  = useWorkflowStore((s) => s.setSettingsOpen);
-  const supabase         = createClient();
+  const debugMode = useWorkflowStore((s) => s.debugMode);
+  const toggleDebug = useWorkflowStore((s) => s.toggleDebug);
+  const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
+  const supabase = createClient();
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ function NavbarInner() {
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Credits ───────────────────────────────────────────────────────────────
@@ -41,10 +41,10 @@ function NavbarInner() {
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res  = await fetch("/api/credit");
+        const res = await fetch("/api/credit");
         if (!res.ok) return;
         const data = await res.json();
-        const val  = typeof data?.data === "number"
+        const val = typeof data?.data === "number"
           ? data.data
           : (data?.data?.balance ?? data?.balance ?? null);
         setBalance(val);
@@ -74,8 +74,8 @@ function NavbarInner() {
   }, [menuOpen]);
 
   const isWorkflow = pathname === "/";
-  const isImages   = pathname === "/gallery" && tab !== "videos";
-  const isVideos   = pathname === "/gallery" && tab === "videos";
+  const isImages = pathname === "/gallery" && tab !== "videos";
+  const isVideos = pathname === "/gallery" && tab === "videos";
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -263,7 +263,7 @@ const NAV_CSS = `
     width: 28px;
     height: 28px;
     border-radius: 7px;
-    background: #77E544;
+    background: #ff3df5;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -330,7 +330,7 @@ const NAV_CSS = `
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #77E544;
+    background: #ff3df5;
     flex-shrink: 0;
     box-shadow: 0 0 6px rgba(119,229,68,0.5);
   }
@@ -368,7 +368,7 @@ const NAV_CSS = `
     justify-content: center;
     transition: background 140ms, border-color 140ms;
     flex-shrink: 0;
-    color: #77E544;
+    color: #ff3df5;
   }
   .tnav-avatar:hover,
   .tnav-avatar--open {
@@ -431,10 +431,10 @@ const NAV_CSS = `
     color: #d0d0d0;
   }
   .tnav-dropdown-item--active {
-    color: #77E544;
+    color: #ff3df5;
   }
   .tnav-dropdown-item--active:hover {
-    color: #77E544;
+    color: #ff3df5;
   }
   .tnav-dropdown-item--danger { color: #6B6B68; }
   .tnav-dropdown-item--danger:hover {

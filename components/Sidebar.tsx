@@ -37,7 +37,7 @@ const NODE_META: Record<string, { accent: string; bg: string; bigIcon: React.Rea
     ),
   },
   generateNode: {
-    accent: "#77E544",
+    accent: "#ff3df5",
     bg: "#0d1f06",
     bigIcon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -73,15 +73,15 @@ const NODE_META: Record<string, { accent: string; bg: string; bigIcon: React.Rea
 // ── Spaces panel ──────────────────────────────────────────────────────────────
 
 function SpacesPanel({ syncNow }: { syncNow: () => void }) {
-  const spaces        = useWorkflowStore((s) => s.spaces);
+  const spaces = useWorkflowStore((s) => s.spaces);
   const activeSpaceId = useWorkflowStore((s) => s.activeSpaceId);
-  const createSpace   = useWorkflowStore((s) => s.createSpace);
-  const switchSpace   = useWorkflowStore((s) => s.switchSpace);
-  const renameSpace   = useWorkflowStore((s) => s.renameSpace);
-  const deleteSpace   = useWorkflowStore((s) => s.deleteSpace);
+  const createSpace = useWorkflowStore((s) => s.createSpace);
+  const switchSpace = useWorkflowStore((s) => s.switchSpace);
+  const renameSpace = useWorkflowStore((s) => s.renameSpace);
+  const deleteSpace = useWorkflowStore((s) => s.deleteSpace);
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft]         = useState("");
+  const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startRename = (sp: Space) => {
@@ -127,11 +127,10 @@ function SpacesPanel({ syncNow }: { syncNow: () => void }) {
             <div
               key={sp.id}
               onClick={() => { if (!active) switchSpace(sp.id); }}
-              className={`group flex items-center gap-2 px-2 py-2 rounded cursor-pointer transition-colors ${
-                active ? "bg-[#0D1012]" : "hover:bg-[#0A0C0E]"
-              }`}
+              className={`group flex items-center gap-2 px-2 py-2 rounded cursor-pointer transition-colors ${active ? "bg-[#0D1012]" : "hover:bg-[#0A0C0E]"
+                }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#77E544]" : "bg-[#2A1A14]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-[#ff3df5]" : "bg-[#2A1A14]"}`} />
 
               {editingId === sp.id ? (
                 <input
@@ -144,7 +143,7 @@ function SpacesPanel({ syncNow }: { syncNow: () => void }) {
                     if (e.key === "Escape") setEditingId(null);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 min-w-0 bg-transparent text-[12px] text-white outline-none border-b border-[#77E544]"
+                  className="flex-1 min-w-0 bg-transparent text-[12px] text-white outline-none border-b border-[#ff3df5]"
                 />
               ) : (
                 <span
@@ -281,17 +280,17 @@ function SyncIndicator({ status, lastSyncedAt }: { status: SyncStatus; lastSynce
   if (status === "idle") return null;
 
   const dot: Record<SyncStatus, string> = {
-    idle:    "",
+    idle: "",
     syncing: "bg-amber-400 animate-pulse",
-    synced:  "bg-[#77E544]",
-    error:   "bg-red-500",
+    synced: "bg-[#ff3df5]",
+    error: "bg-red-500",
   };
 
   const label: Record<SyncStatus, string> = {
-    idle:    "",
+    idle: "",
     syncing: "Syncing…",
-    synced:  lastSyncedAt ? `Synced ${timeAgo(lastSyncedAt)}` : "Synced",
-    error:   "Sync failed",
+    synced: lastSyncedAt ? `Synced ${timeAgo(lastSyncedAt)}` : "Synced",
+    error: "Sync failed",
   };
 
   return (

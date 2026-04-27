@@ -12,6 +12,7 @@ import type { User } from "@supabase/supabase-js";
 interface GalleryItem {
   id: string;
   url: string;
+  imageUrls?: string[];
   mediaType: "image" | "video";
   prompt?: string;
   model?: string;
@@ -115,13 +116,13 @@ function renderGalleryMentions(
       <span
         key={key++}
         style={{
-          color:        "#77E544",
-          fontWeight:   500,
-          cursor:       "text",
+          color: "#ff3df5",
+          fontWeight: 500,
+          cursor: "text",
           pointerEvents: "auto",
-          userSelect:   "none",
-          background:   "rgba(119,229,68,0.15)",
-          boxShadow:    "0 0 0 3px rgba(119,229,68,0.15)",
+          userSelect: "none",
+          background: "rgba(119,229,68,0.15)",
+          boxShadow: "0 0 0 3px rgba(119,229,68,0.15)",
           borderRadius: "3px",
         }}
         onMouseEnter={e => onEnter(tag, e.currentTarget.getBoundingClientRect())}
@@ -148,7 +149,7 @@ async function getToken(): Promise<string | undefined> {
 
 // ── Module-level cache ────────────────────────────────────────────────────────
 
-const galleryCache    = new Map<string, { items: GalleryItem[]; hasMore: boolean }>();
+const galleryCache = new Map<string, { items: GalleryItem[]; hasMore: boolean }>();
 const loadedImageUrls = new Set<string>();
 
 interface SavedSettings {
@@ -165,54 +166,54 @@ function loadSettings(tab: Tab): Partial<SavedSettings> | null {
 
 function saveSettings(tab: Tab, s: SavedSettings) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(`nf-gallery-${tab}`, JSON.stringify(s)); } catch {}
+  try { localStorage.setItem(`nf-gallery-${tab}`, JSON.stringify(s)); } catch { }
 }
 
 // ── Inner page ────────────────────────────────────────────────────────────────
 
 function GalleryInner() {
   const searchParams = useSearchParams();
-  const rawTab       = searchParams.get("tab");
-  const tab          = (rawTab === "videos" ? "videos" : "images") as Tab;
+  const rawTab = searchParams.get("tab");
+  const tab = (rawTab === "videos" ? "videos" : "images") as Tab;
 
-  const [user, setUser]             = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
 
-  const [items, setItems]               = useState<GalleryItem[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [loadingMore, setLoadingMore]   = useState(false);
-  const [hasMore, setHasMore]           = useState(true);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
 
   const isVideo = tab === "videos";
-  const models  = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
+  const models = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
 
   const skipNextModelEffect = useRef(false);
 
-  const [prompt, setPrompt]           = useState<string>(() => loadSettings(tab)?.prompt ?? "");
-  const [modelId, setModelId]         = useState<string>(() => {
+  const [prompt, setPrompt] = useState<string>(() => loadSettings(tab)?.prompt ?? "");
+  const [modelId, setModelId] = useState<string>(() => {
     const s = loadSettings(tab);
     return (s?.modelId && models.find(m => m.id === s.modelId)) ? s.modelId : models[0].id;
   });
   const [aspectRatio, setAspectRatio] = useState<string>(() => {
-    const s   = loadSettings(tab);
+    const s = loadSettings(tab);
     const mId = (s?.modelId && models.find(m => m.id === s.modelId)) ? s.modelId : models[0].id;
     const mdl = models.find(m => m.id === mId) ?? models[0];
     if (s?.aspectRatio && mdl.ratios.includes(s.aspectRatio)) return s.aspectRatio;
     return ("defaultRatio" in mdl ? (mdl as { defaultRatio: string }).defaultRatio : null) ?? mdl.ratios[0] ?? "1:1";
   });
-  const [quality, setQuality]         = useState<string>(() => loadSettings(tab)?.quality ?? "2k");
-  const [count, setCount]             = useState<number>(() => loadSettings(tab)?.count ?? 1);
-  const [duration, setDuration]       = useState<number>(() => loadSettings(tab)?.duration ?? 5);
-  const [mode, setMode]               = useState<string>(() => loadSettings(tab)?.mode ?? "");
+  const [quality, setQuality] = useState<string>(() => loadSettings(tab)?.quality ?? "2k");
+  const [count, setCount] = useState<number>(() => loadSettings(tab)?.count ?? 1);
+  const [duration, setDuration] = useState<number>(() => loadSettings(tab)?.duration ?? 5);
+  const [mode, setMode] = useState<string>(() => loadSettings(tab)?.mode ?? "");
   const [pendingGens, setPendingGens] = useState<PendingGen[]>([]);
-  const [submitting, setSubmitting]   = useState(false);
-  const [genError, setGenError]       = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [genError, setGenError] = useState<string>("");
   const debugMode = useWorkflowStore((s) => s.debugMode);
   const [sourceFilter, setSourceFilter] = useState<"generated" | "uploaded">("generated");
-  const [zoom, setZoom]                 = useState(6);
-  const [downloads, setDownloads]       = useState<DownloadTask[]>([]);
-  const [refError, setRefError]         = useState("");
+  const [zoom, setZoom] = useState(6);
+  const [downloads, setDownloads] = useState<DownloadTask[]>([]);
+  const [refError, setRefError] = useState("");
 
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
@@ -226,33 +227,33 @@ function GalleryInner() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Prompt expansion
-  
+
   // @ mention state — tagged images also restored from localStorage
   const [taggedImages, setTaggedImages] = useState<TaggedImage[]>(() => {
     const s = loadSettings(tab);
     const urls = s?.refImageUrls ?? [];
-    const p    = s?.prompt ?? "";
+    const p = s?.prompt ?? "";
     return urls.flatMap((url, idx) => {
       const label = `img${idx + 1}`;
       return p.includes(`@${label}`) ? [{ label, refId: url, url }] : [];
     });
   });
-  const [mentionQuery, setMentionQuery]   = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSelIdx, setMentionSelIdx] = useState(0);
-  const inputRef                          = useRef<HTMLTextAreaElement>(null);
-  const promptBarRef                      = useRef<HTMLDivElement>(null);
-  const overlayInnerRef                   = useRef<HTMLDivElement>(null);
-  const [chipPreview, setChipPreview]     = useState<{ tag: TaggedImage; rect: DOMRect } | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const promptBarRef = useRef<HTMLDivElement>(null);
+  const overlayInnerRef = useRef<HTMLDivElement>(null);
+  const [chipPreview, setChipPreview] = useState<{ tag: TaggedImage; rect: DOMRect } | null>(null);
 
-  const pageRef     = useRef(0);
-  const tabRef      = useRef<Tab>(tab);
+  const pageRef = useRef(0);
+  const tabRef = useRef<Tab>(tab);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [windowWidth, setWindowWidth] = useState(0);
 
   // Cleanup object URLs on unmount
   useEffect(() => {
     return () => { refImages.forEach(r => URL.revokeObjectURL(r.objectUrl)); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -309,7 +310,7 @@ function GalleryInner() {
   useEffect(() => {
     if (authLoaded && user) loadItems(tab, 0, true);
     if (authLoaded && !user) setLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoaded]);
 
   useEffect(() => {
@@ -320,8 +321,8 @@ function GalleryInner() {
     if (cached) { setItems(cached.items); setHasMore(cached.hasMore); } else setItems([]);
     if (user) loadItems(tab, 0, true);
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
-    const saved  = loadSettings(tab);
-    const model  = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
+    const saved = loadSettings(tab);
+    const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
     const savedAR = saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null;
     skipNextModelEffect.current = true;
     setModelId(model.id);
@@ -343,7 +344,7 @@ function GalleryInner() {
         return savedPrompt.includes(`@${label}`) ? [{ label, refId: url, url }] : [];
       })
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   useEffect(() => {
@@ -357,7 +358,7 @@ function GalleryInner() {
       setRefImages(prev => { prev.forEach(r => URL.revokeObjectURL(r.objectUrl)); return []; });
       setTaggedImages([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
   // Infinite scroll
@@ -393,22 +394,33 @@ function GalleryInner() {
 
   // ── Image upload ──────────────────────────────────────────────────────────
 
-  const imgModel   = IMAGE_MODELS.find(m => m.id === modelId);
-  const maxImgs    = imgModel?.maxImages ?? 0;
+  const imgModel = IMAGE_MODELS.find(m => m.id === modelId);
+  const maxImgs = imgModel?.maxImages ?? 0;
   const canAddImgs = !isVideo && !!imgModel?.supportsImages && refImages.length < maxImgs;
+  const promptMaxLength = (() => {
+    if (isVideo) {
+      const vm = VIDEO_MODELS.find(m => m.id === modelId);
+      return vm?.apiInput.promptMaxLength ?? null;
+    }
+    if (!imgModel) return null;
+    const hasRefImgs = refImages.length > 0;
+    if (!hasRefImgs && imgModel.textOnlyPromptMaxLength) return imgModel.textOnlyPromptMaxLength;
+    return imgModel.apiInput.promptMaxLength;
+  })();
+  const promptOverLimit = promptMaxLength !== null && prompt.length > promptMaxLength;
 
   const handleFilePick = async (files: FileList) => {
     if (!imgModel?.supportsImages) return;
     const remaining = maxImgs - refImages.length;
-    const toAdd     = Array.from(files).slice(0, remaining).filter(f => f.type.startsWith("image/"));
+    const toAdd = Array.from(files).slice(0, remaining).filter(f => f.type.startsWith("image/"));
     if (toAdd.length === 0) return;
 
     const newEntries: RefImage[] = toAdd.map(f => ({
-      id:        crypto.randomUUID(),
+      id: crypto.randomUUID(),
       objectUrl: URL.createObjectURL(f),
-      cdnUrl:    null,
+      cdnUrl: null,
       uploading: true,
-      error:     false,
+      error: false,
     }));
     setRefImages(prev => [...prev, ...newEntries]);
 
@@ -416,8 +428,8 @@ function GalleryInner() {
     await Promise.all(toAdd.map(async (file, i) => {
       const entry = newEntries[i];
       try {
-        const res  = await fetch("/api/upload-asset", {
-          method:  "POST",
+        const res = await fetch("/api/upload-asset", {
+          method: "POST",
           headers: {
             "Content-Type": file.type,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -438,8 +450,8 @@ function GalleryInner() {
     if (el) {
       // Synchronous DOM write — zero frame delay, starts before React scheduler
       el.style.transition = "opacity 170ms cubic-bezier(0.4,0,1,1), transform 170ms cubic-bezier(0.4,0,1,1)";
-      el.style.opacity    = "0";
-      el.style.transform  = "translateY(-10px) scale(0.92)";
+      el.style.opacity = "0";
+      el.style.transform = "translateY(-10px) scale(0.92)";
     }
     // React state as a backup so any re-render in the window doesn't reset the styles
     setRemovingIds(prev => new Set(prev).add(id));
@@ -458,12 +470,12 @@ function GalleryInner() {
   const generateOne = async (token: string): Promise<string> => {
     if (!isVideo) {
       const { resolvedPrompt, extraUrls } = resolveGalleryMentions(prompt, taggedImages);
-      const refUrls   = refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
+      const refUrls = refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
       const imageUrls = [...extraUrls, ...refUrls];
       const res = await fetch("/api/generate", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({ prompt: resolvedPrompt, model: modelId, aspectRatio, quality, imageUrls }),
+        body: JSON.stringify({ prompt: resolvedPrompt, model: modelId, aspectRatio, quality, imageUrls }),
       });
       const d = await res.json() as { taskId?: string; error?: string };
       if (!res.ok) throw new Error(d.error ?? "Failed");
@@ -471,15 +483,15 @@ function GalleryInner() {
     } else {
       const vm = VIDEO_MODELS.find(m => m.id === modelId);
       const res = await fetch("/api/generate-video", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body:    JSON.stringify({
-          videoModel:  modelId,
+        body: JSON.stringify({
+          videoModel: modelId,
           prompt,
           aspectRatio,
           duration,
-          mode:        mode || vm?.defaultMode || "pro",
-          resolution:  vm && "defaultResolution" in vm ? vm.defaultResolution : undefined,
+          mode: mode || vm?.defaultMode || "pro",
+          resolution: vm && "defaultResolution" in vm ? vm.defaultResolution : undefined,
         }),
       });
       const d = await res.json() as { taskId?: string; error?: string };
@@ -491,7 +503,7 @@ function GalleryInner() {
   const pollTask = async (taskId: string): Promise<void> => {
     for (let i = 0; i < 150; i++) {
       await new Promise(r => setTimeout(r, 3_000));
-      const poll   = await fetch(`/api/job-status?taskId=${taskId}`);
+      const poll = await fetch(`/api/job-status?taskId=${taskId}`);
       const result = await poll.json() as { status: string; error?: string };
       if (result.status === "done") return;
       if (result.status === "error") throw new Error(result.error ?? "Generation failed");
@@ -568,7 +580,7 @@ function GalleryInner() {
 
   const mentionableImages = useMemo(() =>
     refImages.filter(r => !r.uploading && !r.error && r.cdnUrl),
-  [refImages]);
+    [refImages]);
 
   const filteredMentions = useMemo(() => {
     if (mentionQuery === null) return [];
@@ -587,7 +599,7 @@ function GalleryInner() {
       inputRef.current.scrollTop = 0;
     }
     if (overlayInnerRef.current) overlayInnerRef.current.style.transform = "";
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt]);
 
   // Close @ menu on outside click
@@ -595,7 +607,7 @@ function GalleryInner() {
     if (!atMenuOpen) return;
     const handler = (e: MouseEvent) => {
       if (!(e.target as HTMLElement).closest("[data-at-menu]") &&
-          !(e.target as HTMLElement).closest("[data-prompt-input]")) {
+        !(e.target as HTMLElement).closest("[data-prompt-input]")) {
         setMentionQuery(null);
       }
     };
@@ -604,15 +616,15 @@ function GalleryInner() {
   }, [atMenuOpen]);
 
   const insertMention = (ref: RefImage) => {
-    const pos   = refImages.findIndex(r => r.id === ref.id);
+    const pos = refImages.findIndex(r => r.id === ref.id);
     const label = `img${pos + 1}`;
     if (!taggedImages.some(t => t.refId === ref.id))
       setTaggedImages(prev => [...prev, { label, refId: ref.id, url: ref.cdnUrl! }]);
 
-    const input  = inputRef.current;
+    const input = inputRef.current;
     const cursor = input?.selectionStart ?? prompt.length;
     const before = prompt.slice(0, cursor);
-    const after  = prompt.slice(cursor);
+    const after = prompt.slice(cursor);
     const lastAt = before.lastIndexOf("@");
     const newText = lastAt >= 0
       ? `${before.slice(0, lastAt)}@${label} ${after}`
@@ -630,17 +642,17 @@ function GalleryInner() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const vidModel    = VIDEO_MODELS.find(m => m.id === modelId);
-  const ratios      = (isVideo ? vidModel?.ratios : imgModel?.ratios) ?? [];
-  const supportsQ   = !isVideo && !!imgModel?.supportsQuality;
+  const vidModel = VIDEO_MODELS.find(m => m.id === modelId);
+  const ratios = (isVideo ? vidModel?.ratios : imgModel?.ratios) ?? [];
+  const supportsQ = !isVideo && !!imgModel?.supportsQuality;
   const qualityOpts = imgModel?.apiInput.qualityOptions ?? ["2k", "4k"];
-  const durations   = vidModel?.durations ?? [];
-  const vidModes    = vidModel?.modes ?? [];
+  const durations = vidModel?.durations ?? [];
+  const vidModes = vidModel?.modes ?? [];
   const activeModel = models.find(m => m.id === modelId);
-  const hasRefImgs  = refImages.length > 0;
+  const hasRefImgs = refImages.length > 0;
   const allUploaded = refImages.every(r => !r.uploading);
 
-  const canGenerate = submitting ? false : isVideo ? true : prompt.trim().length > 0;
+  const canGenerate = submitting ? false : promptOverLimit ? false : isVideo ? true : prompt.trim().length > 0;
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
@@ -670,9 +682,9 @@ function GalleryInner() {
     const token = await getToken();
     if (!token) return;
     await fetch("/api/gallery", {
-      method:  "DELETE",
+      method: "DELETE",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body:    JSON.stringify({ id, source }),
+      body: JSON.stringify({ id, source }),
     });
     setItems(prev => {
       const updated = prev.filter(i => i.id !== id);
@@ -682,18 +694,18 @@ function GalleryInner() {
   }, [hasMore]);
 
   const handleDownload = useCallback(async (url: string, itemIsVideo: boolean): Promise<void> => {
-    const ext      = itemIsVideo ? "mp4" : "jpg";
+    const ext = itemIsVideo ? "mp4" : "jpg";
     const filename = `${Date.now()}.${ext}`;
-    const taskId   = crypto.randomUUID();
+    const taskId = crypto.randomUUID();
     setDownloads(prev => [...prev, { id: taskId, filename, status: "preparing" }]);
     try {
       const res = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${filename}`);
       if (!res.ok) throw new Error("Failed");
-      const blob      = await res.blob();
+      const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
-      const a         = document.createElement("a");
-      a.href          = objectUrl;
-      a.download      = filename;
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -718,15 +730,15 @@ function GalleryInner() {
     sourceFilter === "generated"
       ? items.filter(item => item.source === "generation")
       : items.filter(item => item.source === "upload"),
-  [items, sourceFilter]);
+    [items, sourceFilter]);
 
   const masonryColumns = useMemo<MasonryItem[][]>(() => {
     const all: MasonryItem[] = [
-      ...pendingGens.map(pg   => ({ kind: "pending" as const, pg })),
+      ...pendingGens.map(pg => ({ kind: "pending" as const, pg })),
       ...filteredItems.map(item => ({ kind: "gallery" as const, item })),
     ];
     const cols: MasonryItem[][] = Array.from({ length: colCount }, () => []);
-    const heights               = new Array<number>(colCount).fill(0);
+    const heights = new Array<number>(colCount).fill(0);
     for (const mi of all) {
       const col = heights.indexOf(Math.min(...heights));
       cols[col].push(mi);
@@ -765,13 +777,13 @@ function GalleryInner() {
 
       {/* ── Sub-navbar ── */}
       <div style={{
-        display:      "flex",
-        alignItems:   "center",
+        display: "flex",
+        alignItems: "center",
         justifyContent: "space-between",
-        padding:      "0 14px",
-        height:       "44px",
+        padding: "0 14px",
+        height: "44px",
         borderBottom: "1px solid rgba(255,255,255,0.05)",
-        flexShrink:   0,
+        flexShrink: 0,
       }}>
         {/* Left: source tabs */}
         <div style={{ display: "flex", gap: "2px" }}>
@@ -780,19 +792,19 @@ function GalleryInner() {
               key={src}
               onClick={() => setSourceFilter(src)}
               style={{
-                display:      "flex",
-                alignItems:   "center",
-                gap:          "6px",
-                padding:      "5px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "5px 12px",
                 borderRadius: "8px",
-                border:       "none",
-                background:   sourceFilter === src ? "rgba(255,255,255,0.08)" : "transparent",
-                color:        sourceFilter === src ? "#ffffff" : "rgba(255,255,255,0.38)",
-                fontSize:     "13px",
-                fontWeight:   sourceFilter === src ? 500 : 400,
-                cursor:       "pointer",
-                transition:   "background 140ms, color 140ms",
-                fontFamily:   "inherit",
+                border: "none",
+                background: sourceFilter === src ? "rgba(255,255,255,0.08)" : "transparent",
+                color: sourceFilter === src ? "#ffffff" : "rgba(255,255,255,0.38)",
+                fontSize: "13px",
+                fontWeight: sourceFilter === src ? 500 : 400,
+                cursor: "pointer",
+                transition: "background 140ms, color 140ms",
+                fontFamily: "inherit",
                 letterSpacing: "-0.01em",
               }}
               onMouseEnter={e => { if (sourceFilter !== src) e.currentTarget.style.color = "rgba(255,255,255,0.65)"; }}
@@ -855,7 +867,7 @@ function GalleryInner() {
                         }}>
                           <div style={{
                             width: "20px", height: "20px", borderRadius: "50%",
-                            border: "2px solid rgba(119,229,68,0.15)", borderTopColor: "#77E544",
+                            border: "2px solid rgba(119,229,68,0.15)", borderTopColor: "#ff3df5",
                             animation: "spin 0.9s linear infinite",
                           }} />
                           <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -909,12 +921,12 @@ function GalleryInner() {
       <div
         ref={promptBarRef}
         style={{
-          position:  "fixed",
-          bottom:    "20px",
-          left:      "50%",
+          position: "fixed",
+          bottom: "20px",
+          left: "50%",
           transform: "translateX(-50%)",
-          width:     "min(860px, calc(100vw - 32px))",
-          zIndex:    200,
+          width: "min(860px, calc(100vw - 32px))",
+          zIndex: 200,
         }}
       >
 
@@ -922,131 +934,132 @@ function GalleryInner() {
         {genError && (
           <div style={{
             marginBottom: "8px",
-            padding:      "8px 14px",
-            background:   "rgba(248,113,113,0.1)",
-            border:       "1px solid rgba(248,113,113,0.2)",
+            padding: "8px 14px",
+            background: "rgba(248,113,113,0.1)",
+            border: "1px solid rgba(248,113,113,0.2)",
             borderRadius: "10px",
-            fontSize:     "12px",
-            color:        "#f87171",
+            fontSize: "12px",
+            color: "#f87171",
           }}>
             {genError}
           </div>
         )}
 
         <div style={{
-          background:           "rgba(14,16,18,0.55)",
-          backdropFilter:       "blur(48px)",
+          background: "rgba(14,16,18,0.55)",
+          backdropFilter: "blur(48px)",
           WebkitBackdropFilter: "blur(48px)",
-          border:               "1px solid rgba(255,255,255,0.08)",
-          borderRadius:         "18px",
-          boxShadow:            "0 28px 80px rgba(0,0,0,0.9), 0 4px 20px rgba(0,0,0,0.5)",
-          overflow:             "hidden",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: "18px",
+          boxShadow: "0 28px 80px rgba(0,0,0,0.9), 0 4px 20px rgba(0,0,0,0.5)",
+          overflow: "hidden",
         }}>
 
           {/* ── Reference image thumbnails ── */}
           {!isVideo && (hasRefImgs || canAddImgs) && (
             <div style={{
-              padding:    "14px 16px 0",
-              display:    "flex",
-              gap:        "10px",
-              flexWrap:   "wrap",
+              padding: "14px 16px 0",
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
               alignItems: "flex-start",
             }}>
               {refImages.map(img => {
                 const isRemoving = removingIds.has(img.id);
                 return (
-                <div key={img.id} data-refimg-id={img.id} style={{
-                  position:     "relative",
-                  width:        "88px",
-                  height:       "80px",
-                  borderRadius: "10px",
-                  overflow:     "hidden",
-                  background:   "#1A1C1F",
-                  flexShrink:   0,
-                  border:       img.error ? "1px solid rgba(248,113,113,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                  // Entry: spring animation on mount
-                  animation:    isRemoving ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1)",
-                  // Exit: CSS transition driven by React state (same values as DOM manipulation — no conflict)
-                  ...(isRemoving ? {
-                    transition: "opacity 170ms cubic-bezier(0.4,0,1,1), transform 170ms cubic-bezier(0.4,0,1,1)",
-                    opacity:    0,
-                    transform:  "translateY(-10px) scale(0.92)",
-                  } : {}),
-                }}>
-                  {/* Thumbnail */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.objectUrl}
-                    alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
-                  {/* Upload overlay */}
-                  {img.uploading && (
-                    <div style={{
-                      position:        "absolute",
-                      inset:           0,
-                      background:      "rgba(0,0,0,0.55)",
-                      display:         "flex",
-                      alignItems:      "center",
-                      justifyContent:  "center",
-                    }}>
-                      <span style={{
-                        width:        "18px",
-                        height:       "18px",
+                  <div key={img.id} data-refimg-id={img.id} style={{
+                    position: "relative",
+                    width: "88px",
+                    height: "80px",
+                    borderRadius: "10px",
+                    overflow: "hidden",
+                    background: "#1A1C1F",
+                    flexShrink: 0,
+                    border: img.error ? "1px solid rgba(248,113,113,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                    // Entry: spring animation on mount
+                    animation: isRemoving ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1)",
+                    // Exit: CSS transition driven by React state (same values as DOM manipulation — no conflict)
+                    ...(isRemoving ? {
+                      transition: "opacity 170ms cubic-bezier(0.4,0,1,1), transform 170ms cubic-bezier(0.4,0,1,1)",
+                      opacity: 0,
+                      transform: "translateY(-10px) scale(0.92)",
+                    } : {}),
+                  }}>
+                    {/* Thumbnail */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.objectUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                    {/* Upload overlay */}
+                    {img.uploading && (
+                      <div style={{
+                        position: "absolute",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.55)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}>
+                        <span style={{
+                          width: "18px",
+                          height: "18px",
+                          borderRadius: "50%",
+                          border: "2px solid rgba(255,255,255,0.2)",
+                          borderTopColor: "#ff3df5",
+                          display: "inline-block",
+                          animation: "spin 0.75s linear infinite",
+                        }} />
+                      </div>
+                    )}
+                    {/* Error overlay */}
+                    {img.error && (
+                      <div style={{
+                        position: "absolute",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.55)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round">
+                          <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                        </svg>
+                      </div>
+                    )}
+                    {/* X button */}
+                    <button
+                      onClick={() => removeImage(img.id)}
+                      style={{
+                        position: "absolute",
+                        top: "5px",
+                        right: "5px",
+                        width: "20px",
+                        height: "20px",
                         borderRadius: "50%",
-                        border:       "2px solid rgba(255,255,255,0.2)",
-                        borderTopColor: "#77E544",
-                        display:      "inline-block",
-                        animation:    "spin 0.75s linear infinite",
-                      }} />
-                    </div>
-                  )}
-                  {/* Error overlay */}
-                  {img.error && (
-                    <div style={{
-                      position:       "absolute",
-                      inset:          0,
-                      background:     "rgba(0,0,0,0.55)",
-                      display:        "flex",
-                      alignItems:     "center",
-                      justifyContent: "center",
-                    }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                        background: "rgba(0,0,0,0.7)",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        color: "rgba(255,255,255,0.85)",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        lineHeight: 1,
+                        padding: 0,
+                        fontSize: "12px",
+                        transition: "background 120ms",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,0,0,0.9)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                        <path d="M18 6 6 18M6 6l12 12" />
                       </svg>
-                    </div>
-                  )}
-                  {/* X button */}
-                  <button
-                    onClick={() => removeImage(img.id)}
-                    style={{
-                      position:       "absolute",
-                      top:            "5px",
-                      right:          "5px",
-                      width:          "20px",
-                      height:         "20px",
-                      borderRadius:   "50%",
-                      background:     "rgba(0,0,0,0.7)",
-                      border:         "1px solid rgba(255,255,255,0.15)",
-                      color:          "rgba(255,255,255,0.85)",
-                      cursor:         "pointer",
-                      display:        "flex",
-                      alignItems:     "center",
-                      justifyContent: "center",
-                      lineHeight:     1,
-                      padding:        0,
-                      fontSize:       "12px",
-                      transition:     "background 120ms",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,0,0,0.9)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
-                  >
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                      <path d="M18 6 6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              );})}
+                    </button>
+                  </div>
+                );
+              })}
 
               {/* Add-more button */}
               {canAddImgs && (
@@ -1054,32 +1067,32 @@ function GalleryInner() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={submitting}
                   style={{
-                    width:          "88px",
-                    height:         "80px",
-                    borderRadius:   "10px",
-                    border:         "1.5px dashed rgba(255,255,255,0.4)",
-                    background:     "rgba(255,255,255,0.025)",
-                    cursor:         submitting ? "not-allowed" : "pointer",
-                    display:        "flex",
-                    flexDirection:  "column",
-                    alignItems:     "center",
+                    width: "88px",
+                    height: "80px",
+                    borderRadius: "10px",
+                    border: "1.5px dashed rgba(255,255,255,0.4)",
+                    background: "rgba(255,255,255,0.025)",
+                    cursor: submitting ? "not-allowed" : "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
                     justifyContent: "center",
-                    gap:            "6px",
-                    color:          "rgba(255,255,255,0.75)",
-                    flexShrink:     0,
-                    transition:     "border-color 140ms, background 140ms, color 140ms",
+                    gap: "6px",
+                    color: "rgba(255,255,255,0.75)",
+                    flexShrink: 0,
+                    transition: "border-color 140ms, background 140ms, color 140ms",
                   }}
                   onMouseEnter={e => {
                     if (!submitting) {
                       e.currentTarget.style.borderColor = "rgba(255,255,255,0.6)";
-                      e.currentTarget.style.background  = "rgba(255,255,255,0.05)";
-                      e.currentTarget.style.color       = "#ffffff";
+                      e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+                      e.currentTarget.style.color = "#ffffff";
                     }
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)";
-                    e.currentTarget.style.background  = "rgba(255,255,255,0.025)";
-                    e.currentTarget.style.color       = "rgba(255,255,255,0.75)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                    e.currentTarget.style.color = "rgba(255,255,255,0.75)";
                   }}
                 >
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1098,10 +1111,10 @@ function GalleryInner() {
 
           {/* ── Input + Controls + Generate ── */}
           <div style={{
-            padding:       hasRefImgs ? "12px 14px 14px 16px" : "16px 14px 14px 16px",
-            display:       "flex",
+            padding: hasRefImgs ? "12px 14px 14px 16px" : "16px 14px 14px 16px",
+            display: "flex",
             flexDirection: "column",
-            gap:           "10px",
+            gap: "10px",
           }}>
             {/* Prompt input with inline mention chips */}
             <div style={{ position: "relative", flex: "none" }}>
@@ -1112,7 +1125,7 @@ function GalleryInner() {
                 value={prompt}
                 rows={3}
                 onChange={e => {
-                  const text   = e.target.value;
+                  const text = e.target.value;
                   const cursor = e.target.selectionStart ?? text.length;
                   setPrompt(text);
                   resizeTextarea(e.target);
@@ -1123,9 +1136,9 @@ function GalleryInner() {
                 }}
                 onSelect={e => {
                   if (isVideo) return;
-                  const ta     = e.currentTarget;
+                  const ta = e.currentTarget;
                   const cursor = ta.selectionStart ?? ta.value.length;
-                  const match  = ta.value.slice(0, cursor).match(/@(\w*)$/);
+                  const match = ta.value.slice(0, cursor).match(/@(\w*)$/);
                   setMentionQuery(match ? match[1] : null);
                 }}
                 onScroll={e => {
@@ -1135,30 +1148,30 @@ function GalleryInner() {
                 onKeyDown={e => {
                   if (atMenuOpen) {
                     if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
-                    if (e.key === "ArrowUp")   { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
-                    if (e.key === "Enter")     { e.preventDefault(); insertMention(filteredMentions[mentionSelIdx]); return; }
-                    if (e.key === "Escape")    { setMentionQuery(null); return; }
+                    if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
+                    if (e.key === "Enter") { e.preventDefault(); insertMention(filteredMentions[mentionSelIdx]); return; }
+                    if (e.key === "Escape") { setMentionQuery(null); return; }
                   }
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); }
                 }}
                 disabled={submitting}
                 style={{
-                  position:      "relative",
-                  display:       "block",
-                  width:         "100%",
-                  background:    "transparent",
-                  border:        "none",
-                  outline:       "none",
-                  color:         "transparent",
-                  caretColor:    "#77E544",
-                  fontSize:      "14.5px",
-                  fontFamily:    "inherit",
-                  lineHeight:    "22px",
+                  position: "relative",
+                  display: "block",
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  color: "transparent",
+                  caretColor: "#ff3df5",
+                  fontSize: "14.5px",
+                  fontFamily: "inherit",
+                  lineHeight: "22px",
                   letterSpacing: "-0.01em",
-                  padding:       0,
-                  resize:        "none",
-                  maxHeight:     "440px",
-                  overflowY:     "auto",
+                  padding: 0,
+                  resize: "none",
+                  maxHeight: "440px",
+                  overflowY: "auto",
                   scrollbarWidth: "none",
                 } as React.CSSProperties}
               />
@@ -1166,26 +1179,43 @@ function GalleryInner() {
               <div
                 aria-hidden
                 style={{
-                  position:      "absolute",
-                  inset:         0,
-                  overflow:      "hidden",
+                  position: "absolute",
+                  inset: 0,
+                  overflow: "hidden",
                   pointerEvents: "none",
                 }}
               >
                 <div
                   ref={overlayInnerRef}
                   style={{
-                    display:       "block",
-                    fontSize:      "14.5px",
-                    fontFamily:    "inherit",
-                    lineHeight:    "22px",
+                    display: "block",
+                    fontSize: "14.5px",
+                    fontFamily: "inherit",
+                    lineHeight: "22px",
                     letterSpacing: "-0.01em",
-                    whiteSpace:    "pre-wrap",
-                    wordBreak:     "break-word",
-                    willChange:    "transform",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    willChange: "transform",
                   }}
                 >
-                  {renderGalleryMentions(
+                  {promptMaxLength !== null && prompt.length > promptMaxLength ? (
+                    <>
+                      {renderGalleryMentions(
+                        prompt.slice(0, promptMaxLength), taggedImages,
+                        (tag, rect) => setChipPreview({ tag, rect }),
+                        () => setChipPreview(null),
+                        tag => {
+                          const idx = prompt.indexOf(`@${tag.label}`);
+                          const pos = idx >= 0 ? idx + tag.label.length + 1 : prompt.length;
+                          inputRef.current?.focus();
+                          inputRef.current?.setSelectionRange(pos, pos);
+                        },
+                      )}
+                      <span style={{ background: "rgba(239,68,68,0.22)", color: "#f87171", borderRadius: 2 }}>
+                        {prompt.slice(promptMaxLength)}
+                      </span>
+                    </>
+                  ) : renderGalleryMentions(
                     prompt, taggedImages,
                     (tag, rect) => setChipPreview({ tag, rect }),
                     () => setChipPreview(null),
@@ -1203,14 +1233,14 @@ function GalleryInner() {
                 <div
                   aria-hidden
                   style={{
-                    position:      "absolute",
-                    inset:         0,
-                    display:       "block",
-                    lineHeight:    "22px",
-                    fontSize:      "14.5px",
-                    fontFamily:    "inherit",
+                    position: "absolute",
+                    inset: 0,
+                    display: "block",
+                    lineHeight: "22px",
+                    fontSize: "14.5px",
+                    fontFamily: "inherit",
                     letterSpacing: "-0.01em",
-                    color:         "rgba(255,255,255,0.3)",
+                    color: "rgba(255,255,255,0.3)",
                     pointerEvents: "none",
                   }}
                 >
@@ -1219,152 +1249,178 @@ function GalleryInner() {
               )}
             </div>
             {/* Bottom row: controls + generate button — always stays at the bottom, never moves on expand */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* Controls group */}
-            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
-            {/* Model picker */}
-            <CustomDropdown
-              value={modelId}
-              onChange={setModelId}
-              disabled={submitting}
-              options={models.map(m => ({
-                value: m.id,
-                label: m.name,
-                group: ("provider" in m ? (m as { provider: string }).provider : undefined),
-                providerIcon: "provider" in m ? <ProviderIcon provider={(m as { provider: string }).provider} /> : undefined,
-              }))}
-              showChevron
-            />
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "12px" }}>
+              {/* Controls group */}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
+                {/* Model picker */}
+                <CustomDropdown
+                  value={modelId}
+                  onChange={setModelId}
+                  disabled={submitting}
+                  options={models.map(m => ({
+                    value: m.id,
+                    label: m.name,
+                    group: ("provider" in m ? (m as { provider: string }).provider : undefined),
+                    providerIcon: "provider" in m ? <ProviderIcon provider={(m as { provider: string }).provider} /> : undefined,
+                  }))}
+                  showChevron
+                />
 
-            {/* Quality */}
-            {supportsQ && (
-              <CustomDropdown
-                value={quality}
-                onChange={setQuality}
-                disabled={submitting}
-                options={qualityOpts.map(q => ({ value: q, label: q.toUpperCase() }))}
-                icon={<DiamondIcon />}
-              />
-            )}
+                {/* Quality */}
+                {supportsQ && (
+                  <CustomDropdown
+                    value={quality}
+                    onChange={setQuality}
+                    disabled={submitting}
+                    options={qualityOpts.map(q => ({ value: q, label: q.toUpperCase() }))}
+                    icon={<DiamondIcon />}
+                  />
+                )}
 
-            {/* Aspect ratio */}
-            {ratios.length > 0 && (
-              <CustomDropdown
-                value={aspectRatio}
-                onChange={setAspectRatio}
-                disabled={submitting}
-                options={ratios.map(r => ({ value: r, label: r, preview: <RatioPreview ratio={r} /> }))}
-                icon={<RatioTriggerPreview ratio={aspectRatio} />}
-              />
-            )}
+                {/* Aspect ratio */}
+                {ratios.length > 0 && (
+                  <CustomDropdown
+                    value={aspectRatio}
+                    onChange={setAspectRatio}
+                    disabled={submitting}
+                    options={ratios.map(r => ({ value: r, label: r, preview: <RatioPreview ratio={r} /> }))}
+                    icon={<RatioTriggerPreview ratio={aspectRatio} />}
+                  />
+                )}
 
-            {/* Duration (video) */}
-            {isVideo && durations.length > 0 && (
-              <CustomDropdown
-                value={String(duration)}
-                onChange={v => setDuration(Number(v))}
-                disabled={submitting}
-                options={durations.map(d => ({ value: String(d), label: `${d}s` }))}
-              />
-            )}
+                {/* Duration (video) */}
+                {isVideo && durations.length > 0 && (
+                  <CustomDropdown
+                    value={String(duration)}
+                    onChange={v => setDuration(Number(v))}
+                    disabled={submitting}
+                    options={durations.map(d => ({ value: String(d), label: `${d}s` }))}
+                  />
+                )}
 
-            {/* Mode (video) */}
-            {isVideo && vidModes.length > 0 && (
-              <CustomDropdown
-                value={mode}
-                onChange={setMode}
-                disabled={submitting}
-                options={vidModes.map(m => ({ value: m.value, label: m.label }))}
-              />
-            )}
+                {/* Mode (video) */}
+                {isVideo && vidModes.length > 0 && (
+                  <CustomDropdown
+                    value={mode}
+                    onChange={setMode}
+                    disabled={submitting}
+                    options={vidModes.map(m => ({ value: m.value, label: m.label }))}
+                  />
+                )}
 
-            {/* Count stepper (image only) — last control */}
-            {!isVideo && (
-              <div style={{
-                display:      "flex",
-                alignItems:   "center",
-                height:       "36px",
-                borderRadius: "8px",
-                border:       "1px solid rgba(255,255,255,0.1)",
-                background:   "rgba(255,255,255,0.05)",
-                overflow:     "hidden",
-                flexShrink:   0,
-              }}>
-                <button
-                  onClick={() => setCount(c => Math.max(1, c - 1))}
-                  disabled={submitting || count <= 1}
+                {/* Count stepper (image only) — last control */}
+                {!isVideo && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    height: "36px",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(255,255,255,0.05)",
+                    overflow: "hidden",
+                    flexShrink: 0,
+                  }}>
+                    <button
+                      onClick={() => setCount(c => Math.max(1, c - 1))}
+                      disabled={submitting || count <= 1}
+                      style={{
+                        width: "34px", height: "100%", border: "none", background: "transparent",
+                        color: count <= 1 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
+                        cursor: submitting || count <= 1 ? "not-allowed" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "16px", fontFamily: "inherit", transition: "color 140ms",
+                      }}
+                    >−</button>
+                    <span style={{
+                      fontSize: "12.5px", color: "#ffffff",
+                      minWidth: "30px", textAlign: "center",
+                      fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em",
+                    }}>
+                      {count}/4
+                    </span>
+                    <button
+                      onClick={() => setCount(c => Math.min(4, c + 1))}
+                      disabled={submitting || count >= 4}
+                      style={{
+                        width: "34px", height: "100%", border: "none", background: "transparent",
+                        color: count >= 4 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
+                        cursor: submitting || count >= 4 ? "not-allowed" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "16px", fontFamily: "inherit", transition: "color 140ms",
+                      }}
+                    >+</button>
+                  </div>
+                )}
+              </div>{/* end controls group */}
+
+              {/* Character count — same level as controls, left of generate button */}
+              {promptMaxLength !== null && (
+                <div
+                  aria-hidden
                   style={{
-                    width: "34px", height: "100%", border: "none", background: "transparent",
-                    color: count <= 1 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
-                    cursor: submitting || count <= 1 ? "not-allowed" : "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "16px", fontFamily: "inherit", transition: "color 140ms",
+                    display: "flex",
+                    alignItems: "center",
+                    height: "36px",
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    fontVariantNumeric: "tabular-nums",
+                    lineHeight: 1,
+                    pointerEvents: "none",
+                    userSelect: "none",
+                    flexShrink: 0,
+                    whiteSpace: "nowrap",
+                    color: promptOverLimit ? "#f87171" : "#ffffff",
+                    background: promptOverLimit ? "#3a1010" : "#2a2a2a",
                   }}
-                >−</button>
-                <span style={{
-                  fontSize: "12.5px", color: "#ffffff",
-                  minWidth: "30px", textAlign: "center",
-                  fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em",
-                }}>
-                  {count}/4
-                </span>
-                <button
-                  onClick={() => setCount(c => Math.min(4, c + 1))}
-                  disabled={submitting || count >= 4}
-                  style={{
-                    width: "34px", height: "100%", border: "none", background: "transparent",
-                    color: count >= 4 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
-                    cursor: submitting || count >= 4 ? "not-allowed" : "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "16px", fontFamily: "inherit", transition: "color 140ms",
-                  }}
-                >+</button>
-              </div>
-            )}
-            </div>{/* end controls group */}
-
-            {/* Generate button — last item in the controls row */}
-            <button
-              onClick={generate}
-              disabled={!canGenerate}
-              style={{
-                display:        "flex",
-                flexDirection:  "row",
-                alignItems:     "center",
-                justifyContent: "center",
-                gap:            "7px",
-                padding:        "0 20px",
-                height:         "72px",
-                borderRadius:   "10px",
-                border:         "none",
-                background:     "#77E544",
-                color:          "#060A06",
-                fontSize:       "14px",
-                fontWeight:     700,
-                cursor:         !canGenerate ? "not-allowed" : "pointer",
-                opacity:        !canGenerate ? 0.45 : 1,
-                transition:     "opacity 150ms, background 150ms",
-                fontFamily:     "inherit",
-                flexShrink:     0,
-                letterSpacing:  "-0.02em",
-                whiteSpace:     "nowrap",
-              }}
-              onMouseEnter={e => { if (canGenerate) e.currentTarget.style.background = "#8FEE60"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "#77E544"; }}
-            >
-              {submitting ? (
-                <>
-                  <span style={{
-                    width: "12px", height: "12px", borderRadius: "50%",
-                    border: "2px solid rgba(6,10,6,0.25)", borderTopColor: "#060A06",
-                    display: "inline-block", animation: "spin 0.75s linear infinite",
-                  }} />
-                  Sending…
-                </>
-              ) : (
-                <>Generate <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" stroke="none" style={{ display: "inline", verticalAlign: "middle" }}><path d="M11.8525 4.21651L11.7221 3.2387C11.6906 3.00226 11.4889 2.82568 11.2504 2.82568C11.0118 2.82568 10.8102 3.00226 10.7786 3.23869L10.6483 4.21651C10.2658 7.0847 8.00939 9.34115 5.14119 9.72358L4.16338 9.85396C3.92694 9.88549 3.75037 10.0872 3.75037 10.3257C3.75037 10.5642 3.92694 10.7659 4.16338 10.7974L5.14119 10.9278C8.00938 11.3102 10.2658 13.5667 10.6483 16.4349L10.7786 17.4127C10.8102 17.6491 11.0118 17.8257 11.2504 17.8257C11.4889 17.8257 11.6906 17.6491 11.7221 17.4127L11.8525 16.4349C12.2349 13.5667 14.4913 11.3102 17.3595 10.9278L18.3374 10.7974C18.5738 10.7659 18.7504 10.5642 18.7504 10.3257C18.7504 10.0872 18.5738 9.88549 18.3374 9.85396L17.3595 9.72358C14.4913 9.34115 12.2349 7.0847 11.8525 4.21651Z"/><path d="M4.6519 14.7568L4.82063 14.2084C4.84491 14.1295 4.91781 14.0757 5.00037 14.0757C5.08292 14.0757 5.15582 14.1295 5.1801 14.2084L5.34883 14.7568C5.56525 15.4602 6.11587 16.0108 6.81925 16.2272L7.36762 16.3959C7.44652 16.4202 7.50037 16.4931 7.50037 16.5757C7.50037 16.6582 7.44652 16.7311 7.36762 16.7554L6.81926 16.9241C6.11587 17.1406 5.56525 17.6912 5.34883 18.3946L5.1801 18.9429C5.15582 19.0218 5.08292 19.0757 5.00037 19.0757C4.91781 19.0757 4.84491 19.0218 4.82063 18.9429L4.65191 18.3946C4.43548 17.6912 3.88486 17.1406 3.18147 16.9241L2.63311 16.7554C2.55421 16.7311 2.50037 16.6582 2.50037 16.5757C2.50037 16.4931 2.55421 16.4202 2.63311 16.3959L3.18148 16.2272C3.88486 16.0108 4.43548 15.4602 4.6519 14.7568Z"/></svg></>
+                >
+                  {prompt.length.toLocaleString()}/{promptMaxLength.toLocaleString()}
+                </div>
               )}
-            </button>
+
+              {/* Generate button — last item in the controls row */}
+              <button
+                onClick={generate}
+                disabled={!canGenerate}
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "7px",
+                  padding: "0 20px",
+                  height: "72px",
+                  borderRadius: "10px",
+                  border: "none",
+                  background: "#ff3df5",
+                  color: "#060A06",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  cursor: !canGenerate ? "not-allowed" : "pointer",
+                  opacity: !canGenerate ? 0.45 : 1,
+                  transition: "opacity 150ms, background 150ms",
+                  fontFamily: "inherit",
+                  flexShrink: 0,
+                  letterSpacing: "-0.02em",
+                  whiteSpace: "nowrap",
+                }}
+                onMouseEnter={e => { if (canGenerate) e.currentTarget.style.background = "#8FEE60"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#ff3df5"; }}
+              >
+                {submitting ? (
+                  <>
+                    <span style={{
+                      width: "12px", height: "12px", borderRadius: "50%",
+                      border: "2px solid rgba(6,10,6,0.25)", borderTopColor: "#060A06",
+                      display: "inline-block", animation: "spin 0.75s linear infinite",
+                    }} />
+                    Sending…
+                  </>
+                ) : (
+                  <>Generate <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" stroke="none" style={{ display: "inline", verticalAlign: "middle" }}><path d="M11.8525 4.21651L11.7221 3.2387C11.6906 3.00226 11.4889 2.82568 11.2504 2.82568C11.0118 2.82568 10.8102 3.00226 10.7786 3.23869L10.6483 4.21651C10.2658 7.0847 8.00939 9.34115 5.14119 9.72358L4.16338 9.85396C3.92694 9.88549 3.75037 10.0872 3.75037 10.3257C3.75037 10.5642 3.92694 10.7659 4.16338 10.7974L5.14119 10.9278C8.00938 11.3102 10.2658 13.5667 10.6483 16.4349L10.7786 17.4127C10.8102 17.6491 11.0118 17.8257 11.2504 17.8257C11.4889 17.8257 11.6906 17.6491 11.7221 17.4127L11.8525 16.4349C12.2349 13.5667 14.4913 11.3102 17.3595 10.9278L18.3374 10.7974C18.5738 10.7659 18.7504 10.5642 18.7504 10.3257C18.7504 10.0872 18.5738 9.88549 18.3374 9.85396L17.3595 9.72358C14.4913 9.34115 12.2349 7.0847 11.8525 4.21651Z" /><path d="M4.6519 14.7568L4.82063 14.2084C4.84491 14.1295 4.91781 14.0757 5.00037 14.0757C5.08292 14.0757 5.15582 14.1295 5.1801 14.2084L5.34883 14.7568C5.56525 15.4602 6.11587 16.0108 6.81925 16.2272L7.36762 16.3959C7.44652 16.4202 7.50037 16.4931 7.50037 16.5757C7.50037 16.6582 7.44652 16.7311 7.36762 16.7554L6.81926 16.9241C6.11587 17.1406 5.56525 17.6912 5.34883 18.3946L5.1801 18.9429C5.15582 19.0218 5.08292 19.0757 5.00037 19.0757C4.91781 19.0757 4.84491 19.0218 4.82063 18.9429L4.65191 18.3946C4.43548 17.6912 3.88486 17.1406 3.18147 16.9241L2.63311 16.7554C2.55421 16.7311 2.50037 16.6582 2.50037 16.5757C2.50037 16.4931 2.55421 16.4202 2.63311 16.3959L3.18148 16.2272C3.88486 16.0108 4.43548 15.4602 4.6519 14.7568Z" /></svg></>
+                )}
+              </button>
             </div>{/* end bottom row */}
           </div>
         </div>
@@ -1377,17 +1433,17 @@ function GalleryInner() {
         <div
           data-at-menu=""
           style={{
-            position:    "fixed",
-            left:        promptBarRef.current.getBoundingClientRect().left,
-            bottom:      window.innerHeight - promptBarRef.current.getBoundingClientRect().top + 6,
-            width:       promptBarRef.current.getBoundingClientRect().width,
-            background:  "#0E1012",
-            border:      "1px solid rgba(255,255,255,0.1)",
+            position: "fixed",
+            left: promptBarRef.current.getBoundingClientRect().left,
+            bottom: window.innerHeight - promptBarRef.current.getBoundingClientRect().top + 6,
+            width: promptBarRef.current.getBoundingClientRect().width,
+            background: "#0E1012",
+            border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: "14px",
-            boxShadow:   "0 8px 48px rgba(0,0,0,0.75), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
-            overflow:    "hidden",
-            zIndex:      9999,
-            animation:   "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
+            boxShadow: "0 8px 48px rgba(0,0,0,0.75), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+            overflow: "hidden",
+            zIndex: 9999,
+            animation: "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
           }}
           onMouseDown={e => e.preventDefault()}
         >
@@ -1403,19 +1459,19 @@ function GalleryInner() {
                 onClick={() => insertMention(ref)}
                 onMouseEnter={() => setMentionSelIdx(idx)}
                 style={{
-                  display:    "flex",
+                  display: "flex",
                   alignItems: "center",
-                  gap:        "10px",
-                  width:      "100%",
-                  padding:    "7px 10px",
+                  gap: "10px",
+                  width: "100%",
+                  padding: "7px 10px",
                   borderRadius: "9px",
-                  border:     "none",
+                  border: "none",
                   background: idx === mentionSelIdx ? "rgba(119,229,68,0.07)" : "transparent",
-                  color:      idx === mentionSelIdx ? "#77E544" : "rgba(255,255,255,0.65)",
-                  fontSize:   "13px",
+                  color: idx === mentionSelIdx ? "#ff3df5" : "rgba(255,255,255,0.65)",
+                  fontSize: "13px",
                   fontFamily: "inherit",
-                  cursor:     "pointer",
-                  textAlign:  "left",
+                  cursor: "pointer",
+                  textAlign: "left",
                   transition: "background 80ms",
                   letterSpacing: "-0.01em",
                 }}
@@ -1444,11 +1500,11 @@ function GalleryInner() {
         /* Outer: positioning only — no animation so transform stays stable */
         <div
           style={{
-            position:      "fixed",
-            left:          chipPreview.rect.left + chipPreview.rect.width / 2,
-            bottom:        window.innerHeight - chipPreview.rect.top + 8,
-            transform:     "translateX(-50%)",
-            zIndex:        99999,
+            position: "fixed",
+            left: chipPreview.rect.left + chipPreview.rect.width / 2,
+            bottom: window.innerHeight - chipPreview.rect.top + 8,
+            transform: "translateX(-50%)",
+            zIndex: 99999,
             pointerEvents: "none",
           }}
         >
@@ -1456,10 +1512,10 @@ function GalleryInner() {
           <div
             style={{
               borderRadius: "10px",
-              overflow:     "hidden",
-              boxShadow:    "0 8px 32px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)",
-              border:       "1px solid rgba(255,255,255,0.08)",
-              animation:    "dropIn 140ms cubic-bezier(0.16,1,0.3,1)",
+              overflow: "hidden",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.65), 0 2px 8px rgba(0,0,0,0.4)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              animation: "dropIn 140ms cubic-bezier(0.16,1,0.3,1)",
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1481,25 +1537,25 @@ function GalleryInner() {
 
       {refError && (
         <div style={{
-          position:             "fixed",
-          top:                  "64px",
-          right:                "16px",
-          zIndex:               9600,
-          display:              "flex",
-          alignItems:           "center",
-          gap:                  "8px",
-          padding:              "10px 14px",
-          borderRadius:         "12px",
-          background:           "rgba(16,18,20,0.97)",
-          backdropFilter:       "blur(20px)",
+          position: "fixed",
+          top: "64px",
+          right: "16px",
+          zIndex: 9600,
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "10px 14px",
+          borderRadius: "12px",
+          background: "rgba(16,18,20,0.97)",
+          backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          border:               "1px solid rgba(248,113,113,0.25)",
-          boxShadow:            "0 8px 32px rgba(0,0,0,0.55)",
-          fontSize:             "13px",
-          color:                "#f87171",
-          fontFamily:           "inherit",
-          letterSpacing:        "-0.01em",
-          animation:            "dropIn 160ms cubic-bezier(0.16,1,0.3,1)",
+          border: "1px solid rgba(248,113,113,0.25)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+          fontSize: "13px",
+          color: "#f87171",
+          fontFamily: "inherit",
+          letterSpacing: "-0.01em",
+          animation: "dropIn 160ms cubic-bezier(0.16,1,0.3,1)",
         }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
@@ -1544,14 +1600,14 @@ function CustomDropdown({
   icon?: React.ReactNode;
   showChevron?: boolean;
 }) {
-  const [open, setOpen]     = useState(false);
-  const [pos, setPos]       = useState({ left: 0, bottom: 0, minW: 0 });
-  const triggerRef          = useRef<HTMLButtonElement>(null);
-  const dropRef             = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ left: 0, bottom: 0, minW: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
-  const selectedOpt  = options.find(o => o.value === value);
-  const label        = selectedOpt?.label ?? value;
-  const triggerIcon  = selectedOpt?.providerIcon ?? icon;
+  const selectedOpt = options.find(o => o.value === value);
+  const label = selectedOpt?.label ?? value;
+  const triggerIcon = selectedOpt?.providerIcon ?? icon;
 
   const openDrop = () => {
     if (disabled || !triggerRef.current) return;
@@ -1578,8 +1634,8 @@ function CustomDropdown({
     (acc[g] ??= []).push(o);
     return acc;
   }, {});
-  const groupKeys    = Object.keys(groups);
-  const hasGroups    = groupKeys.some(k => k !== "");
+  const groupKeys = Object.keys(groups);
+  const hasGroups = groupKeys.some(k => k !== "");
 
   return (
     <>
@@ -1588,34 +1644,34 @@ function CustomDropdown({
         onClick={() => open ? setOpen(false) : openDrop()}
         disabled={disabled}
         style={{
-          display:      "flex",
-          alignItems:   "center",
-          gap:          "6px",
-          height:       "36px",
-          padding:      "0 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          height: "36px",
+          padding: "0 12px",
           borderRadius: "8px",
-          border:       open
+          border: open
             ? "1px solid rgba(255,255,255,0.18)"
             : "1px solid rgba(255,255,255,0.1)",
-          background:   open
+          background: open
             ? "rgba(255,255,255,0.08)"
             : "rgba(255,255,255,0.05)",
-          flexShrink:   0,
-          cursor:       disabled ? "not-allowed" : "pointer",
-          fontFamily:   "inherit",
-          transition:   "border-color 140ms, background 140ms",
-          userSelect:   "none",
+          flexShrink: 0,
+          cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          transition: "border-color 140ms, background 140ms",
+          userSelect: "none",
         }}
         onMouseEnter={e => {
           if (!disabled && !open) {
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.16)";
-            e.currentTarget.style.background  = "rgba(255,255,255,0.07)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.07)";
           }
         }}
         onMouseLeave={e => {
           if (!open) {
             e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-            e.currentTarget.style.background  = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
           }
         }}
       >
@@ -1642,17 +1698,17 @@ function CustomDropdown({
         <div
           ref={dropRef}
           style={{
-            position:     "fixed",
-            left:         pos.left,
-            bottom:       pos.bottom,
-            minWidth:     Math.max(pos.minW, 160),
-            background:   "#0E1012",
-            border:       "1px solid rgba(255,255,255,0.1)",
+            position: "fixed",
+            left: pos.left,
+            bottom: pos.bottom,
+            minWidth: Math.max(pos.minW, 160),
+            background: "#0E1012",
+            border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: "14px",
-            boxShadow:    "0 8px 48px rgba(0,0,0,0.75), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
-            overflow:     "hidden",
-            zIndex:       9999,
-            animation:    "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
+            boxShadow: "0 8px 48px rgba(0,0,0,0.75), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+            overflow: "hidden",
+            zIndex: 9999,
+            animation: "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
           }}
         >
           <div style={{ padding: "5px", maxHeight: "300px", overflowY: "auto" }}>
@@ -1664,12 +1720,12 @@ function CustomDropdown({
                   )}
                   {gk && (
                     <div style={{
-                      padding:       "5px 10px 3px",
-                      fontSize:      "10px",
-                      color:         "rgba(255,255,255,0.22)",
+                      padding: "5px 10px 3px",
+                      fontSize: "10px",
+                      color: "rgba(255,255,255,0.22)",
                       textTransform: "uppercase",
                       letterSpacing: "0.09em",
-                      fontWeight:    500,
+                      fontWeight: 500,
                     }}>
                       {gk}
                     </div>
@@ -1714,25 +1770,25 @@ function DropItem({ label, active, onClick, preview, providerIcon }: { label: st
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display:      "flex",
-        alignItems:   "center",
-        gap:          "8px",
-        width:        "100%",
-        padding:      "7px 10px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        width: "100%",
+        padding: "7px 10px",
         borderRadius: "9px",
-        border:       "none",
-        background:   active
+        border: "none",
+        background: active
           ? "rgba(255,255,255,0.09)"
           : hovered ? "rgba(255,255,255,0.06)" : "transparent",
-        color:        active ? "#ffffff" : hovered ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.55)",
-        fontSize:     "13px",
-        fontWeight:   active ? 500 : 400,
-        cursor:       "pointer",
-        textAlign:    "left",
-        transition:   "background 100ms, color 100ms",
-        fontFamily:   "inherit",
+        color: active ? "#ffffff" : hovered ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.55)",
+        fontSize: "13px",
+        fontWeight: active ? 500 : 400,
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "background 100ms, color 100ms",
+        fontFamily: "inherit",
         letterSpacing: "-0.01em",
-        whiteSpace:   "nowrap",
+        whiteSpace: "nowrap",
       }}
     >
       {providerIcon && (
@@ -1756,12 +1812,12 @@ function RatioPreview({ ratio }: { ratio: string }) {
   return (
     <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "44px", flexShrink: 0 }}>
       <span style={{
-        display:     "inline-block",
-        width:       `${Math.round(rw)}px`,
-        height:      `${Math.round(rh)}px`,
-        border:      "1.5px solid rgba(255,255,255,0.75)",
+        display: "inline-block",
+        width: `${Math.round(rw)}px`,
+        height: `${Math.round(rh)}px`,
+        border: "1.5px solid rgba(255,255,255,0.75)",
         borderRadius: "5px",
-        flexShrink:  0,
+        flexShrink: 0,
       }} />
     </span>
   );
@@ -1798,6 +1854,13 @@ function ProviderIcon({ provider }: { provider: string }) {
           <path d="M19.9361 12.1411L17.6243 8.09523L17.3525 7.61735L18.5771 5.47657C18.6187 5.4023 18.6411 5.32158 18.6411 5.23763C18.6411 5.15367 18.6187 5.07295 18.5771 4.99868L17.215 2.61896C17.1735 2.5447 17.1127 2.48658 17.0424 2.4446C16.972 2.40262 16.8921 2.38002 16.8058 2.38002H11.6323L10.4077 0.236011C10.3245 0.0874804 10.1679 -0.00292969 9.9984 -0.00292969H7.27738C7.19425 -0.00292969 7.11111 0.0196728 7.04077 0.0616489C6.97042 0.103625 6.90967 0.161746 6.86811 0.236011L4.55316 4.28509L4.28138 4.75974H1.83213C1.749 4.75974 1.66587 4.78235 1.59552 4.82432C1.52518 4.8663 1.46443 4.92442 1.42286 4.99868L0.0639488 7.38164C0.0223821 7.4559 0 7.53663 0 7.62058C0 7.70453 0.0223821 7.78525 0.0639488 7.85952L2.65068 12.3833L1.42606 14.5273C1.38449 14.6015 1.36211 14.6823 1.36211 14.7662C1.36211 14.8502 1.38449 14.9309 1.42606 15.0051L2.78817 17.3849C2.82974 17.4591 2.89049 17.5173 2.96083 17.5592C3.03118 17.6012 3.11111 17.6238 3.19744 17.6238H8.36771L9.59233 19.7678C9.67546 19.9163 9.83214 20.0068 10.0016 20.0068H12.7226C12.8058 20.0068 12.8889 19.9842 12.9592 19.9422C13.0296 19.9002 13.0903 19.8421 13.1319 19.7678L15.7186 15.2441H18.1679C18.251 15.2441 18.3341 15.2215 18.4045 15.1795C18.4748 15.1375 18.5356 15.0794 18.5771 15.0051L19.9393 12.6254C19.9808 12.5512 20.0032 12.4704 20.0032 12.3865C20.0032 12.3025 19.9808 12.2218 19.9393 12.1475L19.9361 12.1411ZM7.27738 0.474952L8.63949 2.8579L7.27738 5.23763H18.1679L16.8058 7.61735H6.45883L4.82494 4.75974L7.27738 0.474952ZM8.09273 17.1395H3.19424L4.55636 14.7565H7.27738L1.83213 5.23763H4.55316L5.91527 7.61735L9.72662 14.2851L8.09273 17.1427V17.1395ZM16.8058 12.3768L15.4468 9.99707L10.0016 19.5224L8.63949 17.1427L10.0016 14.763L13.813 8.09523H17.0807L19.53 12.38H16.8058V12.3768Z" />
         </svg>
       );
+    case "X":
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9.23842 15.4055L17.3051 9.26292C17.7006 8.9618 18.2658 9.07925 18.4543 9.54702C19.446 12.0138 19.0029 14.9784 17.0297 17.0138C15.0566 19.0492 12.3111 19.4955 9.80163 18.4789L7.06027 19.7882C10.9922 22.5604 15.7667 21.8748 18.7504 18.795C21.117 16.3538 21.8499 13.0262 21.1646 10.0254L21.1708 10.0318C20.1769 5.62354 21.4151 3.86151 23.9515 0.258408C23.9702 0.231693 23.9351 0.202703 23.9123 0.226139L20.7939 3.44289V3.43221L9.23842 15.4055Z" />
+          <path d="M7.65167 7.33217C5.24368 9.81392 4.75711 14.1176 7.57924 16.8984L7.57713 16.9005L0.0792788 23.8097C0.0528384 23.834 0.0162235 23.8015 0.0377551 23.7728C0.487937 23.1707 1.01883 22.595 1.54932 22.0198L1.57777 21.9889C3.28214 20.1411 4.97141 18.3097 3.93926 15.7216C2.55615 12.2552 3.36158 8.19287 5.9228 5.55089C8.58547 2.80639 12.507 2.1144 15.7826 3.5048C16.5072 3.78245 17.1388 4.17758 17.6315 4.54493L14.8964 5.84777C12.3497 4.7457 9.43229 5.49537 7.65167 7.33217Z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -1812,12 +1875,12 @@ function RatioTriggerPreview({ ratio }: { ratio: string }) {
   if (rh > maxH) { rh = maxH; rw = (w / h) * maxH; }
   return (
     <span style={{
-      display:      "inline-block",
-      width:        `${Math.round(rw)}px`,
-      height:       `${Math.round(rh)}px`,
-      border:       "1.5px solid currentColor",
+      display: "inline-block",
+      width: `${Math.round(rw)}px`,
+      height: `${Math.round(rh)}px`,
+      border: "1.5px solid currentColor",
       borderRadius: "2px",
-      flexShrink:   0,
+      flexShrink: 0,
     }} />
   );
 }
@@ -1855,17 +1918,20 @@ function GalleryCard({
   onDownload?: (url: string, isVideo: boolean) => Promise<void>;
   onDelete?: (id: string, source: "generation" | "upload") => Promise<void>;
 }) {
-  const videoRef                        = useRef<HTMLVideoElement>(null);
-  const cardRef                         = useRef<HTMLDivElement>(null);
-  const preloaded                       = loadedImageUrls.has(item.url);
-  const [playing, setPlaying]           = useState(false);
-  const [failed, setFailed]             = useState(false);
-  const [imgLoaded, setImgLoaded]       = useState(preloaded);
-  const [shouldLoad, setShouldLoad]     = useState(preloaded);
-  const [copied, setCopied]             = useState(false);
-  const [downloading, setDownloading]   = useState(false);
-  const [deleting, setDeleting]         = useState(false);
-  const isVideo                         = item.mediaType === "video";
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const preloaded = loadedImageUrls.has(item.url);
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(preloaded);
+  const [shouldLoad, setShouldLoad] = useState(preloaded);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [cardImgIdx, setCardImgIdx] = useState(0);
+  const isVideo = item.mediaType === "video";
+  const allUrls = item.imageUrls ?? [item.url];
+  const displayUrl = allUrls[cardImgIdx] ?? item.url;
 
   useEffect(() => {
     if (preloaded) return;
@@ -1877,7 +1943,7 @@ function GalleryCard({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cssRatio = (() => {
@@ -1927,7 +1993,7 @@ function GalleryCard({
       ref={cardRef}
       className="gallery-item"
       style={cssRatio ? { aspectRatio: cssRatio } : undefined}
-      onMouseEnter={() => { if (isVideo) videoRef.current?.play().then(() => setPlaying(true)).catch(() => {}); }}
+      onMouseEnter={() => { if (isVideo) videoRef.current?.play().then(() => setPlaying(true)).catch(() => { }); }}
       onMouseLeave={() => { if (isVideo && videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; setPlaying(false); } }}
       onClick={onOpen}
     >
@@ -1945,13 +2011,58 @@ function GalleryCard({
           {(!shouldLoad || !imgLoaded) && <div className="gallery-shimmer" />}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={shouldLoad ? `/_next/image?url=${encodeURIComponent(item.url)}&w=828&q=75` : undefined}
+            key={displayUrl}
+            src={shouldLoad ? `/_next/image?url=${encodeURIComponent(displayUrl)}&w=828&q=75` : undefined}
             alt={item.prompt ?? ""}
             decoding="async"
             onLoad={() => { setImgLoaded(true); loadedImageUrls.add(item.url); }}
             onError={() => setFailed(true)}
             style={{ display: "block", width: "100%", height: "auto", opacity: imgLoaded ? 1 : 0, transition: "opacity 280ms ease" }}
           />
+          {/* Inner carousel nav — only when multiple images */}
+          {allUrls.length > 1 && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setImgLoaded(false); setCardImgIdx(i => Math.max(0, i - 1)); }}
+                disabled={cardImgIdx === 0}
+                style={{
+                  position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
+                  width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", zIndex: 3, opacity: cardImgIdx === 0 ? 0.25 : 1,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); setImgLoaded(false); setCardImgIdx(i => Math.min(allUrls.length - 1, i + 1)); }}
+                disabled={cardImgIdx === allUrls.length - 1}
+                style={{
+                  position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                  width: 26, height: 26, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", zIndex: 3, opacity: cardImgIdx === allUrls.length - 1 ? 0.25 : 1,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+              <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 4, zIndex: 3 }}>
+                {allUrls.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={e => { e.stopPropagation(); setImgLoaded(false); setCardImgIdx(idx); }}
+                    style={{
+                      width: idx === cardImgIdx ? 12 : 6, height: 6, borderRadius: 3,
+                      background: idx === cardImgIdx ? "#fff" : "rgba(255,255,255,0.4)",
+                      border: "none", cursor: "pointer", padding: 0, transition: "all 150ms",
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -1972,7 +2083,7 @@ function GalleryCard({
         {item.prompt && onCopyPrompt && (
           <button className="gallery-action-btn" title={copied ? "Copied!" : "Copy prompt"} onClick={handleCopy}>
             {copied ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#77E544" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3df5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             ) : (
@@ -2038,24 +2149,24 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
 
   if (downloads.length === 0) return null;
 
-  const allDone     = downloads.every(d => d.status !== "preparing");
-  const title       = allDone ? "Download complete" : "Preparing download";
+  const allDone = downloads.every(d => d.status !== "preparing");
+  const title = allDone ? "Download complete" : "Preparing download";
 
   return (
     <div style={{
-      position:             "fixed",
-      top:                  "64px",
-      right:                "16px",
-      width:                "300px",
-      background:           "rgba(16,18,20,0.97)",
-      backdropFilter:       "blur(24px)",
+      position: "fixed",
+      top: "64px",
+      right: "16px",
+      width: "300px",
+      background: "rgba(16,18,20,0.97)",
+      backdropFilter: "blur(24px)",
       WebkitBackdropFilter: "blur(24px)",
-      borderRadius:         "18px",
-      border:               "1px solid rgba(255,255,255,0.07)",
-      boxShadow:            "0 12px 48px rgba(0,0,0,0.7), 0 2px 12px rgba(0,0,0,0.4)",
-      zIndex:               9500,
-      overflow:             "hidden",
-      fontFamily:           "inherit",
+      borderRadius: "18px",
+      border: "1px solid rgba(255,255,255,0.07)",
+      boxShadow: "0 12px 48px rgba(0,0,0,0.7), 0 2px 12px rgba(0,0,0,0.4)",
+      zIndex: 9500,
+      overflow: "hidden",
+      fontFamily: "inherit",
     }}>
       {/* Header */}
       <div
@@ -2068,7 +2179,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
             <circle cx="14" cy="14" r="12" stroke="rgba(119,229,68,0.2)" strokeWidth="2" />
             <circle
               cx="14" cy="14" r="12"
-              stroke="#77E544" strokeWidth="2"
+              stroke="#ff3df5" strokeWidth="2"
               strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 12}`}
               strokeDashoffset={allDone ? 0 : `${2 * Math.PI * 12 * 0.25}`}
@@ -2077,7 +2188,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
             />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#77E544" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3df5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </div>
@@ -2096,13 +2207,13 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
         <div style={{ padding: "0 8px 8px" }}>
           {downloads.map(task => (
             <div key={task.id} style={{
-              display:       "flex",
-              alignItems:    "center",
-              gap:           "10px",
-              padding:       "9px 10px",
-              background:    "rgba(255,255,255,0.035)",
-              borderRadius:  "10px",
-              marginBottom:  "4px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "9px 10px",
+              background: "rgba(255,255,255,0.035)",
+              borderRadius: "10px",
+              marginBottom: "4px",
             }}>
               {/* File icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={task.status === "preparing" ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.45)"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -2121,7 +2232,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
                   <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
                 </svg>
               ) : (
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#77E544", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#ff3df5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#060A06" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
                   </svg>
@@ -2138,25 +2249,32 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
 function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void }) {
-  const [visible, setVisible]               = useState(false);
-  const [fullLoaded, setFullLoaded]         = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [fullLoaded, setFullLoaded] = useState(false);
   const [promptExpanded, setPromptExpanded] = useState(false);
-  const [copied, setCopied]                 = useState(false);
-  const [downloading, setDownloading]       = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [imgIdx, setImgIdx] = useState(0);
+  const allUrls = item.imageUrls ?? [item.url];
+  const lightboxUrl = allUrls[imgIdx] ?? item.url;
 
   useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { handleClose(); return; }
+      if (e.key === "ArrowLeft") { setFullLoaded(false); setImgIdx(i => Math.max(0, i - 1)); }
+      if (e.key === "ArrowRight") { setFullLoaded(false); setImgIdx(i => Math.min(allUrls.length - 1, i + 1)); }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUrls.length]);
 
   const handleClose = () => { setVisible(false); setTimeout(onClose, 200); };
 
   const copyPrompt = () => {
     if (!item.prompt) return;
-    navigator.clipboard.writeText(item.prompt).catch(() => {});
+    navigator.clipboard.writeText(item.prompt).catch(() => { });
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
@@ -2165,11 +2283,11 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
     if (downloading) return;
     setDownloading(true);
     try {
-      const res  = await fetch(item.url);
+      const res = await fetch(lightboxUrl);
       const blob = await res.blob();
-      const ext  = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
-      const a    = document.createElement("a");
-      a.href     = URL.createObjectURL(blob);
+      const ext = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg";
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
       a.download = `image-${item.id.slice(0, 8)}.${ext}`;
       a.click();
       URL.revokeObjectURL(a.href);
@@ -2182,11 +2300,11 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
     new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   const infoRows = [
-    item.model        && { label: "Model",        value: item.model },
-    item.quality      && { label: "Quality",      value: item.quality.charAt(0).toUpperCase() + item.quality.slice(1) },
+    item.model && { label: "Model", value: item.model },
+    item.quality && { label: "Quality", value: item.quality.charAt(0).toUpperCase() + item.quality.slice(1) },
     item.aspect_ratio && { label: "Aspect ratio", value: item.aspect_ratio },
-    item.source       && { label: "Source",       value: item.source === "generation" ? "Generated" : "Uploaded" },
-                         { label: "Created",      value: formatDate(item.created_at) },
+    item.source && { label: "Source", value: item.source === "generation" ? "Generated" : "Uploaded" },
+    { label: "Created", value: formatDate(item.created_at) },
   ].filter(Boolean) as { label: string; value: string }[];
 
   const panelStyle: React.CSSProperties = {
@@ -2219,28 +2337,79 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
     }}>
 
       {/* ── Image (vertically centered column) ── */}
-      <div style={{ flex: 1, minHeight: "calc(100vh - 48px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        position: "relative", flexShrink: 0,
-        maxWidth: "100%",
-        transform: visible ? "scale(1)" : "scale(0.96)", transition: "transform 200ms ease",
-        borderRadius: "12px", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
-      }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/_next/image?url=${encodeURIComponent(item.url)}&w=828&q=75`} alt="" aria-hidden style={{
-          display: "block",
-          maxHeight: "calc(100vh - 48px)",
-          width: "100%", height: "auto", objectFit: "contain",
-          filter: fullLoaded ? "none" : "blur(12px)",
-          transform: fullLoaded ? "scale(1)" : "scale(1.04)",
-          transition: "filter 320ms ease, transform 320ms ease",
-        }} />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={item.url} alt={item.prompt ?? ""} onLoad={() => setFullLoaded(true)} style={{
-          position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", objectFit: "contain",
-          opacity: fullLoaded ? 1 : 0, transition: "opacity 320ms ease",
-        }} />
-      </div>
+      <div style={{ flex: 1, minHeight: "calc(100vh - 48px)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+
+        {/* Prev button */}
+        {allUrls.length > 1 && (
+          <button
+            onClick={e => { e.stopPropagation(); setFullLoaded(false); setImgIdx(i => Math.max(0, i - 1)); }}
+            disabled={imgIdx === 0}
+            style={{
+              position: "absolute", left: 0, zIndex: 10,
+              width: 40, height: 40, borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.15)", background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", opacity: imgIdx === 0 ? 0.2 : 1, transition: "opacity 150ms",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+        )}
+
+        <div onClick={e => e.stopPropagation()} style={{
+          position: "relative", flexShrink: 0,
+          maxWidth: "100%",
+          transform: visible ? "scale(1)" : "scale(0.96)", transition: "transform 200ms ease",
+          borderRadius: "12px", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img key={`blur-${lightboxUrl}`} src={`/_next/image?url=${encodeURIComponent(lightboxUrl)}&w=828&q=75`} alt="" aria-hidden style={{
+            display: "block",
+            maxHeight: "calc(100vh - 48px)",
+            width: "100%", height: "auto", objectFit: "contain",
+            filter: fullLoaded ? "none" : "blur(12px)",
+            transform: fullLoaded ? "scale(1)" : "scale(1.04)",
+            transition: "filter 320ms ease, transform 320ms ease",
+          }} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img key={`full-${lightboxUrl}`} src={lightboxUrl} alt={item.prompt ?? ""} onLoad={() => setFullLoaded(true)} style={{
+            position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", objectFit: "contain",
+            opacity: fullLoaded ? 1 : 0, transition: "opacity 320ms ease",
+          }} />
+          {/* Dot indicators */}
+          {allUrls.length > 1 && (
+            <div style={{ position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 5, zIndex: 5 }}>
+              {allUrls.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={e => { e.stopPropagation(); setFullLoaded(false); setImgIdx(idx); }}
+                  style={{
+                    width: idx === imgIdx ? 16 : 8, height: 8, borderRadius: 4,
+                    background: idx === imgIdx ? "#fff" : "rgba(255,255,255,0.4)",
+                    border: "none", cursor: "pointer", padding: 0, transition: "all 150ms",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Next button */}
+        {allUrls.length > 1 && (
+          <button
+            onClick={e => { e.stopPropagation(); setFullLoaded(false); setImgIdx(i => Math.min(allUrls.length - 1, i + 1)); }}
+            disabled={imgIdx === allUrls.length - 1}
+            style={{
+              position: "absolute", right: 0, zIndex: 10,
+              width: 40, height: 40, borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.15)", background: "rgba(0,0,0,0.5)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", opacity: imgIdx === allUrls.length - 1 ? 0.2 : 1, transition: "opacity 150ms",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        )}
       </div>
 
       {/* ── Right panel ── */}
@@ -2270,13 +2439,13 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
                   padding: "4px 12px", borderRadius: "8px",
                   border: "1px solid rgba(255,255,255,0.1)",
                   background: "rgba(255,255,255,0.05)",
-                  color: copied ? "#77E544" : "rgba(255,255,255,0.65)",
+                  color: copied ? "#ff3df5" : "rgba(255,255,255,0.65)",
                   fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                   transition: "background 140ms, color 140ms",
                   borderColor: copied ? "rgba(119,229,68,0.3)" : "rgba(255,255,255,0.1)",
                 }}
-                onMouseEnter={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#fff"; }}}
-                onMouseLeave={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.65)"; }}}
+                onMouseEnter={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#fff"; } }}
+                onMouseLeave={e => { if (!copied) { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "rgba(255,255,255,0.65)"; } }}
               >
                 {copied ? "Copied!" : "Copy"}
               </button>
@@ -2348,8 +2517,8 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
             fontSize: "13px", fontWeight: 600, cursor: downloading ? "default" : "pointer",
             fontFamily: "inherit", transition: "background 140ms, color 140ms",
           }}
-          onMouseEnter={e => { if (!downloading) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; }}}
-          onMouseLeave={e => { if (!downloading) { e.currentTarget.style.background = "#0D1012"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; }}}
+          onMouseEnter={e => { if (!downloading) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; } }}
+          onMouseLeave={e => { if (!downloading) { e.currentTarget.style.background = "#0D1012"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; } }}
         >
           {downloading ? (
             <span style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.15)", borderTopColor: "rgba(255,255,255,0.5)", display: "inline-block", animation: "spin 0.75s linear infinite" }} />
@@ -2500,7 +2669,7 @@ const GALLERY_CSS = `
   .gallery-actions-bottom {
     position: absolute;
     bottom: 10px;
-    left: 10px;
+    right: 10px;
     opacity: 0;
     transition: opacity 180ms ease;
     z-index: 5;

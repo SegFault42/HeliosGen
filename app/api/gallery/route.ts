@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data: gens, error: genError } = await supabaseAdmin
     .from("generations")
-    .select("id, generation_type, prompt, model, aspect_ratio, image_url, video_url, quality, created_at, reference_image_urls")
+    .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, created_at, reference_image_urls")
     .eq("user_id", userId)
     .eq("generation_type", mediaType)
     .eq("status", "done")
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
   type Item = {
     id: string;
     url: string;
+    imageUrls?: string[];
     mediaType: "image" | "video";
     prompt?: string;
     model?: string;
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
   const genItems: Item[] = (gens ?? []).map((g) => ({
     id:                  g.id,
     url:                 (mediaType === "video" ? g.video_url : g.image_url) as string,
+    imageUrls:           (g.image_urls as string[] | null)?.length ? (g.image_urls as string[]) : undefined,
     mediaType:           mediaType as "image" | "video",
     prompt:              g.prompt        ?? undefined,
     model:               g.model         ?? undefined,

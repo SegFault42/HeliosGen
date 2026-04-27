@@ -4,16 +4,16 @@ import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 
 export default function ResetPasswordModal() {
-  const open    = useWorkflowStore((s) => s.resetPasswordModalOpen);
+  const open = useWorkflowStore((s) => s.resetPasswordModalOpen);
   const setOpen = useWorkflowStore((s) => s.setResetPasswordModalOpen);
 
-  const [password, setPassword]   = useState("");
-  const [confirm, setConfirm]     = useState("");
-  const [error, setError]         = useState("");
-  const [success, setSuccess]     = useState(false);
-  const [busy, setBusy]           = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [busy, setBusy] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const supabase    = createClient();
+  const supabase = createClient();
 
   useEffect(() => {
     if (!open) return;
@@ -29,7 +29,7 @@ export default function ResetPasswordModal() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) { setError("Passwords don't match."); return; }
-    if (password.length < 6)  { setError("Password must be at least 6 characters."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
 
     setBusy(true);
     setError("");
@@ -64,7 +64,7 @@ export default function ResetPasswordModal() {
         </div>
 
         {success ? (
-          <p className="text-[12px] text-[#77E544] text-center py-2">
+          <p className="text-[12px] text-[#ff3df5] text-center py-2">
             Password updated successfully.
           </p>
         ) : (

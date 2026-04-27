@@ -64,6 +64,7 @@ create table public.generations (
 
   reference_image_urls text[]   default '{}',
   image_url            text,
+  image_urls           jsonb,
   video_url            text,
   error_msg            text
 );

@@ -24,17 +24,17 @@ import { edgeStyle } from "@/lib/edgeStyles";
 import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
-import PromptNode          from "./nodes/PromptNode";
-import ImageInputNode      from "./nodes/ImageInputNode";
-import VideoInputNode      from "./nodes/VideoInputNode";
-import GenerateNode        from "./nodes/GenerateNode";
-import VideoGeneratorNode  from "./nodes/VideoGeneratorNode";
-import AssistantNode       from "./nodes/AssistantNode";
-import GroupNode           from "./nodes/GroupNode";
+import PromptNode from "./nodes/PromptNode";
+import ImageInputNode from "./nodes/ImageInputNode";
+import VideoInputNode from "./nodes/VideoInputNode";
+import GenerateNode from "./nodes/GenerateNode";
+import VideoGeneratorNode from "./nodes/VideoGeneratorNode";
+import AssistantNode from "./nodes/AssistantNode";
+import GroupNode from "./nodes/GroupNode";
 import NodePickerMenu, { DropState } from "./NodePickerMenu";
-import SelectionToolbar    from "./SelectionToolbar";
-import CanvasToolbar       from "./CanvasToolbar";
-import AddNodeMenu         from "./AddNodeMenu";
+import SelectionToolbar from "./SelectionToolbar";
+import CanvasToolbar from "./CanvasToolbar";
+import AddNodeMenu from "./AddNodeMenu";
 import TopBar from "./TopBar";
 
 async function getAccessToken(): Promise<string | undefined> {
@@ -54,13 +54,13 @@ function authHeaders(token: string | undefined): HeadersInit {
 }
 
 const nodeTypes = {
-  promptNode:          PromptNode,
-  imageInputNode:      ImageInputNode,
-  videoInputNode:      VideoInputNode,
-  generateNode:        GenerateNode,
-  videoGeneratorNode:  VideoGeneratorNode,
-  assistantNode:       AssistantNode,
-  groupNode:           GroupNode,
+  promptNode: PromptNode,
+  imageInputNode: ImageInputNode,
+  videoInputNode: VideoInputNode,
+  generateNode: GenerateNode,
+  videoGeneratorNode: VideoGeneratorNode,
+  assistantNode: AssistantNode,
+  groupNode: GroupNode,
 };
 
 const edgeTypes = {
@@ -76,8 +76,8 @@ interface SnapGuide { type: "h" | "v"; canvasPos: number }
 // Runs inside the ReactFlow provider so it can call useReactFlow()
 function ViewportSyncer() {
   const { setViewport } = useReactFlow();
-  const activeSpaceId   = useWorkflowStore((s) => s.activeSpaceId);
-  const spaces          = useWorkflowStore((s) => s.spaces);
+  const activeSpaceId = useWorkflowStore((s) => s.activeSpaceId);
+  const spaces = useWorkflowStore((s) => s.spaces);
 
   useEffect(() => {
     const space = spaces.find((sp) => sp.id === activeSpaceId);
@@ -98,12 +98,12 @@ function ViewportSyncer() {
 function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
   const count = existingNodes.filter((n) => n.type === type).length + 1;
   const names: Record<string, string> = {
-    videoInputNode:     "VIDEO",
-    imageInputNode:     "IMAGE",
-    promptNode:         "TEXT",
-    generateNode:       "IMAGE GEN",
+    videoInputNode: "VIDEO",
+    imageInputNode: "IMAGE",
+    promptNode: "TEXT",
+    generateNode: "IMAGE GEN",
     videoGeneratorNode: "VIDEO GEN",
-    assistantNode:      "ASSISTANT",
+    assistantNode: "ASSISTANT",
   };
   if (type === "assistantNode") return "ASSISTANT";
   return `${names[type] ?? type} #${count}`;
@@ -128,9 +128,9 @@ export default function WorkflowCanvas() {
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
 
-  const [dyingEdgeIds, setDyingEdgeIds]       = useState<Set<string>>(new Set());
-  const [dyingNodeIds, setDyingNodeIds]       = useState<Set<string>>(new Set());
-  const [ancestorIds, setAncestorIds]         = useState<Set<string>>(new Set());
+  const [dyingEdgeIds, setDyingEdgeIds] = useState<Set<string>>(new Set());
+  const [dyingNodeIds, setDyingNodeIds] = useState<Set<string>>(new Set());
+  const [ancestorIds, setAncestorIds] = useState<Set<string>>(new Set());
   const [ancestorEdgeIds, setAncestorEdgeIds] = useState<Set<string>>(new Set());
   // Ref so the nodes map always reads the latest selected IDs in the same render
   const selectedIdsRef = useRef<Set<string>>(new Set());
@@ -207,9 +207,9 @@ export default function WorkflowCanvas() {
       const edge = edges.find((e) => e.id === c.id);
       if (!edge) continue;
       const isFrameEdge =
-        (edge.targetHandle === "image"      && nodes.find((n) => n.id === edge.target)?.type === "generateNode") ||
+        (edge.targetHandle === "image" && nodes.find((n) => n.id === edge.target)?.type === "generateNode") ||
         (edge.targetHandle === "startFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode") ||
-        (edge.targetHandle === "endFrame"   && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode");
+        (edge.targetHandle === "endFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode");
       if (!isFrameEdge) continue;
       const srcNode = nodes.find((n) => n.id === edge.source);
       if (srcNode?.type !== "videoInputNode") continue;
@@ -281,7 +281,7 @@ export default function WorkflowCanvas() {
       const dragged = nodes.find((n) => n.id === change.id);
       if (!dragged) return change;
 
-      const dw = dragged.measured?.width  ?? (NODE_SIZE[dragged.type ?? ""] ?? FALLBACK_SIZE).w;
+      const dw = dragged.measured?.width ?? (NODE_SIZE[dragged.type ?? ""] ?? FALLBACK_SIZE).w;
       const dh = dragged.measured?.height ?? (NODE_SIZE[dragged.type ?? ""] ?? FALLBACK_SIZE).h;
       const { x, y } = change.position;
 
@@ -290,7 +290,7 @@ export default function WorkflowCanvas() {
 
       for (const other of nodes) {
         if (other.id === change.id) continue;
-        const ow = other.measured?.width  ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).w;
+        const ow = other.measured?.width ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).w;
         const oh = other.measured?.height ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).h;
 
         // Check left / right borders of dragged vs left / right borders of other
@@ -337,7 +337,7 @@ export default function WorkflowCanvas() {
 
       for (const other of nodes) {
         if (other.id === change.id) continue;
-        const ow = other.measured?.width  ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).w;
+        const ow = other.measured?.width ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).w;
         const oh = other.measured?.height ?? (NODE_SIZE[other.type ?? ""] ?? FALLBACK_SIZE).h;
 
         for (const dx of [x, x + dw]) {
@@ -382,7 +382,7 @@ export default function WorkflowCanvas() {
   }, [nodes, edges, _onNodesChange, pushUndoSnapshot]);
 
   // ── Sidebar drag-and-drop ────────────────────────────────────────────────────
-  const wrapperRef  = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<Viewport>({ x: 0, y: 0, zoom: 1 });
 
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -404,7 +404,7 @@ export default function WorkflowCanvas() {
     );
     if (files.length > 0) {
       const dropX = (e.clientX - rect.left - panX) / zoom;
-      const dropY = (e.clientY - rect.top  - panY) / zoom;
+      const dropY = (e.clientY - rect.top - panY) / zoom;
 
       // Lay out multiple files in a row, centred on the drop point.
       // Gap between node edges (canvas units).
@@ -423,12 +423,12 @@ export default function WorkflowCanvas() {
       let cursorX = dropX - totalWidth / 2;
 
       for (const { file, type, size } of fileMeta) {
-        const nodeId  = `${type}-${uid()}`;
+        const nodeId = `${type}-${uid()}`;
         const current = useWorkflowStore.getState().nodes;
         const blobUrl = URL.createObjectURL(file);
-        const posX    = cursorX;
-        const posY    = dropY - size.h / 2;
-        cursorX      += size.w + GAP;
+        const posX = cursorX;
+        const posY = dropY - size.h / 2;
+        cursorX += size.w + GAP;
 
         if (type === "imageInputNode") {
           // Add node immediately with blob URL so the image shows at once
@@ -451,7 +451,7 @@ export default function WorkflowCanvas() {
           (async () => {
             try {
               const bytes = await file.arrayBuffer();
-              const hash  = await sha256Hex(bytes);
+              const hash = await sha256Hex(bytes);
               const { data: authData } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
               const token = authData.session?.access_token;
               const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
@@ -484,7 +484,7 @@ export default function WorkflowCanvas() {
           (async () => {
             try {
               const bytes = await file.arrayBuffer();
-              const hash  = await sha256Hex(bytes);
+              const hash = await sha256Hex(bytes);
               const { data: authData } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
               const token = authData.session?.access_token;
               const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
@@ -515,7 +515,7 @@ export default function WorkflowCanvas() {
 
     const position = {
       x: (e.clientX - rect.left - panX) / zoom,
-      y: (e.clientY - rect.top  - panY) / zoom,
+      y: (e.clientY - rect.top - panY) / zoom,
     };
 
 
@@ -537,7 +537,7 @@ export default function WorkflowCanvas() {
   // Written to the OS clipboard when nodes are copied, so Ctrl+V can tell the
   // difference between "paste my nodes" and "paste real external text".
   const nodeSentinelRef = useRef<string | null>(null);
-  const mousePosRef  = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const handleCopy = useCallback(() => {
     const selected = nodes.filter((n) => n.selected);
@@ -560,7 +560,7 @@ export default function WorkflowCanvas() {
     // not real external text the user wants to paste as a prompt node.
     const sentinel = `__rf_nodes_${Date.now()}__`;
     nodeSentinelRef.current = sentinel;
-    navigator.clipboard.writeText(sentinel).catch(() => {});
+    navigator.clipboard.writeText(sentinel).catch(() => { });
   }, [nodes, edges]);
 
   const handlePaste = useCallback(() => {
@@ -573,7 +573,7 @@ export default function WorkflowCanvas() {
     const { x: panX, y: panY, zoom } = viewportRef.current;
     const cursorCanvas = {
       x: (mousePosRef.current.x - rect.left - panX) / zoom,
-      y: (mousePosRef.current.y - rect.top  - panY) / zoom,
+      y: (mousePosRef.current.y - rect.top - panY) / zoom,
     };
 
     // Find the bounding-box center of the copied group
@@ -648,7 +648,7 @@ export default function WorkflowCanvas() {
             if (!rect) return;
             const { x: panX, y: panY, zoom } = viewportRef.current;
             const cx = (mousePosRef.current.x - rect.left - panX) / zoom;
-            const cy = (mousePosRef.current.y - rect.top  - panY) / zoom;
+            const cy = (mousePosRef.current.y - rect.top - panY) / zoom;
             const size = NODE_SIZE["promptNode"] ?? FALLBACK_SIZE;
             const currentNodes = useWorkflowStore.getState().nodes;
             addNode({
@@ -683,16 +683,16 @@ export default function WorkflowCanvas() {
       const srcNode = nodes.find((n) => n.id === connection.source);
       const tgtNode = nodes.find((n) => n.id === connection.target);
       const validTarget =
-        (th === "image"      && tgtNode?.type === "generateNode") ||
+        (th === "image" && tgtNode?.type === "generateNode") ||
         (th === "startFrame" && tgtNode?.type === "videoGeneratorNode") ||
-        (th === "endFrame"   && tgtNode?.type === "videoGeneratorNode");
+        (th === "endFrame" && tgtNode?.type === "videoGeneratorNode");
       if (srcNode?.type === "videoInputNode" && validTarget) {
         const videoUrl = (srcNode.data.videoUrl ?? srcNode.data.r2Url) as string | undefined;
         // For startFrame/endFrame always re-extract (user is declaring which frame they want).
         // For image handle, skip if already extracted to avoid redundant uploads.
         const alreadyExtracted = !!(srcNode.data.capturedFrameUrl as string | undefined);
         if (videoUrl && !videoUrl.startsWith("blob:") && (th !== "image" || !alreadyExtracted)) {
-          const trimEnd   = srcNode.data.trimEnd   as number | undefined;
+          const trimEnd = srcNode.data.trimEnd as number | undefined;
           const trimStart = srcNode.data.trimStart as number | undefined;
           // startFrame → first frame of trim range (or video start)
           // endFrame   → last frame of trim range (or video end via lastFrame:true)
@@ -719,7 +719,7 @@ export default function WorkflowCanvas() {
               body: JSON.stringify(extractBody),
             }).then((r) => r.json()).then((j) => {
               if (j.cdnUrl) updateNodeDataRef.current(srcId, { capturedFrameUrl: j.cdnUrl });
-            }).catch(() => {}).finally(() => {
+            }).catch(() => { }).finally(() => {
               updateNodeDataRef.current(srcId, { extractingFrame: false });
             });
           });
@@ -750,7 +750,7 @@ export default function WorkflowCanvas() {
 
     // If a trim is already applied, use the trimmed duration — not the full video length
     const trimStart = sourceNode.data?.trimStart as number | undefined;
-    const trimEnd   = sourceNode.data?.trimEnd   as number | undefined;
+    const trimEnd = sourceNode.data?.trimEnd as number | undefined;
     const effectiveDuration = (trimStart !== undefined && trimEnd !== undefined)
       ? trimEnd - trimStart
       : videoDuration;
@@ -762,7 +762,7 @@ export default function WorkflowCanvas() {
   }, [onConnect, nodes, updateNodeData]);
 
   // ── Edge drop → node picker ─────────────────────────────────────────────
-  const [isConnecting, setIsConnecting]   = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [dropState, setDropState] = useState<DropState | null>(null);
   const [log, setLog] = useState<{ text: string; ok: boolean }[]>([]);
 
@@ -804,10 +804,10 @@ export default function WorkflowCanvas() {
       if (
         source?.type === "promptNode" &&
         (connection.targetHandle === "image" ||
-         connection.targetHandle === "resource" ||
-         connection.targetHandle === "startFrame" ||
-         connection.targetHandle === "endFrame" ||
-         connection.targetHandle === "videoRef")
+          connection.targetHandle === "resource" ||
+          connection.targetHandle === "startFrame" ||
+          connection.targetHandle === "endFrame" ||
+          connection.targetHandle === "videoRef")
       ) return false;
 
       if (target?.type === "generateNode") {
@@ -885,16 +885,16 @@ export default function WorkflowCanvas() {
   // Tag the ReactFlow container with the output handle type so CSS can filter compatible inputs
   const onConnectStart = useCallback((event: MouseEvent | TouchEvent) => {
     const handle = (event.target as HTMLElement)?.closest?.(".react-flow__handle") as HTMLElement | null;
-    const rf     = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
+    const rf = (event.target as HTMLElement)?.closest?.(".react-flow") as HTMLElement | null;
     if (!handle || !rf) return;
     let type = "unknown";
-    if      (handle.classList.contains("node-handle-icon-out-text"))  type = "prompt";
+    if (handle.classList.contains("node-handle-icon-out-text")) type = "prompt";
     else if (handle.classList.contains("node-handle-icon-out-image")) type = "image";
     else if (handle.classList.contains("node-handle-icon-out-video")) type = "video";
     else if (handle.classList.contains("node-handle-icon-out-audio")) type = "audio";
-    else if (handle.classList.contains("node-handle-prompt"))         type = "prompt";
-    else if (handle.classList.contains("node-handle-source"))         type = "image";
-    else if (handle.classList.contains("node-handle-video"))          type = "video";
+    else if (handle.classList.contains("node-handle-prompt")) type = "prompt";
+    else if (handle.classList.contains("node-handle-source")) type = "image";
+    else if (handle.classList.contains("node-handle-video")) type = "video";
     rf.setAttribute("data-connecting-type", type);
     setConnectingHandleType(type);
     setIsConnecting(true);
@@ -928,12 +928,12 @@ export default function WorkflowCanvas() {
           : (event as MouseEvent);
 
       setDropState({
-        screenX:        clientX,
-        screenY:        clientY,
-        sourceNodeId:   connectionState.fromNode.id,
+        screenX: clientX,
+        screenY: clientY,
+        sourceNodeId: connectionState.fromNode.id,
         sourceNodeType: connectionState.fromNode.type,
         sourceHandleId: connectionState.fromHandle?.id ?? null,
-        isInputHandle:  connectionState.fromHandle?.type === "target",
+        isInputHandle: connectionState.fromHandle?.type === "target",
       });
     },
     [],
@@ -971,7 +971,7 @@ export default function WorkflowCanvas() {
           const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
           if (!videoUrl || videoUrl.startsWith("blob:")) continue;
           const trimStart = src.data.trimStart as number | undefined;
-          const trimEnd   = src.data.trimEnd   as number | undefined;
+          const trimEnd = src.data.trimEnd as number | undefined;
           const extractBody = trimEnd !== undefined
             ? { videoUrl, timeSeconds: trimEnd }
             : { videoUrl, timeSeconds: trimStart ?? 0 };
@@ -986,12 +986,12 @@ export default function WorkflowCanvas() {
           } catch { /* proceed without */ }
         }
 
-        const upstream    = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const prompt      = upstream.prompt;
-        const imageUrls   = upstream.imageUrls;
+        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
+        const prompt = upstream.prompt;
+        const imageUrls = upstream.imageUrls;
         const aspectRatio = node.data.aspectRatio ?? "1:1";
-        const quality     = node.data.quality ?? "1k";
-        const payload     = { prompt, imageUrls, model: node.data.model, aspectRatio, quality };
+        const quality = node.data.quality ?? "1k";
+        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality };
 
         if (!prompt?.trim()) {
           const promptNodeId = edges.find(
@@ -1013,10 +1013,10 @@ export default function WorkflowCanvas() {
 
         try {
           // Submit job
-          const res  = await fetch("/api/generate", {
-            method:  "POST",
+          const res = await fetch("/api/generate", {
+            method: "POST",
             headers: authHeaders(token),
-            body:    JSON.stringify(payload),
+            body: JSON.stringify(payload),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
@@ -1042,9 +1042,9 @@ export default function WorkflowCanvas() {
           let imageUrl: string | undefined;
           for (let attempt = 0; attempt < 120; attempt++) {
             await new Promise((r) => setTimeout(r, 3000));
-            const poll   = await fetch(`/api/job-status?taskId=${taskId}`);
+            const poll = await fetch(`/api/job-status?taskId=${taskId}`);
             const result = await poll.json();
-            if (result.status === "done")  { imageUrl = result.imageUrl; break; }
+            if (result.status === "done") { imageUrl = result.imageUrl; break; }
             if (result.status === "error") throw new Error(result.error ?? "Generation failed");
             if (attempt > 0 && attempt % 5 === 0) push(`[${node.id}] still waiting…`);
           }
@@ -1062,7 +1062,7 @@ export default function WorkflowCanvas() {
       // ── Assistant (text-to-text LLM) ────────────────────────────────────────
       if (node.type === "assistantNode") {
         const upstream = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
-        const prompt   = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
+        const prompt = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
 
         if (!prompt.trim()) {
           push(`[${node.id}] skipped — prompt is empty`, false);
@@ -1080,9 +1080,9 @@ export default function WorkflowCanvas() {
 
         try {
           const res = await fetch("/api/assistant", {
-            method:  "POST",
+            method: "POST",
             headers: authHeaders(token),
-            body:    JSON.stringify({
+            body: JSON.stringify({
               prompt,
               model: node.data.model ?? "claude-sonnet-4-6",
               systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
@@ -1093,7 +1093,7 @@ export default function WorkflowCanvas() {
             throw new Error(err.error ?? "Generation failed");
           }
 
-          const reader  = res.body!.getReader();
+          const reader = res.body!.getReader();
           const decoder = new TextDecoder();
           let accumulated = "";
           outer: while (true) {
@@ -1123,17 +1123,17 @@ export default function WorkflowCanvas() {
 
       // ── Video generator (Kling 3.0) ─────────────────────────────────────────
       if (node.type === "videoGeneratorNode") {
-        const upstream    = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const prompt      = upstream.prompt ?? "";
-        const duration    = node.data.duration    ?? 5;
+        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
+        const prompt = upstream.prompt ?? "";
+        const duration = node.data.duration ?? 5;
         const aspectRatio = node.data.aspectRatio ?? "16:9";
         const klingMode = node.data.klingMode ?? "pro";
-        const sound     = node.data.sound    ?? false;
+        const sound = node.data.sound ?? false;
         const payload = {
           prompt,
           startFrameUrl: upstream.startFrameUrl,
-          endFrameUrl:   upstream.endFrameUrl,
-          resources:     upstream.resources,
+          endFrameUrl: upstream.endFrameUrl,
+          resources: upstream.resources,
           sound, duration, aspectRatio,
           mode: klingMode,
         };
@@ -1157,10 +1157,10 @@ export default function WorkflowCanvas() {
         updateNodeData(nodeId, { status: "running", videoUrl: undefined });
 
         try {
-          const res  = await fetch("/api/generate-video", {
-            method:  "POST",
+          const res = await fetch("/api/generate-video", {
+            method: "POST",
             headers: authHeaders(token),
-            body:    JSON.stringify(payload),
+            body: JSON.stringify(payload),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
@@ -1183,7 +1183,7 @@ export default function WorkflowCanvas() {
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return;
     const { x: panX, y: panY, zoom } = viewportRef.current;
-    const cx = (rect.width  / 2 - panX) / zoom;
+    const cx = (rect.width / 2 - panX) / zoom;
     const cy = (rect.height / 2 - panY) / zoom;
     const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
 
@@ -1264,283 +1264,283 @@ export default function WorkflowCanvas() {
         className={`relative flex-1 flex flex-col min-h-0 min-w-0${activeTool === "hand" ? " canvas-hand-mode" : ""}`}
         onMouseMove={(e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
       >
-      <ReactFlow
-        nodes={(() => {
-          const selIds = selectedIdsRef.current;
-          const anySelected = selIds.size > 0;
-          // Build set of member IDs belonging to locked groups
-          const lockedMemberIds = new Set<string>();
-          nodes.filter((n) => n.type === "groupNode" && n.data?.locked).forEach((g) => {
-            (g.data?.memberIds as string[] | undefined)?.forEach((mid) => lockedMemberIds.add(mid));
-          });
-          return nodes.map((n) => {
-            const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id);
-            const isDimmed = anySelected && !isHighlighted && !isConnecting;
-            const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
-            const isLockedMember = lockedMemberIds.has(n.id);
-            const isLockedGroup  = n.type === "groupNode" && !!n.data?.locked;
-            const isDying        = dyingNodeIds.has(n.id);
-            const dyingClass     = isDying ? "node-dying" : null;
-            return {
-              ...n,
-              draggable: (isLockedMember || isLockedGroup) ? false : undefined,
-              className: [n.className, ancestorClass, dyingClass].filter(Boolean).join(" ") || undefined,
-              style: {
-                ...n.style,
-                opacity:    isDying ? undefined : (isDimmed ? 0.25 : undefined),
-                transition: isDying ? undefined : (anySelected ? "opacity 150ms" : undefined),
-              },
-            };
-          });
-        })()}
-        edges={(() => {
-          const selIds = selectedIdsRef.current;
-          const anySelected = selIds.size > 0;
-          return edges.map((e) => {
-            const isAncestorEdge = ancestorEdgeIds.has(e.id);
-            const isDimmed = anySelected && !isAncestorEdge;
-            return {
-              ...e,
-              className: isAncestorEdge ? [e.className, "edge-ancestor"].filter(Boolean).join(" ") : e.className,
-              data: { ...e.data, dying: dyingEdgeIds.has(e.id) || e.data?.dying === true, dimmed: isDimmed },
-            };
-          });
-        })()}
-        onNodesChange={onNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onEdgeClick={handleEdgeClick}
-        onSelectionChange={onSelectionChange}
-        onNodeClick={handleNodeClick}
-        onNodeDragStart={handleNodeDragStart}
-        onNodeDragStop={handleNodeDragStop}
-        onConnect={handleConnect}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
-        isValidConnection={isValidConnection}
-        onMove={(_, vp) => { viewportRef.current = vp; saveViewport(vp); }}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        minZoom={0.05}
-        colorMode="dark"
-        className="flex-1"
-        // Hand mode: left-click pans; Select mode: right-click pans + left-click selects
-        panOnDrag={activeTool === "hand" ? [0] : [2]}
-        selectionOnDrag={activeTool !== "hand"}
-        nodesDraggable={activeTool !== "hand"}
-        deleteKeyCode={["Delete", "Backspace"]}
-        multiSelectionKeyCode="Shift"
-        panOnScroll
-        defaultEdgeOptions={{ animated: false }}
-        connectionLineStyle={{
-          stroke: "#555555",
-          strokeWidth: 2,
-          strokeDasharray: "6 3",
-          strokeLinecap: "round",
-        }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
-        <ViewportSyncer />
-        <SelectionToolbar />
+        <ReactFlow
+          nodes={(() => {
+            const selIds = selectedIdsRef.current;
+            const anySelected = selIds.size > 0;
+            // Build set of member IDs belonging to locked groups
+            const lockedMemberIds = new Set<string>();
+            nodes.filter((n) => n.type === "groupNode" && n.data?.locked).forEach((g) => {
+              (g.data?.memberIds as string[] | undefined)?.forEach((mid) => lockedMemberIds.add(mid));
+            });
+            return nodes.map((n) => {
+              const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id);
+              const isDimmed = anySelected && !isHighlighted && !isConnecting;
+              const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
+              const isLockedMember = lockedMemberIds.has(n.id);
+              const isLockedGroup = n.type === "groupNode" && !!n.data?.locked;
+              const isDying = dyingNodeIds.has(n.id);
+              const dyingClass = isDying ? "node-dying" : null;
+              return {
+                ...n,
+                draggable: (isLockedMember || isLockedGroup) ? false : undefined,
+                className: [n.className, ancestorClass, dyingClass].filter(Boolean).join(" ") || undefined,
+                style: {
+                  ...n.style,
+                  opacity: isDying ? undefined : (isDimmed ? 0.25 : undefined),
+                  transition: isDying ? undefined : (anySelected ? "opacity 150ms" : undefined),
+                },
+              };
+            });
+          })()}
+          edges={(() => {
+            const selIds = selectedIdsRef.current;
+            const anySelected = selIds.size > 0;
+            return edges.map((e) => {
+              const isAncestorEdge = ancestorEdgeIds.has(e.id);
+              const isDimmed = anySelected && !isAncestorEdge;
+              return {
+                ...e,
+                className: isAncestorEdge ? [e.className, "edge-ancestor"].filter(Boolean).join(" ") : e.className,
+                data: { ...e.data, dying: dyingEdgeIds.has(e.id) || e.data?.dying === true, dimmed: isDimmed },
+              };
+            });
+          })()}
+          onNodesChange={onNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onEdgeClick={handleEdgeClick}
+          onSelectionChange={onSelectionChange}
+          onNodeClick={handleNodeClick}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDragStop={handleNodeDragStop}
+          onConnect={handleConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
+          onMove={(_, vp) => { viewportRef.current = vp; saveViewport(vp); }}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          minZoom={0.05}
+          colorMode="dark"
+          className="flex-1"
+          // Hand mode: left-click pans; Select mode: right-click pans + left-click selects
+          panOnDrag={activeTool === "hand" ? [0] : [2]}
+          selectionOnDrag={activeTool !== "hand"}
+          nodesDraggable={activeTool !== "hand"}
+          deleteKeyCode={["Delete", "Backspace"]}
+          multiSelectionKeyCode="Shift"
+          panOnScroll
+          defaultEdgeOptions={{ animated: false }}
+          connectionLineStyle={{
+            stroke: "#555555",
+            strokeWidth: 2,
+            strokeDasharray: "6 3",
+            strokeLinecap: "round",
+          }}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
+          <ViewportSyncer />
+          <SelectionToolbar />
 
-        {dropState && (
-          <NodePickerMenu
-            dropState={dropState}
-            onClose={() => setDropState(null)}
+          {dropState && (
+            <NodePickerMenu
+              dropState={dropState}
+              onClose={() => setDropState(null)}
+            />
+          )}
+
+          {/* ── Add-node menu (+ button) — needs to be inside ReactFlow for useReactFlow() ── */}
+          {addMenuAnchor && (
+            <AddNodeMenu
+              anchorRect={addMenuAnchor}
+              onClose={() => setAddMenuAnchor(null)}
+            />
+          )}
+
+          <Controls
+            showInteractive={false}
+            className="[&>button]:!bg-[#0D1012] [&>button]:!border-[#1A100C] [&>button]:!text-[#8D8E89] [&>button:hover]:!text-white"
           />
-        )}
 
-        {/* ── Add-node menu (+ button) — needs to be inside ReactFlow for useReactFlow() ── */}
-        {addMenuAnchor && (
-          <AddNodeMenu
-            anchorRect={addMenuAnchor}
-            onClose={() => setAddMenuAnchor(null)}
-          />
-        )}
+        </ReactFlow>
 
-        <Controls
-          showInteractive={false}
-          className="[&>button]:!bg-[#0D1012] [&>button]:!border-[#1A100C] [&>button]:!text-[#8D8E89] [&>button:hover]:!text-white"
+        {/* ── Left-middle toolbar ───────────────────────────────────────────── */}
+        <CanvasToolbar
+          activeTool={activeTool}
+          onToolChange={(tool) => setActiveTool(tool as "select" | "hand")}
+          onAddNode={(rect) => setAddMenuAnchor(rect)}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
-      </ReactFlow>
 
-      {/* ── Left-middle toolbar ───────────────────────────────────────────── */}
-      <CanvasToolbar
-        activeTool={activeTool}
-        onToolChange={(tool) => setActiveTool(tool as "select" | "hand")}
-        onAddNode={(rect) => setAddMenuAnchor(rect)}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-
-
-      {/* ── Alignment guide lines ────────────────────────────────────────────── */}
-      {snapGuides.length > 0 && (
-        <svg
-          className="absolute inset-0 pointer-events-none z-20"
-          style={{ width: "100%", height: "100%" }}
-        >
-          {snapGuides.map((guide, i) => {
-            const { x: panX, y: panY, zoom } = viewportRef.current;
-            if (guide.type === "h") {
-              const sy = guide.canvasPos * zoom + panY;
+        {/* ── Alignment guide lines ────────────────────────────────────────────── */}
+        {snapGuides.length > 0 && (
+          <svg
+            className="absolute inset-0 pointer-events-none z-20"
+            style={{ width: "100%", height: "100%" }}
+          >
+            {snapGuides.map((guide, i) => {
+              const { x: panX, y: panY, zoom } = viewportRef.current;
+              if (guide.type === "h") {
+                const sy = guide.canvasPos * zoom + panY;
+                return (
+                  <line key={i} x1={-100000} y1={sy} x2={100000} y2={sy}
+                    stroke="#555" strokeWidth={1} opacity={0.8} />
+                );
+              }
+              const sx = guide.canvasPos * zoom + panX;
               return (
-                <line key={i} x1={-100000} y1={sy} x2={100000} y2={sy}
+                <line key={i} x1={sx} y1={-100000} x2={sx} y2={100000}
                   stroke="#555" strokeWidth={1} opacity={0.8} />
               );
-            }
-            const sx = guide.canvasPos * zoom + panX;
-            return (
-              <line key={i} x1={sx} y1={-100000} x2={sx} y2={100000}
-                stroke="#555" strokeWidth={1} opacity={0.8} />
-            );
-          })}
-        </svg>
-      )}
+            })}
+          </svg>
+        )}
 
-      {/* ── Empty state picker ──────────────────────────────────────────────── */}
-      {nodes.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-          {/* Ambient radial glow */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse 80% 55% at 50% 54%, rgba(255,160,80,0.045) 0%, transparent 65%)",
-            }}
-          />
+        {/* ── Empty state picker ──────────────────────────────────────────────── */}
+        {nodes.length === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+            {/* Ambient radial glow */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: "radial-gradient(ellipse 80% 55% at 50% 54%, rgba(255,160,80,0.045) 0%, transparent 65%)",
+              }}
+            />
 
-          <div className="flex flex-col items-center gap-10">
-            <div className="flex flex-col items-center gap-2.5 pointer-events-none">
-              <h2
-                className="text-[26px] font-semibold tracking-tight leading-none"
-                style={{
-                  background: "linear-gradient(160deg, #e8e8e8 30%, #666 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                }}
-              >
-                Your space is ready
-              </h2>
-              <p className="text-[#3E3E3E] text-sm">Pick a node to start building</p>
-            </div>
-
-            <div className="flex items-stretch gap-3 pointer-events-auto">
-              {[
-                {
-                  type: "imageInputNode",
-                  label: "Image",
-                  desc: "Import a photo",
-                  icon: (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="3" />
-                      <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
-                      <path d="m3 15 5-5 4 4 3-3 6 5" />
-                    </svg>
-                  ),
-                  accent: "#fb923c",
-                },
-                {
-                  type: "videoInputNode",
-                  label: "Video",
-                  desc: "Import a clip",
-                  icon: (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="5" width="15" height="14" rx="2" />
-                      <path d="m17 8 5-3v14l-5-3V8Z" />
-                    </svg>
-                  ),
-                  accent: "#60a5fa",
-                },
-                {
-                  type: "generateNode",
-                  label: "Image Gen",
-                  desc: "AI image generation",
-                  icon: (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5L2.5 7.6c-.3.3-.5.7-.5 1.1V19a2 2 0 0 0 2 2h11.5a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
-                      <path d="M3 8h4a1 1 0 0 0 1-1V3" />
-                      <path d="M11 12h4M13 10v4" />
-                    </svg>
-                  ),
-                  accent: "#77E544",
-                },
-                {
-                  type: "videoGeneratorNode",
-                  label: "Video Gen",
-                  desc: "AI video generation",
-                  icon: (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="2" y="5" width="15" height="14" rx="2" />
-                      <path d="m17 8 5-3v14l-5-3V8Z" />
-                      <path d="M7 12h4M9 10v4" />
-                    </svg>
-                  ),
-                  accent: "#a78bfa",
-                },
-              ].map(({ type, label, desc, icon, accent }) => (
-                <button
-                  key={type}
-                  onClick={() => addNodeAtCenter(type)}
-                  className="group relative flex flex-col items-center justify-center gap-4 w-36 py-8 rounded-2xl border border-[#1A1A1A] bg-[#090B0D]"
-                  style={{ transition: "box-shadow 200ms ease, border-color 200ms ease, background 200ms ease" }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget;
-                    el.style.boxShadow = `0 0 32px ${accent}20, 0 0 0 1px ${accent}30`;
-                    el.style.borderColor = `${accent}35`;
-                    el.style.background = "#0D1012";
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget;
-                    el.style.boxShadow = "";
-                    el.style.borderColor = "#1A1A1A";
-                    el.style.background = "#090B0D";
+            <div className="flex flex-col items-center gap-10">
+              <div className="flex flex-col items-center gap-2.5 pointer-events-none">
+                <h2
+                  className="text-[26px] font-semibold tracking-tight leading-none"
+                  style={{
+                    background: "linear-gradient(160deg, #e8e8e8 30%, #666 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
                   }}
                 >
-                  <span
-                    className="flex items-center justify-center w-11 h-11 rounded-xl"
-                    style={{
-                      background: `${accent}14`,
-                      color: accent,
-                      border: `1px solid ${accent}28`,
-                      transition: "background 200ms ease",
+                  Your space is ready
+                </h2>
+                <p className="text-[#3E3E3E] text-sm">Pick a node to start building</p>
+              </div>
+
+              <div className="flex items-stretch gap-3 pointer-events-auto">
+                {[
+                  {
+                    type: "imageInputNode",
+                    label: "Image",
+                    desc: "Import a photo",
+                    icon: (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="3" />
+                        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
+                        <path d="m3 15 5-5 4 4 3-3 6 5" />
+                      </svg>
+                    ),
+                    accent: "#fb923c",
+                  },
+                  {
+                    type: "videoInputNode",
+                    label: "Video",
+                    desc: "Import a clip",
+                    icon: (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="5" width="15" height="14" rx="2" />
+                        <path d="m17 8 5-3v14l-5-3V8Z" />
+                      </svg>
+                    ),
+                    accent: "#60a5fa",
+                  },
+                  {
+                    type: "generateNode",
+                    label: "Image Gen",
+                    desc: "AI image generation",
+                    icon: (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5L2.5 7.6c-.3.3-.5.7-.5 1.1V19a2 2 0 0 0 2 2h11.5a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
+                        <path d="M3 8h4a1 1 0 0 0 1-1V3" />
+                        <path d="M11 12h4M13 10v4" />
+                      </svg>
+                    ),
+                    accent: "#ff3df5",
+                  },
+                  {
+                    type: "videoGeneratorNode",
+                    label: "Video Gen",
+                    desc: "AI video generation",
+                    icon: (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="5" width="15" height="14" rx="2" />
+                        <path d="m17 8 5-3v14l-5-3V8Z" />
+                        <path d="M7 12h4M9 10v4" />
+                      </svg>
+                    ),
+                    accent: "#a78bfa",
+                  },
+                ].map(({ type, label, desc, icon, accent }) => (
+                  <button
+                    key={type}
+                    onClick={() => addNodeAtCenter(type)}
+                    className="group relative flex flex-col items-center justify-center gap-4 w-36 py-8 rounded-2xl border border-[#1A1A1A] bg-[#090B0D]"
+                    style={{ transition: "box-shadow 200ms ease, border-color 200ms ease, background 200ms ease" }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget;
+                      el.style.boxShadow = `0 0 32px ${accent}20, 0 0 0 1px ${accent}30`;
+                      el.style.borderColor = `${accent}35`;
+                      el.style.background = "#0D1012";
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget;
+                      el.style.boxShadow = "";
+                      el.style.borderColor = "#1A1A1A";
+                      el.style.background = "#090B0D";
                     }}
                   >
-                    {icon}
-                  </span>
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[#c0c0c0] group-hover:text-white text-[13px] font-medium transition-colors duration-150">
-                      {label}
+                    <span
+                      className="flex items-center justify-center w-11 h-11 rounded-xl"
+                      style={{
+                        background: `${accent}14`,
+                        color: accent,
+                        border: `1px solid ${accent}28`,
+                        transition: "background 200ms ease",
+                      }}
+                    >
+                      {icon}
                     </span>
-                    <span className="text-[#333] text-[11px] transition-colors duration-150 group-hover:text-[#555]">
-                      {desc}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[#c0c0c0] group-hover:text-white text-[13px] font-medium transition-colors duration-150">
+                        {label}
+                      </span>
+                      <span className="text-[#333] text-[11px] transition-colors duration-150 group-hover:text-[#555]">
+                        {desc}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[#252525] text-[11px] tracking-wide pointer-events-none select-none">
+                or drag &amp; drop images and videos onto the canvas
+              </p>
             </div>
-
-            <p className="text-[#252525] text-[11px] tracking-wide pointer-events-none select-none">
-              or drag &amp; drop images and videos onto the canvas
-            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {log.length > 0 && (
-        <div className="h-24 bg-[#080A0C] border-t border-[#1A100C] overflow-y-auto px-4 py-2 shrink-0">
-          {log.map((l, i) => (
-            <p key={i} className={`text-[11px] font-mono leading-5 ${l.ok ? "text-[#8D8E89]" : "text-red-500"}`}>
-              {l.text}
-            </p>
-          ))}
-        </div>
-      )}
+        {log.length > 0 && (
+          <div className="h-24 bg-[#080A0C] border-t border-[#1A100C] overflow-y-auto px-4 py-2 shrink-0">
+            {log.map((l, i) => (
+              <p key={i} className={`text-[11px] font-mono leading-5 ${l.ok ? "text-[#8D8E89]" : "text-red-500"}`}>
+                {l.text}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

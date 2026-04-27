@@ -3,7 +3,7 @@ import { join } from "path";
 
 export type JobResult =
   | { status: "pending"; type?: "image" | "video" }
-  | { status: "done"; imageUrl?: string; videoUrl?: string }
+  | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
   | { status: "error"; error: string };
 
 const FILE = join(process.cwd(), ".job-store.json");

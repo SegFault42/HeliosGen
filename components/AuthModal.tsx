@@ -6,17 +6,17 @@ import { useWorkflowStore } from "@/lib/store";
 type View = "signin" | "signup" | "forgot";
 
 export default function AuthModal() {
-  const open         = useWorkflowStore((s) => s.authModalOpen);
-  const setOpen      = useWorkflowStore((s) => s.setAuthModalOpen);
+  const open = useWorkflowStore((s) => s.authModalOpen);
+  const setOpen = useWorkflowStore((s) => s.setAuthModalOpen);
 
-  const [mode, setMode]         = useState<View>("signin");
+  const [mode, setMode] = useState<View>("signin");
   const [forgotSent, setForgotSent] = useState(false);
-  const [email, setEmail]       = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
-  const [busy, setBusy]         = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
-  const supabase    = createClient();
+  const supabase = createClient();
 
   // Close on Escape
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function AuthModal() {
 
         {mode === "forgot" ? (
           forgotSent ? (
-            <p className="text-[12px] text-[#77E544] text-center py-2">
+            <p className="text-[12px] text-[#ff3df5] text-center py-2">
               Check your email for a reset link.
             </p>
           ) : (
@@ -125,9 +125,8 @@ export default function AuthModal() {
                 <button
                   key={m}
                   onClick={() => { setMode(m); setError(""); }}
-                  className={`flex-1 text-[11px] py-1.5 transition-colors ${
-                    mode === m ? "bg-[#1A100C] text-white" : "text-[#8D8E89] hover:text-white"
-                  }`}
+                  className={`flex-1 text-[11px] py-1.5 transition-colors ${mode === m ? "bg-[#1A100C] text-white" : "text-[#8D8E89] hover:text-white"
+                    }`}
                 >
                   {m === "signin" ? "Sign in" : "Sign up"}
                 </button>
@@ -155,9 +154,8 @@ export default function AuthModal() {
               />
 
               {error && (
-                <p className={`text-[11px] leading-tight ${
-                  error.startsWith("Check") ? "text-[#8D8E89]" : "text-red-400"
-                }`}>
+                <p className={`text-[11px] leading-tight ${error.startsWith("Check") ? "text-[#8D8E89]" : "text-red-400"
+                  }`}>
                   {error}
                 </p>
               )}

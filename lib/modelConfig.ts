@@ -60,6 +60,10 @@ export interface ImageModel {
    */
   textOnlyApiId?: string;
   /**
+   * When set, overrides apiInput.promptMaxLength for the text-only (no images) variant.
+   */
+  textOnlyPromptMaxLength?: number;
+  /**
    * When set and provider is "azure", these quality values are offered
    * instead of the standard 1k/2k/4k picker.
    */
@@ -165,6 +169,27 @@ export const IMAGE_MODELS: ImageModel[] = [
       qualityMap: { "1k": "basic", "2k": "basic", "4k": "high" },
       qualityOptions: ["2k", "4k"],
       promptMaxLength: 3000,
+      extra: { nsfw_checker: false },
+    },
+  },
+  // ── X (Grok) ────────────────────────────────────────────────────────────────
+  {
+    id: "grok-imagine-image",
+    // apiId used when images ARE attached (image-to-image)
+    apiId: "grok-imagine/image-to-image",
+    // apiId used when NO images are attached (text-to-image)
+    textOnlyApiId: "grok-imagine/text-to-image",
+    name: "Grok Imagine",
+    provider: "X",
+    ratios: ["1:1", "16:9", "9:16", "2:3", "3:2"],
+    supportsImages: true,
+    maxImages: 5,
+    supportsQuality: false,
+    textOnlyPromptMaxLength: 5000,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      imageInputKey: "image_urls",
+      promptMaxLength: 390000,
       extra: { nsfw_checker: false },
     },
   },

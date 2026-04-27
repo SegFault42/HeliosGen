@@ -371,7 +371,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
                 onClick={(e) => { e.stopPropagation(); handleGenerate(); }}
                 disabled={!hasPrompt}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                style={{ border: "1px solid #2a4a0f", color: "#77E544", background: "rgba(119,229,68,0.07)" }}
+                style={{ border: "1px solid #2a4a0f", color: "#ff3df5", background: "rgba(119,229,68,0.07)" }}
                 onMouseEnter={(e) => { if (hasPrompt) (e.currentTarget as HTMLElement).style.background = "rgba(119,229,68,0.13)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(119,229,68,0.07)"; }}
               >

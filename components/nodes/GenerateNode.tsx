@@ -15,15 +15,15 @@ type GenerateNodeType = Node<NodeData, "generateNode">;
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 
 // Derived from config — no hardcoding needed
-const MODELS     = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
+const MODELS = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
 const MODEL_CAPS = Object.fromEntries(
   IMAGE_MODELS.map((m) => [m.id, {
-    supportsImages:      m.supportsImages,
-    supportsQuality:     m.supportsQuality,
-    ratios:              m.ratios,
-    maxImages:           m.maxImages,
-    qualityOptions:      m.apiInput.qualityOptions,
-    qualityKey:          m.apiInput.qualityKey,
+    supportsImages: m.supportsImages,
+    supportsQuality: m.supportsQuality,
+    ratios: m.ratios,
+    maxImages: m.maxImages,
+    qualityOptions: m.apiInput.qualityOptions,
+    qualityKey: m.apiInput.qualityKey,
     azureQualityOptions: m.azureQualityOptions,
   }])
 );
@@ -47,10 +47,10 @@ function ratioRect(value: string) {
 // ── Status dot ────────────────────────────────────────────────────────────────
 
 const STATUS_DOT: Record<string, string> = {
-  idle:    "bg-[#2A1A14]",
+  idle: "bg-[#2A1A14]",
   running: "bg-amber-400 animate-pulse",
-  done:    "bg-[#77E544]",
-  error:   "bg-red-500",
+  done: "bg-[#ff3df5]",
+  error: "bg-red-500",
 };
 
 /**
@@ -155,18 +155,18 @@ function resolveMentions(
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
-  const updateNodeData       = useWorkflowStore((s) => s.updateNodeData);
-  const updateNodeSize       = useWorkflowStore((s) => s.updateNodeSize);
+  const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
+  const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
   const removeEdgesForHandle = useWorkflowStore((s) => s.removeEdgesForHandle);
-  const setAuthModalOpen     = useWorkflowStore((s) => s.setAuthModalOpen);
-  const flashEdgeError       = useWorkflowStore((s) => s.flashEdgeError);
-  const onNodesChange        = useWorkflowStore((s) => s.onNodesChange);
-  const addNode              = useWorkflowStore((s) => s.addNode);
-  const insertEdge           = useWorkflowStore((s) => s.insertEdge);
-  const nodes                = useWorkflowStore((s) => s.nodes);
-  const edges                = useWorkflowStore((s) => s.edges);
-  const debugMode            = useWorkflowStore((s) => s.debugMode);
-  const parentGroupSelected  = useWorkflowStore((s) => {
+  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+  const flashEdgeError = useWorkflowStore((s) => s.flashEdgeError);
+  const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
+  const addNode = useWorkflowStore((s) => s.addNode);
+  const insertEdge = useWorkflowStore((s) => s.insertEdge);
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const debugMode = useWorkflowStore((s) => s.debugMode);
+  const parentGroupSelected = useWorkflowStore((s) => {
     const self = s.nodes.find((n) => n.id === id);
     if (!self?.parentId) return false;
     return s.nodes.find((n) => n.id === self.parentId)?.selected ?? false;
@@ -189,19 +189,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     }
   }, [selected]);
 
-  const [hovering, setHovering]        = useState(false);
-  const [isSaving, setIsSaving]        = useState(false);
-  const [modelOpen, setModelOpen]     = useState(false);
-  const [ratioOpen, setRatioOpen]     = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [ratioOpen, setRatioOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [azureQualityOpen, setAzureQualityOpen] = useState(false);
-  const modelPopup        = useAnimatedPopup(modelOpen && !data.imageUrl);
-  const ratioPopup        = useAnimatedPopup(ratioOpen);
-  const qualityPopup      = useAnimatedPopup(qualityOpen);
+  const modelPopup = useAnimatedPopup(modelOpen && !data.imageUrl);
+  const ratioPopup = useAnimatedPopup(ratioOpen);
+  const qualityPopup = useAnimatedPopup(qualityOpen);
   const azureQualityPopup = useAnimatedPopup(azureQualityOpen);
-  const [loading, setLoading]         = useState(false);
+  const [loading, setLoading] = useState(false);
   const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
-  const [lightboxOpen, setLightboxOpen]       = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [lightboxImgLoaded, setLightboxImgLoaded] = useState(false);
   const [blurSrc, setBlurSrc] = useState<string | null>(null);
@@ -209,17 +209,15 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
   const openLightbox = useCallback(() => {
     setLightboxImgLoaded(false);
-    // Snapshot the already-painted pixels — instant, no network/decode delay
     const imgEl = nodeImgRef.current;
     if (imgEl && imgEl.naturalWidth > 0) {
       try {
         const canvas = document.createElement("canvas");
-        canvas.width  = imgEl.naturalWidth;
+        canvas.width = imgEl.naturalWidth;
         canvas.height = imgEl.naturalHeight;
         canvas.getContext("2d")?.drawImage(imgEl, 0, 0);
         setBlurSrc(canvas.toDataURL());
       } catch {
-        // Cross-origin fallback (shouldn't happen with /_next/image)
         setBlurSrc(imgEl.currentSrc ?? null);
       }
     } else {
@@ -318,11 +316,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     });
   }, [id, updateNodeData]);
 
-  const model       = (data.model as string) ?? "nano-banana-2";
-  const caps        = MODEL_CAPS[model] ?? DEFAULT_CAPS;
-  const modelInfo   = MODELS.find((m) => m.id === model) ?? MODELS[0];
-  const quality     = (data.quality as string) ?? "1k";
-  const status      = data.status ?? "idle";
+  const model = (data.model as string) ?? "nano-banana-2";
+  const caps = MODEL_CAPS[model] ?? DEFAULT_CAPS;
+  const modelInfo = MODELS.find((m) => m.id === model) ?? MODELS[0];
+  const quality = (data.quality as string) ?? "1k";
+  const status = data.status ?? "idle";
 
   const [isAzureProvider, setIsAzureProvider] = useState(false);
   useEffect(() => {
@@ -341,17 +339,22 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     };
   }, [model]);
 
-  const promptOverLimit = (() => {
+  const promptInfo = (() => {
     const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
-    if (!promptEdge) return false;
+    if (!promptEdge) return null;
     const promptNode = nodes.find((n) => n.id === promptEdge.source);
     const text = (promptNode?.data?.prompt as string) ?? "";
-    const limit = (IMAGE_MODELS.find((m) => m.id === model))?.apiInput.promptMaxLength ?? Infinity;
-    return text.length > limit;
+    const cfg = IMAGE_MODELS.find((m) => m.id === model);
+    const hasImages = edges.some((e) => e.target === id && e.targetHandle === "image");
+    const limit = (!hasImages && cfg?.textOnlyPromptMaxLength)
+      ? cfg.textOnlyPromptMaxLength
+      : (cfg?.apiInput.promptMaxLength ?? Infinity);
+    return { len: text.length, limit, over: text.length > limit };
   })();
+  const promptOverLimit = promptInfo?.over ?? false;
 
   // If current ratio isn't valid for this model, fall back to first valid ratio (or 1:1)
-  const rawRatio    = (data.aspectRatio as string) ?? "1:1";
+  const rawRatio = (data.aspectRatio as string) ?? "1:1";
   const aspectRatio = caps.ratios.includes(rawRatio)
     ? rawRatio
     : (caps.ratios[0] ?? "1:1");
@@ -359,7 +362,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   // "auto" has no fixed pixel dimensions — treat as 1:1 for the CSS ratio
   const [rw, rh] = aspectRatio === "auto" ? [1, 1] : aspectRatio.split(":").map(Number);
   const cssRatio = `${rw} / ${rh}`;
-  const busy     = loading || status === "running";
+  const busy = loading || status === "running";
 
   const [natW, natH] = (() => {
     const r = data.imageNaturalRatio as string | undefined;
@@ -370,7 +373,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
   // ── Generation history ────────────────────────────────────────────────────
   type GenEntry = string | null | { error: string };
-  const rawGens     = data.generations;
+  const rawGens = data.generations;
   const generations: GenEntry[] = Array.isArray(rawGens)
     ? (rawGens as GenEntry[])
     : (data.imageUrl ? [data.imageUrl as string] : []);
@@ -386,7 +389,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     const gens: GenEntry[] = Array.isArray(storeNode?.data?.generations)
       ? storeNode!.data.generations as GenEntry[]
       : generations;
-    const curr    = (storeNode?.data?.currentGenIdx as number | undefined) ?? 0;
+    const curr = (storeNode?.data?.currentGenIdx as number | undefined) ?? 0;
     const clamped = Math.max(0, Math.min(gens.length - 1, idx));
     slideDir.current = idx > curr ? "right" : "left";
     const entry = gens[clamped];
@@ -440,7 +443,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
     const interval = setInterval(async () => {
       try {
-        const res  = await fetch(`/api/job-status?taskId=${taskId}`);
+        const res = await fetch(`/api/job-status?taskId=${taskId}`);
         const json = await res.json();
         if (cancelled) return;
 
@@ -476,7 +479,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   }, [data.taskId, status, id, updateNodeData]);
 
   const promptConnected = edges.some((e) => e.target === id && e.targetHandle === "prompt");
-  const imageConnected  = edges.some((e) => e.target === id && e.targetHandle === "image");
+  const imageConnected = edges.some((e) => e.target === id && e.targetHandle === "image");
   const sourceConnected = edges.some((e) => e.source === id);
 
   // ── Submit generation job ────────────────────────────────────────────────────
@@ -500,7 +503,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
       if (!videoUrl || videoUrl.startsWith("blob:")) continue;
       const trimStart = src.data.trimStart as number | undefined;
-      const trimEnd   = src.data.trimEnd   as number | undefined;
+      const trimEnd = src.data.trimEnd as number | undefined;
       const extractBody = trimEnd !== undefined
         ? { videoUrl, timeSeconds: trimEnd }
         : { videoUrl, timeSeconds: trimStart ?? 0 };
@@ -516,7 +519,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     }
 
     // Use fresh store state so any newly extracted frames are included
-    const upstream  = resolveInputs(id, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
+    const upstream = resolveInputs(id, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
     const { resolvedPrompt, orderedUrls } = resolveMentions(
       upstream.prompt ?? "",
       upstream.imageNodeLabels,
@@ -569,7 +572,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     const loadingGens = [...prevGens, null] as GenEntry[];
     updateNodeData(id, { status: "running", imageUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens, currentGenIdx: loadingGens.length - 1 });
     try {
-      const res  = await fetch("/api/generate", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session!.access_token}` },
         body: JSON.stringify(payload),
@@ -623,458 +626,468 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       )}
       <span className="node-above-label">{data.label as string}</span>
 
-        {/* ── Icon handles — bottom-anchored, consistent with other nodes ── */}
-        {/* prompt is top-most; image is closest to bottom */}
+      {/* ── Icon handles — bottom-anchored, consistent with other nodes ── */}
+      {/* prompt is top-most; image is closest to bottom */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="prompt"
+        style={{ top: `calc(100% - ${caps.supportsImages ? 90 : 52}px)` }}
+        className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}`}
+        onMouseEnter={() => setHoveredHandle("prompt")}
+        onMouseLeave={() => setHoveredHandle(null)}
+      >
+        <PromptIcon />
+      </Handle>
+
+      {caps.supportsImages && (
         <Handle
           type="target"
           position={Position.Left}
-          id="prompt"
-          style={{ top: `calc(100% - ${caps.supportsImages ? 90 : 52}px)` }}
-          className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}`}
-          onMouseEnter={() => setHoveredHandle("prompt")}
+          id="image"
+          style={{ top: "calc(100% - 52px)" }}
+          className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}`}
+          onMouseEnter={() => setHoveredHandle("image")}
           onMouseLeave={() => setHoveredHandle(null)}
-        >
-          <PromptIcon />
-        </Handle>
-
-        {caps.supportsImages && (
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="image"
-            style={{ top: "calc(100% - 52px)" }}
-            className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}`}
-            onMouseEnter={() => setHoveredHandle("image")}
-            onMouseLeave={() => setHoveredHandle(null)}
-          >
-            <PhotoIcon />
-          </Handle>
-        )}
-
-        {/* ── Handle tooltip ────────────────────────────────────────────── */}
-        {hoveredHandle && (
-          <div
-            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
-            style={{
-              top:       hoveredHandle === "prompt"
-                ? `calc(100% - ${caps.supportsImages ? 90 : 52}px)`
-                : "calc(100% - 52px)",
-              left:      0,
-              transform: "translate(calc(-100% - 34px), -50%)",
-              background: "#1A1A1A",
-              border: `1px solid ${hoveredHandle === "prompt" ? "#77E54433" : "#fb923c33"}`,
-              color: "#CCCCCC",
-            }}
-          >
-            <span style={{ color: hoveredHandle === "prompt" ? "#77E544" : "#fb923c" }} className="mr-1.5">●</span>
-            {hoveredHandle === "prompt"
-              ? "Text prompt"
-              : caps.maxImages > 0
-                ? `Reference image (up to ${caps.maxImages})`
-                : "Reference image"
-            }
-          </div>
-        )}
-
-        <Handle
-          type="source"
-          position={Position.Right}
-          style={{ top: 20 }}
-          className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
-          title="Image output"
         >
           <PhotoIcon />
         </Handle>
+      )}
 
-        {/* ── Image area — top corners clip to card border-radius ───────── */}
+      {/* ── Handle tooltip ────────────────────────────────────────────── */}
+      {hoveredHandle && (
         <div
-          className="relative bg-[#090B0D] overflow-hidden rounded-t-[7px] group/gen"
+          className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
           style={{
-            aspectRatio: (data.imageNaturalRatio as string | undefined) ?? cssRatio,
-            width: "100%",
-            transition: "aspect-ratio 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+            top: hoveredHandle === "prompt"
+              ? `calc(100% - ${caps.supportsImages ? 90 : 52}px)`
+              : "calc(100% - 52px)",
+            left: 0,
+            transform: "translate(calc(-100% - 34px), -50%)",
+            background: "#1A1A1A",
+            border: `1px solid ${hoveredHandle === "prompt" ? "#ff3df533" : "#fb923c33"}`,
+            color: "#CCCCCC",
           }}
-          onDoubleClick={() => { if (data.imageUrl) openLightbox(); }}
         >
-          {busy && generations[currentGenIdx] === null && (
-            <>
-              <div
-                className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
-                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-                  <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <span className="text-[11px] text-[#ccc] font-medium">Generating</span>
-              </div>
-              <button
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); handleCancel(); }}
-                className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
-                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="m6 6 12 12" />
-                </svg>
-                <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
-              </button>
-            </>
-          )}
-          {generations.length > 0 ? (
-            <div
-              style={{
-                display: "flex",
-                height: "100%",
-                transform: `translateX(${-currentGenIdx * 100}%)`,
-                transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
-                willChange: "transform",
-              }}
-            >
-              {generations.map((entry, i) => (
-                <div key={i} style={{ minWidth: "100%", height: "100%", position: "relative", flexShrink: 0 }}>
-                  {entry === null ? (
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#090B0D" }}>
-                      <div className="w-5 h-5 rounded-full border-2 border-[#2a2a2a] border-t-[#666] animate-spin" />
-                    </div>
-                  ) : typeof entry === "object" ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center" style={{ background: "#090B0D" }}>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5"/>
-                        <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round"/>
-                        <circle cx="12" cy="16" r="1" fill="#c04040"/>
-                      </svg>
-                      <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
-                      <button
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
-                        className="absolute bottom-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-all group/del hover:bg-red-900/60 hover:border-red-500/40"
-                        style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-white/70 group-hover/del:stroke-red-400 transition-colors">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M9 6V4h6v2" />
-                        </svg>
-                        <span className="text-[11px] font-medium text-[#ccc] group-hover/del:text-red-400 transition-colors">Delete</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <Image
-                      ref={i === currentGenIdx ? nodeImgRef : undefined}
-                      src={entry}
-                      alt="Generated"
-                      fill
-                      quality={30}
-                      sizes="400px"
-                      style={{ objectFit: "fill" }}
-                      onLoad={i === currentGenIdx ? () => {
-                        requestAnimationFrame(() => {
-                          if (!cardRef.current) return;
-                          const w = cardRef.current.offsetWidth;
-                          const h = cardRef.current.offsetHeight;
-                          if (w > 0 && h > 0) updateNodeSize(id, w, h);
-                        });
-                      } : undefined}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : status === "error" ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
-              <div className="flex items-center gap-2.5">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                  <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                  <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                  <circle cx="12" cy="16" r="1" fill="#c04040" />
-                </svg>
-                <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
-                  Credits refunded
-                </span>
-              </div>
-              <p className="text-white text-[12px] font-semibold leading-snug">
-                Oops! Something went wrong.
-              </p>
-              <p className="text-[#555] text-[10px] leading-[1.5] break-words">
-                {(data.errorMsg as string) ?? "Generation failed"}
-              </p>
-            </div>
-          ) : (
-            <div className="w-full h-full" />
-          )}
-
-          {natW > 0 && natH > 0 && (
-            <div
-              aria-hidden
-              className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover/gen:opacity-100 transition-opacity duration-150 node-slide-reveal"
-              style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
-            >
-              {natW} × {natH}
-            </div>
-          )}
-
+          <span style={{ color: hoveredHandle === "prompt" ? "#ff3df5" : "#fb923c" }} className="mr-1.5">●</span>
+          {hoveredHandle === "prompt"
+            ? "Text prompt"
+            : caps.maxImages > 0
+              ? `Reference image (up to ${caps.maxImages})`
+              : "Reference image"
+          }
         </div>
+      )}
 
-        {/* ── Carousel nav — always visible when multiple generations exist ── */}
-        {generations.length > 1 && (
-          <div
-            className="flex items-center justify-between px-2 border-t border-[#1E1410] shrink-0"
-            style={{ height: 30 }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx - 1); }}
-              disabled={currentGenIdx === 0}
-              className="w-6 h-6 flex items-center justify-center rounded transition-opacity disabled:opacity-20"
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ top: 20 }}
+        className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+        title="Image output"
+      >
+        <PhotoIcon />
+      </Handle>
+
+      {/* ── Image area — top corners clip to card border-radius ───────── */}
+      <div
+        className="relative bg-[#090B0D] overflow-hidden rounded-t-[7px] group/gen"
+        style={{
+          aspectRatio: (data.imageNaturalRatio as string | undefined) ?? cssRatio,
+          width: "100%",
+          transition: "aspect-ratio 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+        onDoubleClick={() => { if (data.imageUrl) openLightbox(); }}
+      >
+        {busy && generations[currentGenIdx] === null && (
+          <>
+            <div
+              className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
+              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 18 9 12 15 6" />
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+                <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+                <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-            </button>
-            <div className="flex items-center gap-1.5">
-              {generations.length <= 8 ? generations.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={(e) => { e.stopPropagation(); goToGen(i); }}
-                  className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"}`}
-                />
-              )) : (
-                <span className="text-[10px] text-white/50 font-mono tabular-nums">
-                  {currentGenIdx + 1} / {generations.length}
-                </span>
-              )}
+              <span className="text-[11px] text-[#ccc] font-medium">Generating</span>
             </div>
             <button
-              onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx + 1); }}
-              disabled={currentGenIdx === generations.length - 1}
-              className="w-6 h-6 flex items-center justify-center rounded transition-opacity disabled:opacity-20"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+              className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
+              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 18 15 12 9 6" />
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="m6 6 12 12" />
               </svg>
+              <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
             </button>
+          </>
+        )}
+        {generations.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              height: "100%",
+              transform: `translateX(${-currentGenIdx * 100}%)`,
+              transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
+              willChange: "transform",
+            }}
+          >
+            {generations.map((entry, i) => (
+              <div key={i} style={{ minWidth: "100%", height: "100%", position: "relative", flexShrink: 0 }}>
+                {entry === null ? (
+                  <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#090B0D" }}>
+                    <div className="w-5 h-5 rounded-full border-2 border-[#2a2a2a] border-t-[#666] animate-spin" />
+                  </div>
+                ) : typeof entry === "object" && !Array.isArray(entry) ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center" style={{ background: "#090B0D" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                      <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="12" cy="16" r="1" fill="#c04040" />
+                    </svg>
+                    <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                    <button
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
+                      className="absolute bottom-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-all group/del hover:bg-red-900/60 hover:border-red-500/40"
+                      style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-white/70 group-hover/del:stroke-red-400 transition-colors">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14H6L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                      <span className="text-[11px] font-medium text-[#ccc] group-hover/del:text-red-400 transition-colors">Delete</span>
+                    </button>
+                  </div>
+                ) : (
+                  <Image
+                    ref={i === currentGenIdx ? nodeImgRef : undefined}
+                    src={entry}
+                    alt="Generated"
+                    fill
+                    quality={30}
+                    sizes="400px"
+                    style={{ objectFit: "fill" }}
+                    onLoad={i === currentGenIdx ? () => {
+                      requestAnimationFrame(() => {
+                        if (!cardRef.current) return;
+                        const w = cardRef.current.offsetWidth;
+                        const h = cardRef.current.offsetHeight;
+                        if (w > 0 && h > 0) updateNodeSize(id, w, h);
+                      });
+                    } : undefined}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : status === "error" ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
+            <div className="flex items-center gap-2.5">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="12" cy="16" r="1" fill="#c04040" />
+              </svg>
+              <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
+                Credits refunded
+              </span>
+            </div>
+            <p className="text-white text-[12px] font-semibold leading-snug">
+              Oops! Something went wrong.
+            </p>
+            <p className="text-[#555] text-[10px] leading-[1.5] break-words">
+              {(data.errorMsg as string) ?? "Generation failed"}
+            </p>
+          </div>
+        ) : (
+          <div className="w-full h-full" />
+        )}
+
+        {natW > 0 && natH > 0 && (
+          <div
+            aria-hidden
+            className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover/gen:opacity-100 transition-opacity duration-150 node-slide-reveal"
+            style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
+          >
+            {natW} × {natH}
           </div>
         )}
 
-        {/* ── Control bar ─────────────────────────────────────────────────
+      </div>
+
+      {/* ── Carousel nav — always visible when multiple generations exist ── */}
+      {generations.length > 1 && (
+        <div
+          className="flex items-center justify-between px-2 border-t border-[#1E1410] shrink-0"
+          style={{ height: 30 }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx - 1); }}
+            disabled={currentGenIdx === 0}
+            className="w-6 h-6 flex items-center justify-center rounded transition-opacity disabled:opacity-20"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-1.5">
+            {generations.length <= 8 ? generations.map((_, i) => (
+              <button
+                key={i}
+                onClick={(e) => { e.stopPropagation(); goToGen(i); }}
+                className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"}`}
+              />
+            )) : (
+              <span className="text-[10px] text-white/50 font-mono tabular-nums">
+                {currentGenIdx + 1} / {generations.length}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx + 1); }}
+            disabled={currentGenIdx === generations.length - 1}
+            className="w-6 h-6 flex items-center justify-center rounded transition-opacity disabled:opacity-20"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* ── Control bar ─────────────────────────────────────────────────
              Lives outside the image area — dropdowns open freely.          */}
-        <div className="flex items-center gap-2 px-2.5 py-[7px] border-t border-[#1E1410] shrink-0">
-          {/* Status dot */}
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[status]}`} />
+      <div className="flex items-center gap-2 px-2.5 py-[7px] border-t border-[#1E1410] shrink-0">
+        {/* Status dot */}
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[status]}`} />
 
-          {/* Model dropdown — locked once a result exists */}
-          <div className="relative flex-1 min-w-0">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => {
-                if (data.imageUrl) return;
-                setModelOpen((o) => !o); setRatioOpen(false); setQualityOpen(false);
-              }}
-              className={`flex items-center gap-1 w-full text-left ${data.imageUrl ? "cursor-default" : ""}`}
-              title={data.imageUrl ? "Clear the image to change model" : undefined}
-            >
-              <span className={`text-[11px] truncate transition-colors ${data.imageUrl ? "text-[#555]" : "text-[#8D8E89] hover:text-white"}`}>
-                {modelInfo.name}
-              </span>
-              {!data.imageUrl && <ChevronIcon open={modelOpen} />}
-            </button>
+        {/* Model dropdown — locked once a result exists */}
+        <div className="relative flex-1 min-w-0">
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => {
+              if (data.imageUrl) return;
+              setModelOpen((o) => !o); setRatioOpen(false); setQualityOpen(false);
+            }}
+            className={`flex items-center gap-1 w-full text-left ${data.imageUrl ? "cursor-default" : ""}`}
+            title={data.imageUrl ? "Clear the image to change model" : undefined}
+          >
+            <span className={`text-[11px] truncate transition-colors ${data.imageUrl ? "text-[#555]" : "text-[#8D8E89] hover:text-white"}`}>
+              {modelInfo.name}
+            </span>
+            {!data.imageUrl && <ChevronIcon open={modelOpen} />}
+          </button>
 
-            {modelPopup.visible && (
-              <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${modelPopup.className}`}>
-                {MODELS.map((m) => (
-                  <button
-                    key={m.id}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={() => {
-                      const newCaps     = MODEL_CAPS[m.id] ?? DEFAULT_CAPS;
-                      const validRatio  = newCaps.ratios.includes(aspectRatio) ? aspectRatio : "1:1";
-                      const validQuality = newCaps.qualityOptions && !newCaps.qualityOptions.includes(quality as "1k" | "2k" | "4k")
-                        ? newCaps.qualityOptions[0]
-                        : quality;
-                      updateNodeData(id, { model: m.id, aspectRatio: validRatio, quality: validQuality });
-                      // Unlink any attached images if the new model doesn't support them
-                      if (!newCaps.supportsImages) removeEdgesForHandle(id, "image");
-                      setModelOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${
-                      model === m.id ? "text-white" : "text-[#8D8E89]"
-                    }`}
-                  >
-                    <span>{m.name}</span>
-                    <span className="text-[#4A4A45]">{m.meta}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Divider */}
-          <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
-
-          {/* Aspect ratio dropdown */}
-          <div className="relative shrink-0">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setQualityOpen(false); }}
-              className="flex items-center gap-1"
-            >
-              <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors tabular-nums">
-                {aspectRatio}
-              </span>
-              <ChevronIcon open={ratioOpen} />
-            </button>
-
-            {ratioPopup.visible && (
-              <div className={`absolute bottom-full right-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${ratioPopup.className}`}>
-                {caps.ratios.map((r) => {
-                  const { rw: iw, rh: ih, x, y } = ratioRect(r);
-                  const active = r === aspectRatio;
-                  return (
-                    <button
-                      key={r}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${
-                        active ? "text-white" : "text-[#8D8E89]"
-                      }`}
-                    >
-                      <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
-                        <rect
-                          x={x} y={y} width={iw} height={ih} rx="1"
-                          fill={active ? "#FFFFFF" : "none"}
-                          stroke={active ? "#FFFFFF" : "#5A5A55"}
-                          strokeWidth="1"
-                        />
-                      </svg>
-                      <span className="tabular-nums">{r}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {caps.supportsQuality && !(caps.azureQualityOptions && isAzureProvider) && (
-            <>
-              {/* Divider */}
-              <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
-
-              {/* Quality / Resolution dropdown */}
-              <div className="relative shrink-0">
+          {modelPopup.visible && (
+            <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${modelPopup.className}`}>
+              {MODELS.map((m) => (
                 <button
+                  key={m.id}
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setAzureQualityOpen(false); }}
-                  className="flex items-center gap-1"
+                  onClick={() => {
+                    const newCaps = MODEL_CAPS[m.id] ?? DEFAULT_CAPS;
+                    const validRatio = newCaps.ratios.includes(aspectRatio) ? aspectRatio : "1:1";
+                    const validQuality = newCaps.qualityOptions && !newCaps.qualityOptions.includes(quality as "1k" | "2k" | "4k")
+                      ? newCaps.qualityOptions[0]
+                      : quality;
+                    updateNodeData(id, { model: m.id, aspectRatio: validRatio, quality: validQuality });
+                    // Unlink any attached images if the new model doesn't support them
+                    if (!newCaps.supportsImages) removeEdgesForHandle(id, "image");
+                    setModelOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${model === m.id ? "text-white" : "text-[#8D8E89]"
+                    }`}
                 >
-                  {caps.qualityKey === "resolution" && (
-                    <span className="text-[11px] text-[#4A4A45]">Res</span>
-                  )}
-                  <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors uppercase">
-                    {quality}
-                  </span>
-                  <ChevronIcon open={qualityOpen} />
+                  <span>{m.name}</span>
+                  <span className="text-[#4A4A45]">{m.meta}</span>
                 </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {qualityPopup.visible && (
-                  <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${qualityPopup.className}`}>
-                    {caps.qualityKey === "resolution" && (
-                      <div className="px-3 py-1.5 border-b border-[#1E1410]">
-                        <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Resolution</span>
-                      </div>
-                    )}
-                    {[
-                      { id: "1k", label: "1K", meta: "Standard" },
-                      { id: "2k", label: "2K", meta: "High" },
-                      { id: "4k", label: "4K", meta: "Maximum" },
-                    ].filter((q) => !caps.qualityOptions || caps.qualityOptions.includes(q.id as "1k" | "2k" | "4k")).map((q) => (
+        {/* Divider */}
+        <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
+
+        {/* Aspect ratio dropdown */}
+        <div className="relative shrink-0">
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setQualityOpen(false); }}
+            className="flex items-center gap-1"
+          >
+            <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors tabular-nums">
+              {aspectRatio}
+            </span>
+            <ChevronIcon open={ratioOpen} />
+          </button>
+
+          {ratioPopup.visible && (
+            <div className={`absolute bottom-full right-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${ratioPopup.className}`}>
+              {caps.ratios.map((r) => {
+                const { rw: iw, rh: ih, x, y } = ratioRect(r);
+                const active = r === aspectRatio;
+                return (
+                  <button
+                    key={r}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${active ? "text-white" : "text-[#8D8E89]"
+                      }`}
+                  >
+                    <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
+                      <rect
+                        x={x} y={y} width={iw} height={ih} rx="1"
+                        fill={active ? "#FFFFFF" : "none"}
+                        stroke={active ? "#FFFFFF" : "#5A5A55"}
+                        strokeWidth="1"
+                      />
+                    </svg>
+                    <span className="tabular-nums">{r}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {caps.supportsQuality && !(caps.azureQualityOptions && isAzureProvider) && (
+          <>
+            {/* Divider */}
+            <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
+
+            {/* Quality / Resolution dropdown */}
+            <div className="relative shrink-0">
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => { setQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setAzureQualityOpen(false); }}
+                className="flex items-center gap-1"
+              >
+                {caps.qualityKey === "resolution" && (
+                  <span className="text-[11px] text-[#4A4A45]">Res</span>
+                )}
+                <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors uppercase">
+                  {quality}
+                </span>
+                <ChevronIcon open={qualityOpen} />
+              </button>
+
+              {qualityPopup.visible && (
+                <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${qualityPopup.className}`}>
+                  {caps.qualityKey === "resolution" && (
+                    <div className="px-3 py-1.5 border-b border-[#1E1410]">
+                      <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Resolution</span>
+                    </div>
+                  )}
+                  {[
+                    { id: "1k", label: "1K", meta: "Standard" },
+                    { id: "2k", label: "2K", meta: "High" },
+                    { id: "4k", label: "4K", meta: "Maximum" },
+                  ].filter((q) => !caps.qualityOptions || caps.qualityOptions.includes(q.id as "1k" | "2k" | "4k")).map((q) => (
+                    <button
+                      key={q.id}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => { updateNodeData(id, { quality: q.id }); setQualityOpen(false); }}
+                      className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${quality === q.id ? "text-white" : "text-[#8D8E89]"
+                        }`}
+                    >
+                      <span className="uppercase font-medium">{q.label}</span>
+                      <span className="text-[#4A4A45]">{q.meta}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Azure quality — shown only when model has Azure options AND Azure provider is selected */}
+        {caps.azureQualityOptions && isAzureProvider && (
+          <>
+            {/* Divider */}
+            <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
+
+            <div className="relative shrink-0">
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); }}
+                className="flex items-center gap-1"
+                title="Quality (Azure Foundry)"
+              >
+                <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors capitalize">
+                  {(data.azureQuality as string | undefined) ?? "auto"}
+                </span>
+                <ChevronIcon open={azureQualityOpen} />
+              </button>
+
+              {azureQualityPopup.visible && (
+                <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${azureQualityPopup.className}`}>
+                  <div className="px-3 py-1.5 border-b border-[#1E1410]">
+                    <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Azure Quality</span>
+                  </div>
+                  {[
+                    { id: "auto", meta: "Model default" },
+                    { id: "low", meta: "Faster, cheaper" },
+                    { id: "medium", meta: "Balanced" },
+                    { id: "high", meta: "Best quality" },
+                  ].map((q) => {
+                    const active = ((data.azureQuality as string | undefined) ?? "auto") === q.id;
+                    return (
                       <button
                         key={q.id}
                         onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => { updateNodeData(id, { quality: q.id }); setQualityOpen(false); }}
-                        className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${
-                          quality === q.id ? "text-white" : "text-[#8D8E89]"
-                        }`}
+                        onClick={() => { updateNodeData(id, { azureQuality: q.id }); setAzureQualityOpen(false); }}
+                        className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${active ? "text-white" : "text-[#8D8E89]"
+                          }`}
                       >
-                        <span className="uppercase font-medium">{q.label}</span>
+                        <span className="capitalize font-medium">{q.id}</span>
                         <span className="text-[#4A4A45]">{q.meta}</span>
                       </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
-          {/* Azure quality — shown only when model has Azure options AND Azure provider is selected */}
-          {caps.azureQualityOptions && isAzureProvider && (
-            <>
-              {/* Divider */}
-              <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
+        {/* Divider */}
+        <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
 
-              <div className="relative shrink-0">
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); }}
-                  className="flex items-center gap-1"
-                  title="Quality (Azure Foundry)"
-                >
-                  <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors capitalize">
-                    {(data.azureQuality as string | undefined) ?? "auto"}
-                  </span>
-                  <ChevronIcon open={azureQualityOpen} />
-                </button>
-
-                {azureQualityPopup.visible && (
-                  <div className={`absolute bottom-full right-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${azureQualityPopup.className}`}>
-                    <div className="px-3 py-1.5 border-b border-[#1E1410]">
-                      <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Azure Quality</span>
-                    </div>
-                    {[
-                      { id: "auto",   meta: "Model default" },
-                      { id: "low",    meta: "Faster, cheaper" },
-                      { id: "medium", meta: "Balanced" },
-                      { id: "high",   meta: "Best quality" },
-                    ].map((q) => {
-                      const active = ((data.azureQuality as string | undefined) ?? "auto") === q.id;
-                      return (
-                        <button
-                          key={q.id}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => { updateNodeData(id, { azureQuality: q.id }); setAzureQualityOpen(false); }}
-                          className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${
-                            active ? "text-white" : "text-[#8D8E89]"
-                          }`}
-                        >
-                          <span className="capitalize font-medium">{q.id}</span>
-                          <span className="text-[#4A4A45]">{q.meta}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Divider */}
-          <span className="w-px h-3 bg-[#2A1A14] shrink-0" />
-
-          {/* Generate button */}
-          <button
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={generate}
-            disabled={busy || promptOverLimit}
-            className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-[#77E544] transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[rgba(119,229,68,0.13)]"
-            style={{ border: "1px solid #2a4a0f", background: "rgba(119,229,68,0.07)" }}
+        {/* Prompt character count */}
+        {promptInfo && (
+          <span
+            aria-hidden
+            className="tabular-nums shrink-0 select-none"
+            style={{
+              fontSize: 9,
+              color: promptInfo.over ? "#f87171" : "#4A4A45",
+            }}
           >
-            <svg width="7" height="7" viewBox="0 0 8 8" fill="currentColor"><polygon points="1,0.5 7.5,4 1,7.5" /></svg>
-            Generate
-          </button>
+            {promptInfo.len.toLocaleString()}/{promptInfo.limit.toLocaleString()}
+          </span>
+        )}
 
-        </div>
+        {/* Generate button */}
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={generate}
+          disabled={busy || promptOverLimit}
+          className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-[#ff3df5] transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[rgba(119,229,68,0.13)]"
+          style={{ border: "1px solid #2a4a0f", background: "rgba(119,229,68,0.07)" }}
+        >
+          <svg width="7" height="7" viewBox="0 0 8 8" fill="currentColor"><polygon points="1,0.5 7.5,4 1,7.5" /></svg>
+          Generate
+        </button>
+
+      </div>
 
 
       {/* ── Lightbox — blur-up full-quality view on double-click ─────── */}
@@ -1100,7 +1113,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               className="block max-w-[90vw] max-h-[90vh] object-contain"
               onLoad={() => setLightboxImgLoaded(true)}
             />
-            {/* Blur placeholder — pulses while loading, fades out once full-res is ready */}
+            {/* Blur placeholder */}
             {blurSrc && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -1135,7 +1148,7 @@ function SpinnerOverlay() {
     }}>
       <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
         <circle cx="14" cy="14" r="11" stroke="#333" strokeWidth="2.5" />
-        <path d="M14 3 A11 11 0 0 1 25 14" stroke="#77E544" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M14 3 A11 11 0 0 1 25 14" stroke="#ff3df5" strokeWidth="2.5" strokeLinecap="round" />
       </svg>
     </div>
   );
@@ -1166,7 +1179,7 @@ function ChevronIcon({ open }: { open: boolean }) {
       stroke="#5A5A55" strokeWidth="1.5" strokeLinecap="round"
       className={`shrink-0 transition-transform duration-100 ${open ? "rotate-180" : ""}`}
     >
-      <path d="M1 2.5 4 5.5 7 2.5"/>
+      <path d="M1 2.5 4 5.5 7 2.5" />
     </svg>
   );
 }

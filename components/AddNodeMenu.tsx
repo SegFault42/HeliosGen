@@ -16,17 +16,17 @@ const SECTIONS: Array<{
   label: string;
   nodeTypes: string[];
 }> = [
-  {
-    id: "generators",
-    label: "GENERATORS",
-    nodeTypes: ["generateNode", "videoGeneratorNode", "assistantNode"],
-  },
-  {
-    id: "resources",
-    label: "INPUTS",
-    nodeTypes: ["promptNode", "imageInputNode", "videoInputNode"],
-  },
-];
+    {
+      id: "generators",
+      label: "GENERATORS",
+      nodeTypes: ["generateNode", "videoGeneratorNode", "assistantNode"],
+    },
+    {
+      id: "resources",
+      label: "INPUTS",
+      nodeTypes: ["promptNode", "imageInputNode", "videoInputNode"],
+    },
+  ];
 
 /* ─── Props ─────────────────────────────────────────────────────────────────── */
 
@@ -73,10 +73,10 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
   const allNodes = NODES;
   const filtered = q
     ? allNodes.filter(
-        (n) =>
-          n.label.toLowerCase().includes(q) ||
-          n.description.toLowerCase().includes(q)
-      )
+      (n) =>
+        n.label.toLowerCase().includes(q) ||
+        n.description.toLowerCase().includes(q)
+    )
     : null;
 
   /* Returns true if two axis-aligned rects (with padding) overlap */
@@ -129,8 +129,8 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
       } else {
         // ── Find the node nearest to the current viewport centre ───────────
         const vpCentreScreen = {
-          x: rect ? rect.left + rect.width  / 2 : window.innerWidth  / 2,
-          y: rect ? rect.top  + rect.height / 2 : window.innerHeight / 2,
+          x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+          y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
         };
         const vpCentreFlow = screenToFlowPosition(vpCentreScreen);
 
@@ -356,7 +356,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
             outline: "none",
             color: "rgba(255,255,255,0.82)",
             fontSize: "13px",
-            caretColor: "#77E544",
+            caretColor: "#ff3df5",
           }}
         />
         {query && (
