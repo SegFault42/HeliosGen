@@ -405,7 +405,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     maxResources: 9,
     maxReferenceVideos: 3,
     maxReferenceAudios: 3,
-    resolutions: ["480p", "720p"],
+    resolutions: ["480p", "720p", "1080p"],
     defaultResolution: "720p",
     apiInput: {
       aspectRatioKey: "aspect_ratio",

@@ -247,6 +247,7 @@ function GalleryInner() {
   const [count, setCount] = useState<number>(() => loadSettings(tab)?.count ?? 1);
   const [duration, setDuration] = useState<number>(() => loadSettings(tab)?.duration ?? 5);
   const [mode, setMode] = useState<string>(() => loadSettings(tab)?.mode ?? "");
+  const [resolution, setResolution] = useState<string>("");
   const [sound, setSound] = useState<boolean>(() => loadSettings(tab)?.sound ?? false);
   const [durPickerOpen, setDurPickerOpen] = useState(false);
   const [durPickerClosing, setDurPickerClosing] = useState(false);
@@ -419,6 +420,7 @@ function GalleryInner() {
     setCount(saved?.count ?? 1);
     if ("defaultDuration" in model) setDuration(saved?.duration ?? (model as { defaultDuration: number }).defaultDuration ?? 5);
     if ("defaultMode" in model) setMode(saved?.mode ?? (model as { defaultMode: string }).defaultMode ?? "");
+    if ("defaultResolution" in model) setResolution((model as { defaultResolution: string }).defaultResolution);
     setSound(saved?.sound ?? false);
     const savedUrls = saved?.refImageUrls ?? [];
     const savedPrompt = saved?.prompt ?? "";
@@ -445,6 +447,7 @@ function GalleryInner() {
     setAspectRatio(("defaultRatio" in m ? m.defaultRatio : null) ?? m.ratios[0] ?? "1:1");
     if ("defaultDuration" in m) setDuration(m.defaultDuration ?? 5);
     if ("defaultMode" in m) setMode(m.defaultMode ?? "");
+    if ("defaultResolution" in m) setResolution((m as { defaultResolution: string }).defaultResolution);
     if (!isVideo) {
       const im = m as { apiInput?: { qualityOptions?: string[] }; azureQualityOptions?: string[] };
       const provider = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[m.id] ?? "kie"; } catch { return "kie"; } })();
@@ -767,7 +770,7 @@ function GalleryInner() {
           duration,
           sound: vm?.sound ? sound : false,
           mode: mode || vm?.defaultMode || "pro",
-          resolution: vm && "defaultResolution" in vm ? vm.defaultResolution : undefined,
+          resolution: vm && "resolutions" in vm && vm.resolutions?.length ? resolution || vm.defaultResolution : undefined,
           ...(startFrameUrl               ? { startFrameUrl }               : {}),
           ...(endFrameUrl                 ? { endFrameUrl }                 : {}),
           ...(videoRefUrl                 ? { videoRefUrl }                 : {}),
@@ -1563,38 +1566,41 @@ function GalleryInner() {
           {isVideo && vidRefHandles.length > 0 && (() => {
             type VidSlot =
               | { kind: "filled"; target: "startFrame"|"endFrame"|"resource"|"videoRef"|"referenceVideo"|"audioRef"; mediaKind: "image"|"video"|"audio"; label: string; ref: RefImage }
-              | { kind: "add";    target: "startFrame"|"endFrame"|"resource"|"videoRef"|"referenceVideo"|"audioRef"; mediaKind: "image"|"video"|"audio"; label: string }
+              | { kind: "add";    target: "startFrame"|"endFrame"|"resource"|"videoRef"|"referenceVideo"|"audioRef"; mediaKind: "image"|"video"|"audio"; label: string; countLeft: number }
               | { kind: "element-filled"; element: KlingElement }
-              | { kind: "element-add" };
+              | { kind: "element-add"; countLeft: number };
             const slots: VidSlot[] = [];
             const useElems = !!(vidModel?.apiInput.useKlingElements);
             for (const h of vidRefHandles) {
               if (h === "startFrame") {
                 if (vidStartFrame) slots.push({ kind: "filled", target: h, mediaKind: "image", label: "Start Frame", ref: vidStartFrame });
-                else               slots.push({ kind: "add",    target: h, mediaKind: "image", label: "Start Frame" });
+                else               slots.push({ kind: "add",    target: h, mediaKind: "image", label: "Start Frame", countLeft: 1 });
               } else if (h === "endFrame") {
                 if (vidEndFrame)   slots.push({ kind: "filled", target: h, mediaKind: "image", label: "End Frame", ref: vidEndFrame });
-                else               slots.push({ kind: "add",    target: h, mediaKind: "image", label: "End Frame" });
+                else               slots.push({ kind: "add",    target: h, mediaKind: "image", label: "End Frame", countLeft: 1 });
               } else if (h === "videoRef") {
                 if (vidVideoRef)   slots.push({ kind: "filled", target: h, mediaKind: "video", label: "Ref Video", ref: vidVideoRef });
-                else               slots.push({ kind: "add",    target: h, mediaKind: "video", label: "Ref Video" });
+                else               slots.push({ kind: "add",    target: h, mediaKind: "video", label: "Ref Video", countLeft: 1 });
               } else if (h === "resource") {
                 if (useElems) {
                   vidElements.forEach(el => slots.push({ kind: "element-filled", element: el }));
-                  if (vidElements.length < 3) slots.push({ kind: "element-add" });
+                  if (vidElements.length < 3) slots.push({ kind: "element-add", countLeft: 3 - vidElements.length });
                 } else {
-                  vidResources.forEach(r => slots.push({ kind: "filled", target: h, mediaKind: "image", label: "Resource", ref: r }));
-                  if (vidResources.length < (vidModel?.maxResources ?? 3))
-                    slots.push({ kind: "add", target: h, mediaKind: "image", label: "Resource" });
+                  const maxRes = vidModel?.maxResources ?? 3;
+                  vidResources.forEach(r => slots.push({ kind: "filled", target: h, mediaKind: "image", label: "Image", ref: r }));
+                  if (vidResources.length < maxRes)
+                    slots.push({ kind: "add", target: h, mediaKind: "image", label: "Image", countLeft: maxRes - vidResources.length });
                 }
               } else if (h === "referenceVideo") {
+                const maxRefVid = vidModel?.maxReferenceVideos ?? 3;
                 vidRefVideos.forEach(r => slots.push({ kind: "filled", target: h, mediaKind: "video", label: "Ref Video", ref: r }));
-                if (vidRefVideos.length < (vidModel?.maxReferenceVideos ?? 3))
-                  slots.push({ kind: "add", target: h, mediaKind: "video", label: "Ref Video" });
+                if (vidRefVideos.length < maxRefVid)
+                  slots.push({ kind: "add", target: h, mediaKind: "video", label: "Ref Video", countLeft: maxRefVid - vidRefVideos.length });
               } else if (h === "audioRef") {
+                const maxRefAud = vidModel?.maxReferenceAudios ?? 3;
                 vidRefAudios.forEach(r => slots.push({ kind: "filled", target: h, mediaKind: "audio", label: "Audio", ref: r }));
-                if (vidRefAudios.length < (vidModel?.maxReferenceAudios ?? 3))
-                  slots.push({ kind: "add", target: h, mediaKind: "audio", label: "Audio" });
+                if (vidRefAudios.length < maxRefAud)
+                  slots.push({ kind: "add", target: h, mediaKind: "audio", label: "Audio", countLeft: maxRefAud - vidRefAudios.length });
               }
             }
             return (
@@ -1656,6 +1662,7 @@ function GalleryInner() {
                           <path d="M20 3v4M22 5h-4"/>
                         </svg>
                         <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>Element</span>
+                        <span style={{ fontSize: "9px", fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "0.03em" }}>{slot.countLeft} left</span>
                       </button>
                     );
                   }
@@ -1754,6 +1761,7 @@ function GalleryInner() {
                     >
                       <MediaIcon />
                       <span style={{ fontSize: "10px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>{label}</span>
+                      <span style={{ fontSize: "9px", fontWeight: 500, color: "rgba(255,255,255,0.3)", letterSpacing: "0.03em" }}>{slot.countLeft} left</span>
                     </button>
                   );
                 })}
@@ -1974,6 +1982,16 @@ function GalleryInner() {
                   />
                 )}
 
+                {/* Resolution (video) */}
+                {isVideo && (vidModel?.resolutions?.length ?? 0) > 0 && (
+                  <CustomDropdown
+                    value={resolution || vidModel!.defaultResolution!}
+                    onChange={setResolution}
+                    disabled={submitting}
+                    options={vidModel!.resolutions!.map(r => ({ value: r, label: r }))}
+                  />
+                )}
+
                 {/* Sound toggle (video) */}
                 {isVideo && vidModel?.sound && (
                   <button
@@ -2107,7 +2125,7 @@ function GalleryInner() {
                   letterSpacing: "-0.02em",
                   whiteSpace: "nowrap",
                 }}
-                onMouseEnter={e => { if (canGenerate) e.currentTarget.style.background = "#8FEE60"; }}
+                onMouseEnter={e => { if (canGenerate) e.currentTarget.style.background = "#cc00c4"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = "#ff3df5"; }}
               >
                 {submitting ? (
