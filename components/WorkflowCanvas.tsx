@@ -939,6 +939,8 @@ export default function WorkflowCanvas() {
   );
 
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+  const addToast   = useWorkflowStore((s) => s.addToast);
+  const kieKeySet  = useWorkflowStore((s) => s.kieKeySet);
 
   const runAll = useCallback(async () => {
     const token = await getAccessToken();
@@ -1175,7 +1177,7 @@ export default function WorkflowCanvas() {
 
     push("Complete");
     setIsRunning(false);
-  }, [nodes, edges, updateNodeData, setIsRunning, debugMode, push]);
+  }, [nodes, edges, updateNodeData, setIsRunning, debugMode, push, kieKeySet, addToast]);
 
   // ── Place a node at the viewport center (used by the empty-state picker) ────
   const addNodeAtCenter = useCallback((type: string) => {

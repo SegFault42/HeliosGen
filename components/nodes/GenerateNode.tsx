@@ -164,6 +164,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
+  const addToast   = useWorkflowStore((s) => s.addToast);
+  const kieKeySet  = useWorkflowStore((s) => s.kieKeySet);
   const nodes = useWorkflowStore((s) => s.nodes);
   const edges = useWorkflowStore((s) => s.edges);
   const debugMode = useWorkflowStore((s) => s.debugMode);
@@ -593,7 +595,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     } finally {
       setLoading(false);
     }
-  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError]);
+  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError, kieKeySet, addToast]);
 
   // node-card has position:relative — handles and label position relative to it
   return (
@@ -1000,7 +1002,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           </div>{/* end pills wrapper */}
 
           {/* Generate button — always right */}
-          <GenerateButton onClick={generate} busy={busy} disabled={promptOverLimit} />
+          <GenerateButton onClick={generate} busy={busy} disabled={promptOverLimit || kieKeySet === false} />
         </div>
       </div>
 

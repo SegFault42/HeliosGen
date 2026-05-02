@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { getKieToken } from "@/lib/getKieToken";
 
 export async function POST(req: NextRequest) {
   const { prompt, systemPrompt, model } = (await req.json()) as {
@@ -14,11 +15,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const apiKey = process.env.KIE_API_TOKEN;
+  const apiKey = await getKieToken(req);
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "KIE_API_TOKEN is not set in environment" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({ error: "No Kie.ai API key configured. Add one in Settings." }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
     );
   }
 

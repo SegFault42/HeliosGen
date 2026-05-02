@@ -9,6 +9,7 @@ import { jobStore } from "@/lib/jobStore";
 import { ensureR2, uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { IMAGE_MODELS } from "@/lib/modelConfig";
+import { getKieTokenForUser } from "@/lib/getKieToken";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -197,6 +198,9 @@ export async function POST(req: NextRequest) {
     // image mirroring failures are non-fatal — proceed without reference images
   }
 
+  // Resolve user once — used by both Azure and Kie branches
+  const currentUserId = await getUserId(req).catch(() => null);
+
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
     const azureKey = process.env.AZURE_API_KEY;
@@ -210,10 +214,9 @@ export async function POST(req: NextRequest) {
     const truncatedPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000);
 
     const azureTaskId = `azure-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    jobStore.set(azureTaskId, { status: "pending", type: "image" });
+    jobStore.set(azureTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
-    // Resolve user before the async fire-and-forget (req context will be gone)
-    const azureUserId = await getUserId(req).catch(() => null);
+    const azureUserId = currentUserId;
 
     const hasRefImages = r2ImageUrls.length > 0;
 
@@ -320,8 +323,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Kie.ai branch ─────────────────────────────────────────────────────────────
-  const kieToken = process.env.KIE_API_TOKEN;
-  if (!kieToken) return NextResponse.json({ error: "KIE_API_TOKEN is not set" }, { status: 500 });
+  const kieToken = currentUserId ? await getKieTokenForUser(currentUserId) : null;
+  if (!kieToken) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const callbackBase = process.env.CALLBACK_BASE_URL;
   if (!callbackBase) return NextResponse.json({ error: "CALLBACK_BASE_URL is not set" }, { status: 500 });
@@ -364,12 +367,11 @@ export async function POST(req: NextRequest) {
     const taskId = d.data?.taskId ?? d.data?.id ?? d.taskId ?? d.id;
     if (!taskId) throw new Error("No task ID in response");
 
-    jobStore.set(taskId, { status: "pending" });
+    jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
 
-    const userId = await getUserId(req);
     supabaseAdmin.from("generations").insert({
       task_id:              taskId,
-      user_id:              userId,
+      user_id:              currentUserId,
       generation_type:      "image",
       status:               "pending",
       prompt,

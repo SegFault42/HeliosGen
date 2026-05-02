@@ -29,8 +29,7 @@ Create a `.env.local` file at the project root with the following variables:
 
 ```env
 # ── Kie.ai ────────────────────────────────────────────────────────────────────
-# Get your token at https://kie.ai/api-key
-KIE_API_TOKEN=your_kie_api_token
+# No shared key needed — each user enters their own key via the Settings UI.
 
 # Public URL where kie.ai will POST generation results (webhook).
 # Must be reachable from the internet. Use ngrok or similar for local dev.
@@ -151,6 +150,15 @@ alter table public.generations enable row level security;
 create policy "users read own generations"
   on public.generations for select
   using (auth.uid() = user_id);
+
+-- ── User settings (per-user API keys) ─────────────────────────────────────────
+create table public.user_settings (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  kie_api_token text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.user_settings enable row level security;
 ```
 
 ---
@@ -180,8 +188,10 @@ The app organises objects under these prefixes automatically:
 
 [Kie.ai](https://kie.ai) is the primary backend for all AI generation (images and videos) and also proxies the Claude assistant.
 
-1. Create an account at [kie.ai](https://kie.ai).
-2. Go to **API Keys** and generate a token. Paste it into `KIE_API_TOKEN`.
+There is **no shared API key** — each user brings their own:
+
+1. Each user creates an account at [kie.ai](https://kie.ai) and generates an API token at [kie.ai/api-key](https://kie.ai/api-key).
+2. After signing in to the app, they open **Settings → API Keys** and paste their token. It is saved server-side in Supabase and never exposed to the browser.
 3. Set `CALLBACK_BASE_URL` to the **public root URL** of your deployment (no trailing slash). Kie.ai will POST job results to `{CALLBACK_BASE_URL}/api/callback` when a generation finishes.
    - **Local dev:** expose your machine with [ngrok](https://ngrok.com) (`ngrok http 3000`) and use the HTTPS URL it gives you.
    - **Production:** use your deployed domain (e.g. `https://your-app.vercel.app`).
@@ -190,7 +200,7 @@ The app organises objects under these prefixes automatically:
 - **Images:** Seedream, Z-Image, Grok Imagine (X), GPT-4o, Nano Banana, and more
 - **Videos:** Kling 3.0, Kling 2.6 (motion-control), Seedance 2, Grok Imagine (X)
 
-Credits are consumed per generation. Check your balance inside the app via the credit indicator in the top bar.
+Credits are consumed per generation from each user's own Kie.ai balance. Users can check their balance inside the app via the credit indicator in the top bar.
 
 ---
 

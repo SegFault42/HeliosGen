@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { mirrorToR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getKieTokenForUser } from "@/lib/getKieToken";
 
 const RECORD_INFO = "https://api.kie.ai/api/v1/jobs/recordInfo";
 
@@ -95,20 +96,33 @@ async function syncFromKie(
   }
 }
 
+async function resolveKieToken(taskId: string, stored?: { userId?: string }): Promise<string | null> {
+  // Try userId from jobStore first
+  if (stored?.userId) return getKieTokenForUser(stored.userId);
+  // Fall back to generations table (covers server-restart / cold-start cases)
+  const { data } = await supabaseAdmin
+    .from("generations")
+    .select("user_id")
+    .eq("task_id", taskId)
+    .single();
+  if (data?.user_id) return getKieTokenForUser(data.user_id);
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const taskId = req.nextUrl.searchParams.get("taskId");
   if (!taskId) {
     return NextResponse.json({ error: "taskId is required" }, { status: 400 });
   }
 
-  const token = process.env.KIE_API_TOKEN;
   const result = jobStore.get(taskId);
 
   // ── Task known to local store ──────────────────────────────────────────────
   if (result) {
     if (result.status === "pending") {
       // Sync from Kie in case the webhook callback was missed
-      if (token) await syncFromKie(taskId, token, (result as { type?: "image" | "video" }).type);
+      const token = await resolveKieToken(taskId, result.status === "pending" ? result : undefined);
+      if (token) await syncFromKie(taskId, token, result.type);
       return NextResponse.json(jobStore.get(taskId) ?? result);
     }
     return NextResponse.json(result);
@@ -118,16 +132,18 @@ export async function GET(req: NextRequest) {
   // For Kie jobs: query Kie.ai directly to recover the state.
   // For Azure jobs (azure-* prefix): unrecoverable if not in jobStore
   //   (Azure has no status endpoint; jobStore is file-backed so this is rare).
-  if (token && !taskId.startsWith("azure-")) {
-    const kieState = await syncFromKie(taskId, token);
+  if (!taskId.startsWith("azure-")) {
+    const token = await resolveKieToken(taskId);
+    if (token) {
+      const kieState = await syncFromKie(taskId, token);
 
-    if (kieState === "done" || kieState === "error") {
-      return NextResponse.json(jobStore.get(taskId)!);
-    }
+      if (kieState === "done" || kieState === "error") {
+        return NextResponse.json(jobStore.get(taskId)!);
+      }
 
-    if (kieState === "pending") {
-      // Still running on Kie's side — tell the client to keep polling
-      return NextResponse.json({ status: "pending" });
+      if (kieState === "pending") {
+        return NextResponse.json({ status: "pending" });
+      }
     }
   }
 

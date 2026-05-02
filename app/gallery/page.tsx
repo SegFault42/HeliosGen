@@ -222,7 +222,7 @@ function GalleryInner() {
   const [authLoaded, setAuthLoaded] = useState(false);
 
   const [items, setItems] = useState<GalleryItem[]>(() => galleryCache.get(tab)?.items ?? []);
-  const [loading, setLoading] = useState(() => galleryCache.get(tab) === undefined);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => galleryCache.get(tab)?.hasMore ?? true);
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
@@ -258,9 +258,15 @@ function GalleryInner() {
   const [pendingGens, setPendingGens] = useState<PendingGen[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [genError, setGenError] = useState<string>("");
-  const debugMode = useWorkflowStore((s) => s.debugMode);
+  const debugMode   = useWorkflowStore((s) => s.debugMode);
+  const addToast    = useWorkflowStore((s) => s.addToast);
+  const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
+  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
   const [sourceFilter, setSourceFilter] = useState<"generated" | "uploaded">("generated");
   const [zoom, setZoom] = useState(6);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const gridOuterRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const [downloads, setDownloads] = useState<DownloadTask[]>([]);
   const [refError, setRefError] = useState("");
 
@@ -329,9 +335,18 @@ function GalleryInner() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setAuthLoaded(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.access_token) {
+        fetch("/api/settings/kie-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then(r => r.json())
+          .then(d => setKieKeySet(!!d.hasToken))
+          .catch(() => setKieKeySet(false))
+          .finally(() => setAuthLoaded(true));
+      } else {
+        setKieKeySet(null);
+        setAuthLoaded(true);
+      }
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       setUser(session?.user ?? null);
@@ -397,10 +412,10 @@ function GalleryInner() {
   }, []);
 
   useEffect(() => {
-    if (authLoaded && user) loadItems(tab, 0, true);
-    if (authLoaded && !user) setLoading(false);
+    if (!authLoaded || kieKeySet === null) return;
+    if (user) loadItems(tab, 0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoaded]);
+  }, [authLoaded, kieKeySet]);
 
   useEffect(() => {
     tabRef.current = tab;
@@ -502,6 +517,17 @@ function GalleryInner() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  useEffect(() => {
+    const el = gridOuterRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerWidth(e.contentRect.width));
+    ro.observe(el);
+    setContainerWidth(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  // Re-run once the full layout is mounted (after auth loads and user is present)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoaded, user]);
 
   // ── Image upload ──────────────────────────────────────────────────────────
 
@@ -1000,7 +1026,7 @@ function GalleryInner() {
   const hasVidRefs = isVideo && (!!vidStartFrame || !!vidEndFrame || !!vidVideoRef || vidResources.length > 0 || vidElements.length > 0 || vidRefVideos.length > 0 || vidRefAudios.length > 0);
 
   const vidRequiresPrompt = isVideo && !!(vidModel?.apiInput.promptMaxLength);
-  const canGenerate = submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const canGenerate = kieKeySet === false ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
@@ -1072,13 +1098,69 @@ function GalleryInner() {
     }
   }, [downloads]);
 
-  const colCount = zoom;
+  const GALLERY_GAP = 3;
 
   const filteredItems = useMemo(() =>
     sourceFilter === "generated"
       ? items.filter(item => item.source === "generation")
       : items.filter(item => item.source === "upload"),
     [items, sourceFilter]);
+
+  const justifiedRows = useMemo(() => {
+    if (containerWidth <= 0) return [];
+    const targetH = Math.max(80, Math.min(400, Math.round(containerWidth / Math.max(1, zoom))));
+
+    type LayoutEntry =
+      | { kind: "pending"; pg: PendingGen; ratio: number; width: number }
+      | { kind: "gallery"; item: GalleryItem; ratio: number; width: number };
+
+    const allItems: LayoutEntry[] = [
+      ...pendingGens.map(pg => {
+        const [ws, hs] = pg.aspectRatio.split(":");
+        const w = parseFloat(ws), h = parseFloat(hs);
+        return { kind: "pending" as const, pg, ratio: (w && h) ? w / h : 1, width: 0 };
+      }),
+      ...filteredItems.map(item => {
+        const ar = item.aspect_ratio;
+        let ratio = 1;
+        if (ar && ar !== "auto") {
+          const [w, h] = ar.split(":");
+          const wn = parseFloat(w), hn = parseFloat(h);
+          if (wn && hn) ratio = wn / hn;
+        }
+        return { kind: "gallery" as const, item, ratio, width: 0 };
+      }),
+    ];
+
+    const rows: Array<{ items: LayoutEntry[]; height: number }> = [];
+    let cur: LayoutEntry[] = [];
+    let ratioSum = 0;
+
+    const sealRow = (items: LayoutEntry[], rSum: number, rowH: number) => {
+      const totalGaps = (items.length - 1) * GALLERY_GAP;
+      const availW = containerWidth - totalGaps;
+      rows.push({
+        items: items.map(it => ({ ...it, width: availW * it.ratio / rSum })),
+        height: rowH,
+      });
+    };
+
+    for (const item of allItems) {
+      cur.push(item);
+      ratioSum += item.ratio;
+      const gaps = (cur.length - 1) * GALLERY_GAP;
+      const h = (containerWidth - gaps) / ratioSum;
+      if (h <= targetH) {
+        sealRow(cur, ratioSum, h);
+        cur = [];
+        ratioSum = 0;
+      }
+    }
+
+    if (cur.length > 0) sealRow(cur, ratioSum, targetH);
+
+    return rows;
+  }, [containerWidth, zoom, pendingGens, filteredItems, GALLERY_GAP]);
 
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1164,38 +1246,42 @@ function GalleryInner() {
       </div>
 
       {/* ── Grid ── */}
-      <div style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
-        {/* ── Gallery grid ── */}
-        {loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${colCount}, 1fr)`, gap: "3px", padding: "3px", alignItems: "start" }}>
-            {Array.from({ length: colCount * 3 }).map((_, i) => (
-              <div
-                key={i}
-                className="gallery-skeleton"
-                style={{ aspectRatio: i % 3 === 1 ? "4 / 5" : i % 5 === 0 ? "16 / 9" : "1 / 1" }}
-              />
+      <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
+        {loading || containerWidth === 0 ? (
+          /* Skeleton — shown while loading or before container size is measured */
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${zoom}, 1fr)`, gap: "3px", padding: "3px", alignItems: "start" }}>
+            {Array.from({ length: zoom * 3 }).map((_, i) => (
+              <div key={i} className="gallery-skeleton" style={{ aspectRatio: i % 3 === 1 ? "4 / 5" : i % 5 === 0 ? "16 / 9" : "1 / 1" }} />
             ))}
           </div>
-        ) : !loading && filteredItems.length === 0 && pendingGens.length === 0 ? (
+        ) : filteredItems.length === 0 && pendingGens.length === 0 ? (
           <EmptyState tab={tab} />
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${colCount}, 1fr)`, gap: "3px", padding: "3px", alignItems: "start" }}>
-            {[
-              ...pendingGens.map(pg => ({ kind: "pending" as const, pg })),
-              ...filteredItems.map(item => ({ kind: "gallery" as const, item })),
-            ].map(mi => {
-              if (mi.kind === "pending") {
-                const pg = mi.pg;
-                const [ws, hs] = pg.aspectRatio.split(":");
-                const w = parseFloat(ws), h = parseFloat(hs);
-                return (
-                      <div key={pg.id} className="gallery-item" style={{
-                        aspectRatio: (w && h) ? `${w} / ${h}` : "1 / 1",
+          <div ref={gridRef} style={{ padding: "3px" }}>
+            {justifiedRows.map((row, rowIdx) => (
+              <div
+                key={rowIdx}
+                style={{
+                  display: "flex",
+                  height: row.height,
+                  gap: `${GALLERY_GAP}px`,
+                  marginBottom: rowIdx < justifiedRows.length - 1 ? `${GALLERY_GAP}px` : 0,
+                }}
+              >
+                {row.items.map(layoutItem => {
+                  if (layoutItem.kind === "pending") {
+                    const pg = layoutItem.pg;
+                    return (
+                      <div key={pg.id} style={{
+                        width: layoutItem.width,
+                        flex: "0 0 auto",
+                        height: "100%",
+                        position: "relative",
+                        overflow: "hidden",
                         background: pg.error ? "rgba(20,8,8,0.95)" : "#0D1012",
                       }}>
                         {pg.error ? (
                           <>
-                            {/* Error state */}
                             <div style={{
                               position: "absolute", inset: 0,
                               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -1212,102 +1298,61 @@ function GalleryInner() {
                                 {pg.error}
                               </p>
                             </div>
-                            {/* Top-right icon buttons */}
-                            <div style={{
-                              position: "absolute", top: 8, right: 8,
-                              display: "flex", flexDirection: "column", gap: 5, zIndex: 5,
-                            }}>
-                              {/* Paste prompt + ref images */}
-                              <button
-                                className="gallery-action-btn"
-                                title="Paste prompt & images"
-                                onClick={() => handleCopyPrompt(pg.prompt, pg.referenceImageUrls)}
-                              >
+                            <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 5, zIndex: 5 }}>
+                              <button className="gallery-action-btn" title="Paste prompt & images" onClick={() => handleCopyPrompt(pg.prompt, pg.referenceImageUrls)}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                                 </svg>
                               </button>
-                              {/* Retry */}
-                              <button
-                                className="gallery-action-btn"
-                                title="Retry"
-                                onClick={async () => {
-                                  const newId = crypto.randomUUID();
-                                  const newPending: PendingGen = {
-                                    id: newId,
-                                    aspectRatio: pg.aspectRatio,
-                                    prompt: pg.prompt,
-                                    referenceImageUrls: pg.referenceImageUrls,
-                                  };
-                                  setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
-
-                                  const token = await getToken();
-                                  if (!token) {
-                                    setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p));
-                                    return;
-                                  }
-
-                                  const storedRefs = pg.referenceImageUrls ?? [];
-                                  const syntheticTagged: TaggedImage[] = storedRefs.map((url, i) => ({ label: `img${i + 1}`, refId: url, url }));
-                                  const { resolvedPrompt, extraUrls } = resolveGalleryMentions(pg.prompt, syntheticTagged);
-                                  const dedupedExtra = new Set(extraUrls);
-                                  const imageUrls = [...extraUrls, ...storedRefs.filter(u => !dedupedExtra.has(u))];
-
-                                  const azureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
-                                  const azureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
-                                  const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
-                                  const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
-
-                                  let taskId: string;
-                                  try {
-                                    const res = await fetch("/api/generate", {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                                      body: JSON.stringify({
-                                        prompt: resolvedPrompt, model: modelId, aspectRatio: pg.aspectRatio, quality, imageUrls,
-                                        ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality } : {}),
-                                      }),
+                              <button className="gallery-action-btn" title="Retry" onClick={async () => {
+                                const newId = crypto.randomUUID();
+                                const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls };
+                                setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
+                                const token = await getToken();
+                                if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p)); return; }
+                                const storedRefs = pg.referenceImageUrls ?? [];
+                                const syntheticTagged: TaggedImage[] = storedRefs.map((url, i) => ({ label: `img${i + 1}`, refId: url, url }));
+                                const { resolvedPrompt, extraUrls } = resolveGalleryMentions(pg.prompt, syntheticTagged);
+                                const dedupedExtra = new Set(extraUrls);
+                                const imageUrls = [...extraUrls, ...storedRefs.filter(u => !dedupedExtra.has(u))];
+                                const azureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
+                                const azureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
+                                const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
+                                const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
+                                let taskId: string;
+                                try {
+                                  const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ prompt: resolvedPrompt, model: modelId, aspectRatio: pg.aspectRatio, quality, imageUrls, ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality } : {}) }) });
+                                  const d = await res.json() as { taskId?: string; error?: string };
+                                  if (!res.ok) throw new Error(d.error ?? "Failed");
+                                  taskId = d.taskId!;
+                                } catch (e: unknown) {
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                  return;
+                                }
+                                try {
+                                  await pollTask(taskId);
+                                  const fresh = await fetchNewItems(tabRef.current);
+                                  setPendingGens(prev => prev.filter(p => p.id !== newId));
+                                  if (fresh.length > 0) {
+                                    setItems(prev => {
+                                      const existingIds = new Set(prev.map(i => i.id));
+                                      const brandNew = fresh.filter(i => !existingIds.has(i.id));
+                                      if (brandNew.length === 0) return prev;
+                                      const merged = [...brandNew, ...prev];
+                                      galleryCache.set(tabRef.current, { items: merged, hasMore: true });
+                                      return merged;
                                     });
-                                    const d = await res.json() as { taskId?: string; error?: string };
-                                    if (!res.ok) throw new Error(d.error ?? "Failed");
-                                    taskId = d.taskId!;
-                                  } catch (e: unknown) {
-                                    const msg = e instanceof Error ? e.message : String(e);
-                                    setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: msg } : p));
-                                    return;
                                   }
-
-                                  try {
-                                    await pollTask(taskId);
-                                    const fresh = await fetchNewItems(tabRef.current);
-                                    setPendingGens(prev => prev.filter(p => p.id !== newId));
-                                    if (fresh.length > 0) {
-                                      setItems(prev => {
-                                        const existingIds = new Set(prev.map(i => i.id));
-                                        const brandNew = fresh.filter(i => !existingIds.has(i.id));
-                                        if (brandNew.length === 0) return prev;
-                                        const merged = [...brandNew, ...prev];
-                                        galleryCache.set(tabRef.current, { items: merged, hasMore: true });
-                                        return merged;
-                                      });
-                                    }
-                                    window.dispatchEvent(new Event("credits-refresh"));
-                                  } catch (e: unknown) {
-                                    const msg = e instanceof Error ? e.message : String(e);
-                                    setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: msg } : p));
-                                  }
-                                }}
-                              >
+                                  window.dispatchEvent(new Event("credits-refresh"));
+                                } catch (e: unknown) {
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                }
+                              }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
                                 </svg>
                               </button>
-                              {/* Delete */}
-                              <button
-                                className="gallery-action-btn gallery-delete-btn"
-                                title="Dismiss"
-                                onClick={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}
-                              >
+                              <button className="gallery-action-btn gallery-delete-btn" title="Dismiss" onClick={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                                 </svg>
@@ -1316,29 +1361,13 @@ function GalleryInner() {
                           </>
                         ) : (
                           <>
-                            {/* Generating spinner */}
-                            <div style={{
-                              position: "absolute", inset: 0,
-                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px",
-                            }}>
-                              <div style={{
-                                width: "20px", height: "20px", borderRadius: "50%",
-                                border: "2px solid rgba(119,229,68,0.15)", borderTopColor: "#ff3df5",
-                                animation: "spin 0.9s linear infinite",
-                              }} />
-                              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                                Generating
-                              </span>
+                            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                              <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: "2px solid rgba(119,229,68,0.15)", borderTopColor: "#ff3df5", animation: "spin 0.9s linear infinite" }} />
+                              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" }}>Generating</span>
                             </div>
                             {pg.prompt && (
-                              <div style={{
-                                position: "absolute", bottom: 0, left: 0, right: 0,
-                                padding: "24px 10px 10px",
-                                background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)",
-                              }}>
-                                <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                                  {pg.prompt}
-                                </p>
+                              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px 10px 10px", background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)" }}>
+                                <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{pg.prompt}</p>
                               </div>
                             )}
                           </>
@@ -1347,19 +1376,22 @@ function GalleryInner() {
                     );
                   }
                   return (
-                    <GalleryCard
-                      key={mi.item.id}
-                      item={mi.item}
-                      onOpen={() => setLightboxItem(mi.item)}
-                      onAddReference={mi.item.mediaType === "image" && canAddImgs ? handleAddReference : undefined}
-                      onCopyPrompt={handleCopyPrompt}
-                      onDownload={handleDownload}
-                      onDelete={handleDelete}
-                      videoMuted={videoMuted}
-                      onToggleMute={() => setVideoMuted(m => !m)}
-                    />
-                );
-              })}
+                    <div key={layoutItem.item.id} style={{ width: layoutItem.width, flex: "0 0 auto", height: "100%", overflow: "hidden" }}>
+                      <GalleryCard
+                        item={layoutItem.item}
+                        onOpen={() => setLightboxItem(layoutItem.item)}
+                        onAddReference={layoutItem.item.mediaType === "image" && canAddImgs ? handleAddReference : undefined}
+                        onCopyPrompt={handleCopyPrompt}
+                        onDownload={handleDownload}
+                        onDelete={handleDelete}
+                        videoMuted={videoMuted}
+                        onToggleMute={() => setVideoMuted(m => !m)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         )}
         <div ref={sentinelRef} style={{ height: "1px" }} />
@@ -3327,7 +3359,7 @@ function GalleryCard({
 
   if (failed) {
     return (
-      <div className="gallery-item" style={{ aspectRatio: cssRatio ?? "1 / 1", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="gallery-item" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
       </div>
     );
@@ -3337,7 +3369,6 @@ function GalleryCard({
     <div
       ref={cardRef}
       className="gallery-item"
-      style={cssRatio ? { aspectRatio: cssRatio } : undefined}
       onMouseEnter={() => { if (isVideo) videoRef.current?.play().then(() => setPlaying(true)).catch(() => { }); }}
       onMouseLeave={() => { if (isVideo && videoRef.current) { videoRef.current.pause(); setPlaying(false); } }}
       onClick={onOpen}
@@ -3352,7 +3383,7 @@ function GalleryCard({
             playsInline
             preload="metadata"
             onError={() => setFailed(true)}
-            style={cssRatio ? { width: "100%", height: "100%", objectFit: "cover", display: "block" } : { width: "100%", height: "auto", display: "block" }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
           {!playing && (
             <div className="gallery-play-icon">
@@ -3396,7 +3427,7 @@ function GalleryCard({
               loadedImageUrls.add(item.url);
             }}
             onError={() => setFailed(true)}
-            style={{ display: "block", width: "100%", height: "auto", opacity: imgLoaded ? 1 : 0, transition: "opacity 280ms ease" }}
+            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", opacity: imgLoaded ? 1 : 0, transition: "opacity 280ms ease" }}
           />
           {/* Inner carousel nav — only when multiple images */}
           {allUrls.length > 1 && (
@@ -4150,6 +4181,7 @@ const GALLERY_CSS = `
     cursor: pointer;
     background: #222226;
     width: 100%;
+    height: 100%;
   }
   .gallery-actions-top {
     position: absolute;
@@ -4234,8 +4266,8 @@ const GALLERY_CSS = `
     background-size: 800px 100%;
     animation: shimmer 1.6s infinite linear;
   }
-  .gallery-item img { display: block; width: 100%; height: auto; }
-  .gallery-item video { display: block; width: 100%; height: auto; }
+  .gallery-item img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .gallery-item video { display: block; width: 100%; height: 100%; object-fit: cover; }
   [data-at-menu] { font-family: inherit; }
   .gallery-overlay {
     position: absolute; inset: 0;

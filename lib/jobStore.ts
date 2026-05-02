@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 export type JobResult =
-  | { status: "pending"; type?: "image" | "video" }
+  | { status: "pending"; type?: "image" | "video"; userId?: string }
   | { status: "done"; imageUrl?: string; imageUrls?: string[]; videoUrl?: string }
   | { status: "error"; error: string };
 

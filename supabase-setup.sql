@@ -85,3 +85,15 @@ alter table public.generations enable row level security;
 create policy "users read own generations"
   on public.generations for select
   using (auth.uid() = user_id);
+
+-- ── User settings (per-user API keys) ─────────────────────────────────────────
+
+create table public.user_settings (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  kie_api_token text,
+  updated_at timestamptz not null default now()
+);
+
+-- Only the service role accesses this table (from API routes).
+-- No user-facing RLS policies needed — the server never exposes the token to the client.
+alter table public.user_settings enable row level security;

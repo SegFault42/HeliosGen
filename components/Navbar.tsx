@@ -24,6 +24,7 @@ function NavbarInner() {
   const toggleDebug = useWorkflowStore((s) => s.toggleDebug);
   const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
   const setShowDashboard = useWorkflowStore((s) => s.setShowDashboard);
+  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
   const supabase = createClient();
 
   // ── Preload heavy route chunks in background ──────────────────────────────
@@ -41,6 +42,14 @@ function NavbarInner() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       setUser(session?.user ?? null);
+      if (session?.access_token) {
+        fetch("/api/settings/kie-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then((r) => r.json())
+          .then((d) => setKieKeySet(!!d.hasToken))
+          .catch(() => {});
+      } else {
+        setKieKeySet(null);
+      }
     });
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -51,7 +60,11 @@ function NavbarInner() {
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await fetch("/api/credit");
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: HeadersInit = session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {};
+        const res = await fetch("/api/credit", { headers });
         if (!res.ok) return;
         const data = await res.json();
         const val = typeof data?.data === "number"

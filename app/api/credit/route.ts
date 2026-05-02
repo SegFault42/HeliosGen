@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getKieToken } from "@/lib/getKieToken";
 
-export async function GET() {
-  const apiKey = process.env.KIE_API_TOKEN;
-  if (!apiKey) return NextResponse.json({ error: "KIE_API_TOKEN not set" }, { status: 500 });
+export async function GET(req: NextRequest) {
+  const apiKey = await getKieToken(req);
+  if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const res = await fetch("https://api.kie.ai/api/v1/chat/credit", {
     headers: { Authorization: `Bearer ${apiKey}` },

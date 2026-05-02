@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useWorkflowStore } from "@/lib/store";
+import { createClient } from "@/lib/supabase/client";
 
 export default function CreditBalance() {
   const [balance, setBalance] = useState<number | null>(null);
@@ -9,7 +10,11 @@ export default function CreditBalance() {
 
   const fetchBalance = async () => {
     try {
-      const res = await fetch("/api/credit");
+      const { data: { session } } = await createClient().auth.getSession();
+      const headers: HeadersInit = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+      const res = await fetch("/api/credit", { headers });
       if (!res.ok) return;
       const data = await res.json();
       const val = typeof data?.data === "number" ? data.data : (data?.data?.balance ?? data?.balance ?? null);

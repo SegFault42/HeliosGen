@@ -3,6 +3,7 @@ import { jobStore } from "@/lib/jobStore";
 import { ensureR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { getKieTokenForUser } from "@/lib/getKieToken";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -45,8 +46,9 @@ export async function POST(req: NextRequest) {
     debugOnly       = false,
   } = await req.json();
 
-  const apiKey = process.env.KIE_API_TOKEN;
-  if (!apiKey) return NextResponse.json({ error: "KIE_API_TOKEN not set" }, { status: 500 });
+  const userId = await getUserId(req);
+  const apiKey = userId ? await getKieTokenForUser(userId) : null;
+  if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const callbackBase = process.env.CALLBACK_BASE_URL;
   if (!callbackBase) return NextResponse.json({ error: "CALLBACK_BASE_URL not set" }, { status: 500 });
@@ -217,10 +219,9 @@ export async function POST(req: NextRequest) {
   if (!taskId) return NextResponse.json({ error: "No taskId returned" }, { status: 500 });
 
   // Register as pending so the frontend can poll job-status
-  jobStore.set(taskId, { status: "pending", type: "video" });
+  jobStore.set(taskId, { status: "pending", type: "video", userId: userId ?? undefined });
 
   // Save to Supabase (fire-and-forget)
-  const userId = await getUserId(req);
 
   const referenceUrls: string[] = apiInput.useMotionControl
     ? [

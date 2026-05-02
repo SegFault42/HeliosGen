@@ -158,6 +158,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const killEdgesForHandles = useWorkflowStore((s) => s.killEdgesForHandles);
   const remapTargetHandle = useWorkflowStore((s) => s.remapTargetHandle);
   const flashEdgeError = useWorkflowStore((s) => s.flashEdgeError);
+  const addToast  = useWorkflowStore((s) => s.addToast);
+  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
@@ -725,7 +727,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       setLoading(false);
     }
   }, [id, nodes, edges, prompt, sound, duration, aspectRatio, videoModelId,
-    mode, resolution, cfg, debugMode, textEdge, updateNodeData, setAuthModalOpen, flashEdgeError]);
+    mode, resolution, cfg, debugMode, textEdge, updateNodeData, setAuthModalOpen, flashEdgeError, kieKeySet, addToast]);
 
   const hoveredDef = hoveredHand && activeHandles.has(hoveredHand)
     ? handles.find((h) => h.id === hoveredHand)
@@ -1259,7 +1261,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               </div>{/* end pills wrapper */}
 
               {/* Generate button — always right */}
-              <GenerateButton onClick={generate} busy={busy} disabled={promptOverLimit} />
+              <GenerateButton onClick={generate} busy={busy} disabled={promptOverLimit || kieKeySet === false} />
             </div>
           );
         })()}

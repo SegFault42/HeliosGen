@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
+import { createClient } from "@/lib/supabase/client";
+import { useWorkflowStore } from "@/lib/store";
 
 /* ─── Provider options ──────────────────────────────────────────────────────── */
 
@@ -329,6 +331,9 @@ function ApiKeysPanel({
   onDeploymentChange,
   azureBaseUrl,
   onBaseUrlChange,
+  kieKeyStatus,
+  onKieKeySave,
+  onKieKeyDelete,
 }: {
   providers: Record<string, ProviderId>;
   onProviderChange: (modelId: string, v: ProviderId) => void;
@@ -336,7 +341,28 @@ function ApiKeysPanel({
   onDeploymentChange: (modelId: string, v: string) => void;
   azureBaseUrl: string;
   onBaseUrlChange: (v: string) => void;
+  kieKeyStatus: "unknown" | "set" | "unset";
+  onKieKeySave: (token: string) => Promise<void>;
+  onKieKeyDelete: () => Promise<void>;
 }) {
+  const [kieInput, setKieInput]     = useState("");
+  const [kieSaving, setKieSaving]   = useState(false);
+  const [kieError, setKieError]     = useState<string | null>(null);
+
+  const handleKieSave = async () => {
+    if (!kieInput.trim()) return;
+    setKieSaving(true);
+    setKieError(null);
+    try {
+      await onKieKeySave(kieInput.trim());
+      setKieInput("");
+    } catch (e: unknown) {
+      setKieError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setKieSaving(false);
+    }
+  };
+
   const imageModels = IMAGE_MODELS.map((m) => ({
     id: m.id,
     name: m.name,
@@ -361,9 +387,124 @@ function ApiKeysPanel({
           API Keys
         </h2>
         <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Choose which provider handles each model. Set the global Azure base URL once and specify
-          a deployment name per model.
+          Your Kie.ai key is stored securely on the server — it is never exposed to the browser.
         </p>
+      </div>
+
+      {/* ──── Kie.ai API key ──────────────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          padding: "16px",
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span
+            style={{
+              width: "28px", height: "28px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "11px", fontWeight: 700, color: "rgba(255,255,255,0.55)",
+            }}
+          >
+            K
+          </span>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Kie.ai</div>
+            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+              Used for all image &amp; video generation
+            </div>
+          </div>
+          {kieKeyStatus === "set" && (
+            <span
+              style={{
+                marginLeft: "auto", fontSize: "10px", fontWeight: 600,
+                color: "rgba(74,222,128,0.8)", background: "rgba(74,222,128,0.08)",
+                border: "1px solid rgba(74,222,128,0.2)", borderRadius: "5px",
+                padding: "2px 7px", letterSpacing: "0.04em",
+              }}
+            >
+              SAVED
+            </span>
+          )}
+        </div>
+
+        {kieKeyStatus === "unknown" ? (
+          <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{
+              flex: 1, height: "31px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.05)",
+              animation: "skeleton-pulse 1.4s ease-in-out infinite",
+            }} />
+            <div style={{
+              width: "72px", height: "31px", borderRadius: "7px",
+              background: "rgba(255,255,255,0.05)",
+              animation: "skeleton-pulse 1.4s ease-in-out infinite 0.2s",
+            }} />
+          </div>
+        ) : kieKeyStatus === "set" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <input
+              type="password"
+              value="placeholdertoken"
+              readOnly
+              style={{ ...INPUT_STYLE, flex: 1, cursor: "default", color: "rgba(255,255,255,0.3)" }}
+            />
+            <button
+              onClick={onKieKeyDelete}
+              style={{
+                padding: "7px 12px", borderRadius: "7px", border: "1px solid rgba(239,68,68,0.3)",
+                background: "rgba(239,68,68,0.06)", color: "rgba(239,68,68,0.7)",
+                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="password"
+                placeholder="Paste your Kie.ai API token"
+                value={kieInput}
+                onChange={(e) => setKieInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleKieSave(); }}
+                style={{ ...INPUT_STYLE, flex: 1 }}
+                onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.2)"; }}
+                onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+              />
+              <button
+                onClick={handleKieSave}
+                disabled={!kieInput.trim() || kieSaving}
+                style={{
+                  padding: "7px 14px", borderRadius: "7px", border: "none",
+                  background: kieInput.trim() ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
+                  color: kieInput.trim() ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)",
+                  cursor: kieInput.trim() ? "pointer" : "default",
+                  fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+                  transition: "background 140ms ease, color 140ms ease",
+                }}
+              >
+                {kieSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {kieError && (
+              <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0 }}>{kieError}</p>
+            )}
+            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+              Get your token at{" "}
+              <a href="https://kie.ai/api-key" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>
+                kie.ai/api-key
+              </a>
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ──── Global Azure Foundry endpoint ───────────────────────────── */}
@@ -470,13 +611,27 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [modelProviders, setModelProviders] = useState<Record<string, ProviderId>>({});
   const [azureDeployments, setAzureDeployments] = useState<Record<string, string>>({});
   const [azureBaseUrl, setAzureBaseUrl]   = useState("");
+  const [kieKeyStatus, setKieKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
+  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
   const overlayRef = useRef<HTMLDivElement>(null);
+
+  async function authHeader(): Promise<HeadersInit> {
+    const { data: { session } } = await createClient().auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  }
 
   /* Load persisted data on mount */
   useEffect(() => {
     setModelProviders(loadModelProviders());
     setAzureDeployments(loadAzureEndpoints());
     setAzureBaseUrl(loadAzureBaseUrl());
+    // Check if Kie key is saved on the server
+    authHeader().then((h) =>
+      fetch("/api/settings/kie-key", { headers: h })
+        .then((r) => r.json())
+        .then((d) => setKieKeyStatus(d.hasToken ? "set" : "unset"))
+        .catch(() => setKieKeyStatus("unset"))
+    );
   }, []);
 
   /* Close on Escape */
@@ -510,6 +665,25 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     saveAzureBaseUrl(v);
   };
 
+  const handleKieKeySave = async (token: string) => {
+    const h = await authHeader();
+    const res = await fetch("/api/settings/kie-key", {
+      method: "POST",
+      headers: { ...h, "Content-Type": "application/json" },
+      body: JSON.stringify({ kieApiToken: token }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+    setKieKeyStatus("set");
+    setKieKeySet(true);
+  };
+
+  const handleKieKeyDelete = async () => {
+    const h = await authHeader();
+    await fetch("/api/settings/kie-key", { method: "DELETE", headers: h });
+    setKieKeyStatus("unset");
+    setKieKeySet(false);
+  };
+
   return (
     <>
       {/* ── Keyframe animations ── */}
@@ -521,6 +695,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         @keyframes settingsModalIn {
           from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
           to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        @keyframes skeleton-pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
         }
       `}</style>
 
@@ -697,6 +875,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onDeploymentChange={handleDeploymentChange}
                 azureBaseUrl={azureBaseUrl}
                 onBaseUrlChange={handleBaseUrlChange}
+                kieKeyStatus={kieKeyStatus}
+                onKieKeySave={handleKieKeySave}
+                onKieKeyDelete={handleKieKeyDelete}
               />
             )}
           </div>
