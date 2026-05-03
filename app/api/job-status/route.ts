@@ -54,22 +54,18 @@ async function syncFromKie(
 
         if (isVideo) {
           jobStore.set(taskId, { status: "done", videoUrl: r2Urls[0] });
-          supabaseAdmin
+          const { error } = await supabaseAdmin
             .from("generations")
             .update({ status: "done", video_url: r2Urls[0] })
-            .eq("task_id", taskId)
-            .then(({ error }) => {
-              if (error) console.error("[job-status] supabase update error:", error.message);
-            });
+            .eq("task_id", taskId);
+          if (error) console.error("[job-status] supabase update error:", error.message);
         } else {
           jobStore.set(taskId, { status: "done", imageUrl: r2Urls[0], imageUrls: r2Urls });
-          supabaseAdmin
+          const { error } = await supabaseAdmin
             .from("generations")
             .update({ status: "done", image_url: r2Urls[0], image_urls: r2Urls })
-            .eq("task_id", taskId)
-            .then(({ error }) => {
-              if (error) console.error("[job-status] supabase update error:", error.message);
-            });
+            .eq("task_id", taskId);
+          if (error) console.error("[job-status] supabase update error:", error.message);
         }
         return "done";
       }

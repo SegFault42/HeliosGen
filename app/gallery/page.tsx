@@ -38,6 +38,8 @@ interface PendingGen {
   prompt: string;
   referenceImageUrls?: string[];
   error?: string;
+  taskId?: string;
+  createdAt?: string;
 }
 
 
@@ -183,6 +185,13 @@ const galleryCache = {
 const loadedImageUrls = new Set<string>();
 const naturalRatioCache = new Map<string, string>(); // url → "w / h"
 
+function mergeByNewest(prev: GalleryItem[], incoming: GalleryItem[]): GalleryItem[] {
+  const seen = new Set(prev.map(i => i.id));
+  const brandNew = incoming.filter(i => !seen.has(i.id));
+  if (brandNew.length === 0) return prev;
+  return [...prev, ...brandNew].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
 interface SavedSettings {
   prompt: string; modelId: string; aspectRatio: string;
   quality: string; count: number; duration: number; mode: string;
@@ -245,6 +254,7 @@ function GalleryInner() {
     return ("defaultRatio" in mdl ? (mdl as { defaultRatio: string }).defaultRatio : null) ?? mdl.ratios[0] ?? "1:1";
   });
   const [quality, setQuality] = useState<string>(() => loadSettings(tab)?.quality ?? "2k");
+  const [isAzureProvider, setIsAzureProvider] = useState<boolean>(false);
   const [count, setCount] = useState<number>(() => loadSettings(tab)?.count ?? 1);
   const [duration, setDuration] = useState<number>(() => loadSettings(tab)?.duration ?? 5);
   const [mode, setMode] = useState<string>(() => loadSettings(tab)?.mode ?? "");
@@ -255,7 +265,13 @@ function GalleryInner() {
   const [durPickerPos, setDurPickerPos] = useState<{ left: number; bottom: number } | null>(null);
   const durPillRef = useRef<HTMLButtonElement>(null);
   const durCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pendingGens, setPendingGens] = useState<PendingGen[]>([]);
+  const [pendingGens, setPendingGens] = useState<PendingGen[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("aiui-pending-gens");
+      return stored ? (JSON.parse(stored) as PendingGen[]) : [];
+    } catch { return []; }
+  });
   const [submitting, setSubmitting] = useState(false);
   const [genError, setGenError] = useState<string>("");
   const debugMode   = useWorkflowStore((s) => s.debugMode);
@@ -332,6 +348,48 @@ function GalleryInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Persist pendingGens so generating/failed jobs survive page refresh
+  useEffect(() => {
+    try { localStorage.setItem("aiui-pending-gens", JSON.stringify(pendingGens)); } catch { }
+  }, [pendingGens]);
+
+  // On mount, resume polling for any pending gens that were in-flight before the refresh
+  useEffect(() => {
+    const toResume = pendingGens.filter(p => p.taskId && !p.error);
+    toResume.forEach(async (pending) => {
+      try {
+        // Check immediately (no 3s delay) before entering the regular poll loop
+        const immediateRes = await fetch(`/api/job-status?taskId=${pending.taskId!}`);
+        const immediateResult = await immediateRes.json() as { status: string; error?: string };
+        if (immediateResult.status === "error") throw new Error(immediateResult.error ?? "Generation failed");
+        if (immediateResult.status === "not_found") {
+          // Task expired from server memory — image was likely already saved; just remove the spinner
+          setPendingGens(prev => prev.filter(p => p.id !== pending.id));
+          return;
+        }
+        if (immediateResult.status !== "done") {
+          // Still generating — enter the regular poll loop
+          await pollTask(pending.taskId!);
+        }
+        const fresh = await fetchNewItems(tabRef.current);
+        setPendingGens(prev => prev.filter(p => p.id !== pending.id));
+        if (fresh.length > 0) {
+          setItems(prev => {
+            const merged = mergeByNewest(prev, fresh);
+            if (merged === prev) return prev;
+            galleryCache.set(tabRef.current, { items: merged, hasMore: true });
+            return merged;
+          });
+        }
+        window.dispatchEvent(new Event("credits-refresh"));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -381,7 +439,7 @@ function GalleryInner() {
         galleryCache.set(currentTab, { items: newItems, hasMore: more });
       } else {
         setItems(prev => {
-          const merged = [...prev, ...newItems];
+          const merged = mergeByNewest(prev, newItems);
           galleryCache.set(currentTab, { items: merged, hasMore: more });
           return merged;
         });
@@ -488,6 +546,33 @@ function GalleryInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]);
 
+  // Keep isAzureProvider in sync with localStorage whenever model or provider settings change
+  useEffect(() => {
+    const m = models.find(m => m.id === modelId);
+    const im = m as { azureQualityOptions?: string[] } | undefined;
+    const read = () => {
+      try {
+        const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
+        const base     = localStorage.getItem("aiui-azure-base-url") ?? "";
+        const deploy   = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
+        const azure    = provider === "azure" && !!base && !!deploy && !!im?.azureQualityOptions;
+        setIsAzureProvider(azure);
+        if (!isVideo && im) {
+          const validQ = azure ? (im.azureQualityOptions ?? []) : ((m as { apiInput?: { qualityOptions?: string[] } })?.apiInput?.qualityOptions ?? []);
+          if (validQ.length) setQuality(prev => validQ.includes(prev) ? prev : validQ[0]);
+        }
+      } catch { setIsAzureProvider(false); }
+    };
+    read();
+    window.addEventListener("storage", read);
+    window.addEventListener("aiui-providers-changed", read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener("aiui-providers-changed", read);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelId, isVideo]);
+
   // Infinite scroll
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -503,9 +588,9 @@ function GalleryInner() {
 
   // Persist settings
   useEffect(() => {
-    const refImageUrls = refImages
+    const refImageUrls = [...new Set(refImages
       .filter(r => r.cdnUrl && !r.uploading && !r.error)
-      .map(r => r.cdnUrl!);
+      .map(r => r.cdnUrl!))];
     saveSettings(tab, { prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls });
   }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages]);
 
@@ -740,8 +825,9 @@ function GalleryInner() {
   const generateOne = async (token: string): Promise<string> => {
     if (!isVideo) {
       const { resolvedPrompt, extraUrls } = resolveGalleryMentions(prompt, taggedImages);
-      const refUrls = refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
-      const imageUrls = [...extraUrls, ...refUrls];
+      const extraUrlSet = new Set(extraUrls);
+      const refUrls = refImages.filter(r => r.cdnUrl && !r.error && !extraUrlSet.has(r.cdnUrl!)).map(r => r.cdnUrl!);
+      const imageUrls = [...new Set([...extraUrls, ...refUrls])];
 
       // Read provider settings from localStorage (same keys as GenerateNode)
       const azureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
@@ -834,16 +920,17 @@ function GalleryInner() {
     setGenError("");
 
     const n = isVideo ? 1 : count;
-    const snapshotRefUrls = refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
+    const snapshotRefUrls = [...new Set(refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!))];
     const newPendings: PendingGen[] = Array.from({ length: n }, () => ({
-      id: crypto.randomUUID(), aspectRatio, prompt, referenceImageUrls: snapshotRefUrls,
+      id: crypto.randomUUID(), aspectRatio, prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(),
     }));
     setPendingGens(prev => [...prev, ...newPendings]);
 
     // ── Debug mode: log + simulate, no real API call ────────────────────────
     if (debugMode) {
       const { resolvedPrompt: dbgPrompt, extraUrls: dbgExtra } = resolveGalleryMentions(prompt, taggedImages);
-      const dbgRefUrls = refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
+      const dbgExtraSet = new Set(dbgExtra);
+      const dbgRefUrls = refImages.filter(r => r.cdnUrl && !r.error && !dbgExtraSet.has(r.cdnUrl!)).map(r => r.cdnUrl!);
       const dbgAzureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
       const dbgAzureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
       const dbgProvider        = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
@@ -855,7 +942,7 @@ function GalleryInner() {
         ...(dbgIsAzure ? { azureBaseUrl: dbgAzureBaseUrl, azureDeployment: dbgAzureDeployment, azureQuality: "auto" } : {}),
         ...(isVideo
           ? { duration, mode }
-          : { imageUrls: [...dbgExtra, ...dbgRefUrls], count: n }),
+          : { imageUrls: [...new Set([...dbgExtra, ...dbgRefUrls])], count: n }),
       });
       setTimeout(() => {
         setPendingGens(prev => prev.filter(p => !newPendings.some(np => np.id === p.id)));
@@ -886,6 +973,12 @@ function GalleryInner() {
     }
     setSubmitting(false); // re-enable button — polling happens in background
 
+    // Store taskIds so polls can be resumed after a page refresh
+    setPendingGens(prev => prev.map(p => {
+      const idx = newPendings.findIndex(np => np.id === p.id);
+      return idx >= 0 ? { ...p, taskId: taskIds[idx] } : p;
+    }));
+
     // ── Poll each task independently ───────────────────────────────────────
     taskIds.forEach(async (taskId, i) => {
       const pending = newPendings[i];
@@ -896,10 +989,8 @@ function GalleryInner() {
         setPendingGens(prev => prev.filter(p => p.id !== pending.id));
         if (fresh.length > 0) {
           setItems(prev => {
-            const existingIds = new Set(prev.map(i => i.id));
-            const brandNew = fresh.filter(i => !existingIds.has(i.id));
-            if (brandNew.length === 0) return prev;
-            const merged = [...brandNew, ...prev];
+            const merged = mergeByNewest(prev, fresh);
+            if (merged === prev) return prev;
             galleryCache.set(tabRef.current, { items: merged, hasMore: true });
             return merged;
           });
@@ -1006,15 +1097,6 @@ function GalleryInner() {
   const ratios = (isVideo ? vidModel?.ratios : imgModel?.ratios) ?? [];
   const supportsQ = !isVideo && !!imgModel?.supportsQuality;
 
-  // Read provider from localStorage to pick the right quality option set
-  const isAzureProvider = !isVideo && !!imgModel && (() => {
-    try {
-      const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
-      const base      = localStorage.getItem("aiui-azure-base-url") ?? "";
-      const deploy    = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
-      return provider === "azure" && !!base && !!deploy && !!imgModel.azureQualityOptions;
-    } catch { return false; }
-  })();
   const qualityOpts: string[] = isAzureProvider
     ? (imgModel!.azureQualityOptions ?? [])
     : (imgModel?.apiInput.qualityOptions ?? ["2k", "4k"]);
@@ -1133,18 +1215,25 @@ function GalleryInner() {
       return fallback;
     };
 
+    const toPendingEntry = (pg: PendingGen): GalleryLayoutItem => {
+      const [ws, hs] = pg.aspectRatio.split(":");
+      const w = parseFloat(ws), h = parseFloat(hs);
+      return { kind: "pending" as const, pg, ratio: (w && h) ? w / h : 16 / 9, width: 0 };
+    };
+
+    // Active (generating) gens stay at the top; failed gens sort among gallery items by time.
+    const activePendings = pendingGens.filter(pg => !pg.error);
+    const failedPendings = pendingGens.filter(pg => !!pg.error);
+
+    type Dated = { t: number; entry: GalleryLayoutItem };
+    const mixed: Dated[] = [
+      ...failedPendings.map(pg => ({ t: pg.createdAt ? new Date(pg.createdAt).getTime() : Date.now(), entry: toPendingEntry(pg) })),
+      ...filteredItems.map(item => ({ t: new Date(item.created_at).getTime(), entry: { kind: "gallery" as const, item, ratio: toRatio(item.aspect_ratio, item.mediaType, item.url), width: 0 } })),
+    ].sort((a, b) => b.t - a.t);
+
     const allItems: GalleryLayoutItem[] = [
-      ...pendingGens.map(pg => {
-        const [ws, hs] = pg.aspectRatio.split(":");
-        const w = parseFloat(ws), h = parseFloat(hs);
-        return { kind: "pending" as const, pg, ratio: (w && h) ? w / h : 16 / 9, width: 0 };
-      }),
-      ...filteredItems.map(item => ({
-        kind: "gallery" as const,
-        item,
-        ratio: toRatio(item.aspect_ratio, item.mediaType, item.url),
-        width: 0,
-      })),
+      ...activePendings.map(toPendingEntry),
+      ...mixed.map(d => d.entry),
     ];
 
     const rows: Array<{ items: GalleryLayoutItem[]; height: number }> = [];
@@ -1371,7 +1460,7 @@ function GalleryInner() {
                               </button>
                               <button className="gallery-action-btn" title="Retry" onClick={async () => {
                                 const newId = crypto.randomUUID();
-                                const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls };
+                                const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: new Date().toISOString() };
                                 setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
                                 const token = await getToken();
                                 if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p)); return; }
@@ -1390,6 +1479,7 @@ function GalleryInner() {
                                   const d = await res.json() as { taskId?: string; error?: string };
                                   if (!res.ok) throw new Error(d.error ?? "Failed");
                                   taskId = d.taskId!;
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, taskId } : p));
                                 } catch (e: unknown) {
                                   setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
                                   return;
@@ -1400,10 +1490,8 @@ function GalleryInner() {
                                   setPendingGens(prev => prev.filter(p => p.id !== newId));
                                   if (fresh.length > 0) {
                                     setItems(prev => {
-                                      const existingIds = new Set(prev.map(i => i.id));
-                                      const brandNew = fresh.filter(i => !existingIds.has(i.id));
-                                      if (brandNew.length === 0) return prev;
-                                      const merged = [...brandNew, ...prev];
+                                      const merged = mergeByNewest(prev, fresh);
+                                      if (merged === prev) return prev;
                                       galleryCache.set(tabRef.current, { items: merged, hasMore: true });
                                       return merged;
                                     });
