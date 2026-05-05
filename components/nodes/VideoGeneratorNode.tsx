@@ -1050,43 +1050,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           </div>
         )}
 
-        {/* Carousel nav dots — overlay above bottom bar */}
-        {generations.length > 1 && (
-          <div
-            className="absolute flex items-center justify-center gap-1.5 z-20"
-            style={{ bottom: 82, left: 0, right: 0 }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx - 1); }}
-              disabled={currentGenIdx === 0}
-              className="w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
-              style={{ background: "rgba(0,0,0,0.45)" }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-            </button>
-            {generations.length <= 8 ? generations.map((_, i) => (
-              <button
-                key={i}
-                onClick={(e) => { e.stopPropagation(); goToGen(i); }}
-                className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"}`}
-              />
-            )) : (
-              <span className="text-[10px] text-white/60 font-mono tabular-nums">
-                {currentGenIdx + 1} / {generations.length}
-              </span>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx + 1); }}
-              disabled={currentGenIdx === generations.length - 1}
-              className="w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
-              style={{ background: "rgba(0,0,0,0.45)" }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-            </button>
-          </div>
-        )}
-
         {/* ── Bottom overlay control bar ── */}
         {(() => {
           const modePicker = cfg.modes ? (
@@ -1291,6 +1254,43 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           );
         })()}
       </div>
+
+      {/* ── Carousel nav — floats below the node card ── */}
+      {generations.length > 1 && (
+        <div
+          className="absolute left-0 right-0 flex items-center justify-center gap-1.5"
+          style={{ top: "calc(100% + 16px)" }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx - 1); }}
+            disabled={currentGenIdx === 0}
+            className="absolute left-0 w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
+            style={{ background: "rgba(0,0,0,0.45)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+          {generations.length <= 8 ? generations.map((_, i) => (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); goToGen(i); }}
+              className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"}`}
+            />
+          )) : (
+            <span className="text-[10px] text-white/60 font-mono tabular-nums">
+              {currentGenIdx + 1} / {generations.length}
+            </span>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx + 1); }}
+            disabled={currentGenIdx === generations.length - 1}
+            className="absolute right-0 w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
+            style={{ background: "rgba(0,0,0,0.45)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Video lightbox ───────────────────────────────────────────── */}
       {lightboxOpen && typeof document !== "undefined" && createPortal(
