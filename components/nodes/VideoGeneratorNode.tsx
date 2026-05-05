@@ -211,16 +211,20 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
   const durLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const durRef = useRef<HTMLDivElement>(null);
+  const controlBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!durOpen) return;
+    const anyOpen = modelOpen || ratioOpen || durOpen || modeOpen || grokResOpen;
+    if (!anyOpen) return;
     const handler = (e: MouseEvent) => {
-      if (durRef.current && !durRef.current.contains(e.target as Node)) setDurOpen(false);
+      if (controlBarRef.current && !controlBarRef.current.contains(e.target as unknown as globalThis.Node)) {
+        setModelOpen(false); setRatioOpen(false); setDurOpen(false);
+        setModeOpen(false); setGrokResOpen(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [durOpen]);
+  }, [modelOpen, ratioOpen, durOpen, modeOpen, grokResOpen]);
 
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -1138,6 +1142,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
           return (
             <div
+              ref={controlBarRef}
               className={`absolute left-0 right-0 flex items-end gap-2 px-2.5 pb-2 pt-1 z-10 transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
               style={{ bottom: 36 }}
               onMouseDown={(e) => e.stopPropagation()}
@@ -1202,13 +1207,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
               {/* Duration */}
               {durations.length > 0 && (
-                <div ref={durRef} className="relative">
+                <div className="relative">
                   <Pill onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
                     <span className="text-[11px] text-white/70 tabular-nums">{duration}s</span>
                     <ChevronIcon open={durOpen} />
                   </Pill>
-                  <FloatMenu open={durOpen} fullWidth>
-                    <div className="p-3" onMouseDown={(e) => e.stopPropagation()}>
+                  <FloatMenu open={durOpen}>
+                    <div className="p-3 min-w-[200px]" onMouseDown={(e) => e.stopPropagation()}>
                       <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
                       <div
                         className="nodrag flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-lg"

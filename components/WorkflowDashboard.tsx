@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import NextImage from "next/image";
 import { useWorkflowStore, Space } from "@/lib/store";
 import { timeAgo } from "@/lib/useSpaceSync";
 
@@ -25,13 +26,7 @@ function collectMedia(space: Space): MediaItem[] {
 
 // ── Single media cell ─────────────────────────────────────────────────────────
 
-function MediaCell({ item }: { item: MediaItem }) {
-  const shared: React.CSSProperties = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  };
+function MediaCell({ item, sizes }: { item: MediaItem; sizes: string }) {
   if (item.type === "video") {
     return (
       <video
@@ -41,12 +36,19 @@ function MediaCell({ item }: { item: MediaItem }) {
         playsInline
         autoPlay
         preload="metadata"
-        style={shared}
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
       />
     );
   }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={item.url} alt="" style={shared} />;
+  return (
+    <NextImage
+      src={item.url}
+      alt=""
+      fill
+      sizes={sizes}
+      style={{ objectFit: "cover" }}
+    />
+  );
 }
 
 // ── Mosaic preview ────────────────────────────────────────────────────────────
@@ -82,7 +84,7 @@ function SpacePreview({ space }: { space: Space }) {
   if (media.length === 1) {
     return (
       <div className="absolute inset-0 overflow-hidden">
-        <MediaCell item={media[0]} />
+        <MediaCell item={media[0]} sizes="(max-width: 768px) calc(100vw - 80px), 440px" />
       </div>
     );
   }
@@ -90,11 +92,11 @@ function SpacePreview({ space }: { space: Space }) {
   if (media.length === 2) {
     return (
       <div className="absolute inset-0 overflow-hidden flex">
-        <div style={{ flex: 1, borderRight: "1px solid rgba(0,0,0,0.5)", overflow: "hidden" }}>
-          <MediaCell item={media[0]} />
+        <div style={{ flex: 1, borderRight: "1px solid rgba(0,0,0,0.5)", overflow: "hidden", position: "relative" }}>
+          <MediaCell item={media[0]} sizes="(max-width: 768px) calc(50vw - 40px), 220px" />
         </div>
-        <div style={{ flex: 1, overflow: "hidden" }}>
-          <MediaCell item={media[1]} />
+        <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+          <MediaCell item={media[1]} sizes="(max-width: 768px) calc(50vw - 40px), 220px" />
         </div>
       </div>
     );
@@ -103,15 +105,15 @@ function SpacePreview({ space }: { space: Space }) {
   if (media.length === 3) {
     return (
       <div className="absolute inset-0 overflow-hidden flex">
-        <div style={{ flex: "0 0 50%", borderRight: "1px solid rgba(0,0,0,0.5)", overflow: "hidden" }}>
-          <MediaCell item={media[0]} />
+        <div style={{ flex: "0 0 50%", borderRight: "1px solid rgba(0,0,0,0.5)", overflow: "hidden", position: "relative" }}>
+          <MediaCell item={media[0]} sizes="(max-width: 768px) calc(50vw - 40px), 220px" />
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: 1, borderBottom: "1px solid rgba(0,0,0,0.5)", overflow: "hidden" }}>
-            <MediaCell item={media[1]} />
+          <div style={{ flex: 1, borderBottom: "1px solid rgba(0,0,0,0.5)", overflow: "hidden", position: "relative" }}>
+            <MediaCell item={media[1]} sizes="(max-width: 768px) calc(25vw - 20px), 110px" />
           </div>
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <MediaCell item={media[2]} />
+          <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+            <MediaCell item={media[2]} sizes="(max-width: 768px) calc(25vw - 20px), 110px" />
           </div>
         </div>
       </div>
@@ -130,8 +132,8 @@ function SpacePreview({ space }: { space: Space }) {
       }}
     >
       {media.map((item, i) => (
-        <div key={i} style={{ overflow: "hidden" }}>
-          <MediaCell item={item} />
+        <div key={i} style={{ overflow: "hidden", position: "relative" }}>
+          <MediaCell item={item} sizes="(max-width: 768px) calc(25vw - 20px), 160px" />
         </div>
       ))}
     </div>

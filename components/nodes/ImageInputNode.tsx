@@ -8,8 +8,6 @@ import { useWorkflowStore, NodeData } from "@/lib/store";
 import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
-// Only HTTP(S) URLs can be optimized by next/image; blob/data URLs cannot.
-const isRemote = (src: string) => src.startsWith("http://") || src.startsWith("https://");
 
 type ImageInputNodeType = Node<NodeData, "imageInputNode">;
 
@@ -252,9 +250,12 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           style={{ borderRadius: 7, overflow: "hidden" }}
           onDoubleClick={openLightbox}
         >
-          {/* Layer 1 — base image (optimized for display; lightbox shows full-res) */}
+          {/* Layer 1 — base image */}
           {baseSrc && (
-            isRemote(baseSrc) ? (
+            // Use <NextImage> only for confirmed R2 CDN URLs — third-party URLs skip
+            // next/image optimization because /_next/image fetches server-side and fails
+            // for URLs that have auth, IP allowlists, or expiry (e.g. Replicate links).
+            baseSrc === (data.r2Url as string | undefined) ? (
               <NextImage
                 ref={nodeImgRef}
                 src={baseSrc}
@@ -301,7 +302,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
                 pointerEvents: "none",
               }}
             >
-              {isRemote(topSrc) ? (
+              {topSrc === (data.r2Url as string | undefined) ? (
                 <NextImage
                   src={topSrc}
                   alt=""

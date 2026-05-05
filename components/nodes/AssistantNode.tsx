@@ -51,6 +51,18 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const [loading, setLoading] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const modelPopup = useAnimatedPopup(modelOpen);
+  const modelBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!modelOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelBarRef.current && !modelBarRef.current.contains(e.target as unknown as globalThis.Node)) {
+        setModelOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelOpen]);
 
   const busy = loading || status === "running";
 
@@ -334,6 +346,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
 
           {/* ── Bottom controls ────────────────────────────────────────── */}
           <div
+            ref={modelBarRef}
             className="absolute bottom-0 inset-x-0 px-2.5 pb-1.5 pt-1 flex items-center justify-between z-20"
             onMouseDown={(e) => e.stopPropagation()}
           >

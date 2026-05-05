@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   } = await req.json();
 
   const userId = await getUserId(req);
-  const apiKey = userId ? await getKieTokenForUser(userId) : null;
+  const apiKey = (userId ? await getKieTokenForUser(userId) : null) ?? process.env.KIE_API_TOKEN ?? null;
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   const callbackBase = process.env.CALLBACK_BASE_URL;

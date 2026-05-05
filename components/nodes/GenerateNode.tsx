@@ -211,6 +211,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const [lightboxImgLoaded, setLightboxImgLoaded] = useState(false);
   const [blurSrc, setBlurSrc] = useState<string | null>(null);
   const nodeImgRef = useRef<HTMLImageElement>(null);
+  const controlBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen;
+    if (!anyOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (controlBarRef.current && !controlBarRef.current.contains(e.target as unknown as globalThis.Node)) {
+        setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [modelOpen, ratioOpen, qualityOpen, azureQualityOpen]);
 
   const openLightbox = useCallback(() => {
     setLightboxImgLoaded(false);
@@ -839,6 +852,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
         {/* ── Bottom floating controls ── */}
         <div
+          ref={controlBarRef}
           className={`absolute bottom-0 left-0 right-0 flex items-end gap-2 px-2.5 pb-2.5 pt-1 z-10 transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
           onMouseDown={(e) => e.stopPropagation()}
         >
