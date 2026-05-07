@@ -542,6 +542,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     );
 
     if (!cfg.promptOptional && !finalPrompt.trim()) {
+      setErrorHandles(new Set(["prompt"]));
+      setTimeout(() => setErrorHandles(new Set()), 1400);
+      updateNodeData(id, { hasError: true });
+      addToast("A prompt is required to generate a video.", "error");
       if (textEdge) {
         updateNodeData(textEdge.source, { hasError: true });
         flashEdgeError(textEdge.id);
@@ -587,20 +591,52 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       }
       if (hasError) {
         updateNodeData(id, { hasError: true });
+        addToast("Connect all required inputs for this model.", "error");
         return;
       }
     }
 
-    // For non-motion-control models: if startFrame is wired but source has no image yet, block
-    if (!cfg.apiInput.useMotionControl) {
-      const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame");
-      if (sfEdge && !upstream.startFrameUrl) {
-        setErrorHandles(new Set(["startFrame"]));
+    // All models: any connected handle whose source has no content → block + blink.
+    // Linked = required, regardless of whether the handle is optional when unlinked.
+    {
+      type HandleSpec = { handle: string; getUrl: (d: Record<string, unknown>) => string | undefined };
+      const handleSpecs: HandleSpec[] = [
+        { handle: "startFrame",     getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "endFrame",       getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "resource",       getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "videoRef",       getUrl: (d) => (d.videoUrl) as string | undefined },
+        { handle: "referenceVideo", getUrl: (d) => (d.videoUrl ?? d.r2Url) as string | undefined },
+        { handle: "audioRef",       getUrl: (d) => (d.audioUrl ?? d.r2Url) as string | undefined },
+      ];
+
+      const flashSet = new Set<string>();
+      let hasEmpty = false;
+
+      for (const { handle, getUrl } of handleSpecs) {
+        const emptyEdges = edges
+          .filter((e) => e.target === id && e.targetHandle === handle)
+          .filter((e) => {
+            const src = nodes.find((n) => n.id === e.source);
+            return !src || !getUrl(src.data as Record<string, unknown>);
+          });
+        if (emptyEdges.length > 0) {
+          flashSet.add(handle);
+          for (const e of emptyEdges) {
+            const src = nodes.find((n) => n.id === e.source);
+            if (src) updateNodeData(src.id, { hasError: true });
+            flashEdgeError(e.id);
+          }
+          hasEmpty = true;
+        }
+      }
+
+      if (flashSet.size > 0) {
+        setErrorHandles(flashSet);
         setTimeout(() => setErrorHandles(new Set()), 1400);
+      }
+      if (hasEmpty) {
         updateNodeData(id, { hasError: true });
-        const srcNode = nodes.find((n) => n.id === sfEdge.source);
-        if (srcNode) updateNodeData(srcNode.id, { hasError: true });
-        flashEdgeError(sfEdge.id);
+        addToast("Some connected inputs have no content yet.", "error");
         return;
       }
     }
@@ -1395,8 +1431,8 @@ function ChevronIcon({ open = false }: { open?: boolean }) {
 
 function ToggleSwitch({ on }: { on: boolean }) {
   return (
-    <div className="relative shrink-0 rounded-full transition-colors" style={{ width: 32, height: 18, background: on ? "rgba(119,229,68,0.25)" : "#2A2A2A" }}>
-      <div className="absolute top-[3px] rounded-full transition-transform" style={{ width: 12, height: 12, background: on ? "#ff3df5" : "#555", transform: on ? "translateX(17px)" : "translateX(3px)" }} />
+    <div className="relative shrink-0 rounded-full transition-colors" style={{ width: 32, height: 18, background: on ? "#3A3A3A" : "#2A2A2A" }}>
+      <div className="absolute top-[3px] rounded-full transition-transform" style={{ width: 12, height: 12, background: on ? "#4ade80" : "#555", transform: on ? "translateX(17px)" : "translateX(3px)" }} />
     </div>
   );
 }

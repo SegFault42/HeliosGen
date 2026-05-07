@@ -540,6 +540,28 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       } catch { /* proceed without */ }
     }
 
+    // Block if any wired image source has no output yet
+    {
+      const emptyImageEdges = edges.filter((e) => e.target === id && e.targetHandle === "image").filter((e) => {
+        const src = useWorkflowStore.getState().nodes.find((n) => n.id === e.source);
+        if (!src) return true;
+        const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
+        return !url;
+      });
+      if (emptyImageEdges.length > 0) {
+        setErrorHandles(new Set(["image"]));
+        setTimeout(() => setErrorHandles(new Set()), 1400);
+        updateNodeData(id, { hasError: true });
+        addToast("Some connected image inputs have no content yet.", "error");
+        for (const e of emptyImageEdges) {
+          const src = useWorkflowStore.getState().nodes.find((n) => n.id === e.source);
+          if (src) updateNodeData(src.id, { hasError: true });
+          flashEdgeError(e.id);
+        }
+        return;
+      }
+    }
+
     // Use fresh store state so any newly extracted frames are included
     const upstream = resolveInputs(id, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
     const { resolvedPrompt, orderedUrls } = resolveMentions(
@@ -576,6 +598,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       updateNodeData(id, { hasError: true });
       setErrorHandles(new Set(["prompt"]));
       setTimeout(() => setErrorHandles(new Set()), 1400);
+      addToast("A prompt is required to generate an image.", "error");
       if (connectedPromptNodeId) {
         updateNodeData(connectedPromptNodeId, { hasError: true });
         const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
@@ -681,7 +704,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           position={Position.Left}
           id="image"
           style={{ top: "calc(100% - 52px)" }}
-          className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}`}
+          className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}${errorHandles.has("image") ? " node-handle-error" : ""}`}
           onMouseEnter={() => setHoveredHandle("image")}
           onMouseLeave={() => setHoveredHandle(null)}
         >

@@ -10,6 +10,11 @@ import type { User } from "@supabase/supabase-js";
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 
+function thumbSrc(url: string, w = 128): string {
+  if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`;
+}
+
 interface RefImage {
   id: string;
   objectUrl: string;
@@ -1768,7 +1773,7 @@ function GalleryInner() {
                     {/* Thumbnail */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={img.objectUrl}
+                      src={thumbSrc(img.objectUrl)}
                       alt=""
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                     />
@@ -2022,7 +2027,7 @@ function GalleryInner() {
                         }}>
                         {mediaKind === "image" ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.objectUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          <img src={thumbSrc(r.objectUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                         ) : mediaKind === "video" ? (
                           <video
                             src={r.objectUrl}
@@ -2525,7 +2530,7 @@ function GalleryInner() {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={ref.objectUrl}
+                  src={thumbSrc(ref.objectUrl)}
                   alt=""
                   style={{ width: "30px", height: "30px", borderRadius: "6px", objectFit: "cover", flexShrink: 0, background: "#1a1c1f" }}
                 />
@@ -2567,7 +2572,7 @@ function GalleryInner() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={chipPreview.tag.url}
+              src={thumbSrc(chipPreview.tag.url, 256)}
               alt=""
               style={{ display: "block", maxWidth: "200px", maxHeight: "160px", width: "auto", height: "auto", objectFit: "contain" }}
             />
@@ -3778,7 +3783,7 @@ function renderLightboxPrompt(
       }}>
         {imgUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imgUrl} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
+          <img src={thumbSrc(imgUrl)} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: "cover", flexShrink: 0 }} />
         )}
         Image {n}
       </span>
@@ -4008,7 +4013,7 @@ function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void })
                 {item.referenceImageUrls.map((url, i) => (
                   <div key={i} style={{ position: "relative", width: 76, height: 68, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    <img src={thumbSrc(url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                     <div style={{
                       position: "absolute", bottom: 4, right: 4,
                       background: "rgba(0,0,0,0.65)", borderRadius: 4,

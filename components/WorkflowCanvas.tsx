@@ -12,6 +12,7 @@ import {
   Edge,
   Viewport,
   useReactFlow,
+  useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -93,6 +94,52 @@ function ViewportSyncer() {
   return null;
 }
 
+/** Dashed group-preview outline shown when selecting a non-grouped node.
+ *  Must be rendered inside <ReactFlow> to access useViewport / useReactFlow. */
+function GroupPreviewOverlay({ groupIds }: { groupIds: Set<string> | null }) {
+  const { getNodes } = useReactFlow();
+  const { x: vpX, y: vpY, zoom } = useViewport();
+
+  if (!groupIds || groupIds.size === 0) return null;
+
+  const allNodes = getNodes();
+  const relevant = allNodes.filter((n) => groupIds.has(n.id));
+  if (relevant.length === 0) return null;
+
+  const PAD = 28;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of relevant) {
+    const w = (n.measured?.width  ?? NODE_SIZE[n.type ?? ""]?.w ?? FALLBACK_SIZE.w);
+    const h = (n.measured?.height ?? NODE_SIZE[n.type ?? ""]?.h ?? FALLBACK_SIZE.h);
+    minX = Math.min(minX, n.position.x);
+    minY = Math.min(minY, n.position.y);
+    maxX = Math.max(maxX, n.position.x + w);
+    maxY = Math.max(maxY, n.position.y + h);
+  }
+
+  const sx = (minX - PAD) * zoom + vpX;
+  const sy = (minY - PAD) * zoom + vpY;
+  const sw = (maxX - minX + PAD * 2) * zoom;
+  const sh = (maxY - minY + PAD * 2) * zoom;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: sx,
+        top: sy,
+        width: sw,
+        height: sh,
+        border: "2px dashed rgba(150, 150, 150, 0.45)",
+        borderRadius: Math.max(10, 14 * zoom),
+        background: "transparent",
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+    />
+  );
+}
+
 /** Human-readable label with auto-incrementing counter per type */
 function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
   const count = existingNodes.filter((n) => n.type === type).length + 1;
@@ -130,6 +177,7 @@ export default function WorkflowCanvas() {
   const [dyingNodeIds, setDyingNodeIds] = useState<Set<string>>(new Set());
   const [ancestorIds, setAncestorIds] = useState<Set<string>>(new Set());
   const [ancestorEdgeIds, setAncestorEdgeIds] = useState<Set<string>>(new Set());
+  const [potentialGroupIds, setPotentialGroupIds] = useState<Set<string> | null>(null);
   // Ref so the nodes map always reads the latest selected IDs in the same render
   const selectedIdsRef = useRef<Set<string>>(new Set());
   // Edge IDs that will be removed by our delayed node-delete handler — suppress RF's auto-remove
@@ -1239,12 +1287,50 @@ export default function WorkflowCanvas() {
 
   const handleNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
     breakGroupSelection(node);
-  }, [breakGroupSelection]);
+
+    // Group nodes and nodes already in a group don't show a preview
+    if (node.type === "groupNode") {
+      setPotentialGroupIds(null);
+      return;
+    }
+    const isInGroup = nodes.some(
+      (n) => n.type === "groupNode" && (n.data?.memberIds as string[] | undefined)?.includes(node.id)
+    );
+    if (isInGroup) {
+      setPotentialGroupIds(null);
+      return;
+    }
+
+    // Bidirectional BFS — collect all connected non-group nodes
+    const visited = new Set<string>([node.id]);
+    const queue = [node.id];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (const edge of edges) {
+        const next =
+          edge.source === cur ? edge.target :
+          edge.target === cur ? edge.source : null;
+        if (!next || visited.has(next)) continue;
+        const nextNode = nodes.find((n) => n.id === next);
+        if (!nextNode || nextNode.type === "groupNode") continue;
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+
+    // Only show when there are actual connections
+    setPotentialGroupIds(visited.size > 1 ? visited : null);
+  }, [breakGroupSelection, nodes, edges]);
 
   const handleNodeDragStart = useCallback((_e: React.MouseEvent, node: Node) => {
     pushUndoSnapshot();
     breakGroupSelection(node);
+    setPotentialGroupIds(null);
   }, [breakGroupSelection, pushUndoSnapshot]);
+
+  const handlePaneClick = useCallback(() => {
+    setPotentialGroupIds(null);
+  }, []);
 
   const canRun = !isRunning && nodes.some(
     (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
@@ -1266,10 +1352,14 @@ export default function WorkflowCanvas() {
             nodes.filter((n) => n.type === "groupNode" && n.data?.locked).forEach((g) => {
               (g.data?.memberIds as string[] | undefined)?.forEach((mid) => lockedMemberIds.add(mid));
             });
+            const hasPotentialGroup = potentialGroupIds !== null && potentialGroupIds.size > 0;
             return nodes.map((n) => {
-              const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id);
-              const isDimmed = anySelected && !isHighlighted && !isConnecting;
+              const isInGroup = hasPotentialGroup && potentialGroupIds!.has(n.id);
+              const isHighlighted = selIds.has(n.id) || ancestorIds.has(n.id) || isInGroup;
+              const isDimmed = (anySelected || hasPotentialGroup) && !isHighlighted && !isConnecting;
               const ancestorClass = ancestorIds.has(n.id) ? "node-ancestor" : null;
+              // Only add group-preview to nodes not already styled by selection or ancestor
+              const groupPreviewClass = (isInGroup && !selIds.has(n.id) && !ancestorIds.has(n.id)) ? "node-group-preview" : null;
               const isLockedMember = lockedMemberIds.has(n.id);
               const isLockedGroup = n.type === "groupNode" && !!n.data?.locked;
               const isDying = dyingNodeIds.has(n.id);
@@ -1277,11 +1367,11 @@ export default function WorkflowCanvas() {
               return {
                 ...n,
                 draggable: (isLockedMember || isLockedGroup) ? false : undefined,
-                className: [n.className, ancestorClass, dyingClass].filter(Boolean).join(" ") || undefined,
+                className: [n.className, ancestorClass, groupPreviewClass, dyingClass].filter(Boolean).join(" ") || undefined,
                 style: {
                   ...n.style,
                   opacity: isDying ? undefined : (isDimmed ? 0.25 : undefined),
-                  transition: isDying ? undefined : (anySelected ? "opacity 150ms" : undefined),
+                  transition: isDying ? undefined : ((anySelected || hasPotentialGroup) ? "opacity 150ms" : undefined),
                 },
               };
             });
@@ -1289,9 +1379,11 @@ export default function WorkflowCanvas() {
           edges={(() => {
             const selIds = selectedIdsRef.current;
             const anySelected = selIds.size > 0;
+            const hasPotentialGroup = potentialGroupIds !== null && potentialGroupIds.size > 0;
             return edges.map((e) => {
               const isAncestorEdge = ancestorEdgeIds.has(e.id);
-              const isDimmed = anySelected && !isAncestorEdge;
+              const isGroupEdge = hasPotentialGroup && potentialGroupIds!.has(e.source) && potentialGroupIds!.has(e.target);
+              const isDimmed = (anySelected || hasPotentialGroup) && !isAncestorEdge && !isGroupEdge;
               return {
                 ...e,
                 className: isAncestorEdge ? [e.className, "edge-ancestor"].filter(Boolean).join(" ") : e.className,
@@ -1304,6 +1396,7 @@ export default function WorkflowCanvas() {
           onEdgeClick={handleEdgeClick}
           onSelectionChange={onSelectionChange}
           onNodeClick={handleNodeClick}
+          onPaneClick={handlePaneClick}
           onNodeDragStart={handleNodeDragStart}
           onNodeDragStop={handleNodeDragStop}
           onConnect={handleConnect}
@@ -1336,6 +1429,7 @@ export default function WorkflowCanvas() {
         >
           <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
           <ViewportSyncer />
+          <GroupPreviewOverlay groupIds={potentialGroupIds} />
           <SelectionToolbar />
 
           {dropState && (

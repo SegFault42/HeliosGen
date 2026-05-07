@@ -17,17 +17,16 @@ body {
 /* ── Node design system ──────────────────────────────── */
 .node-card {
   background: #191919;
-  border: 1px solid #333333;
+  border: 1px solid transparent;
   border-radius: 8px;
   overflow: visible;
   position: relative;
-  box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
   transition: border-color 120ms, box-shadow 120ms;
 }
 
 .node-card:hover {
-  border-color: #555555;
-  box-shadow: 0 0 0 1px rgba(120, 120, 120, 0.3), 0 2px 20px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
 }
 
 .node-card:hover .node-above-label {
@@ -572,6 +571,18 @@ body {
 .react-flow__edge.edge-ancestor .react-flow__edge-path {
   filter: brightness(1.25);
   opacity: 0.85;
+}
+
+/* ── Group-preview highlight (downstream + other connected nodes) ── */
+.react-flow__node.node-group-preview .node-card {
+  border-color: rgba(190, 190, 190, 0.65) !important;
+  box-shadow: 0 0 0 1px rgba(190, 190, 190, 0.1), 0 2px 16px rgba(0, 0, 0, 0.5);
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.react-flow__node.node-group-preview .node-above-label {
+  color: rgba(190, 190, 190, 0.65);
+  transition: color 150ms;
 }
 
 .react-flow__attribution {
