@@ -27,7 +27,7 @@ function PickerImage({ src }: { src: string }) {
         <img
           alt=""
           src={src}
-          loading="lazy"
+          loading="eager"
           decoding="async"
           onLoad={() => setStatus("loaded")}
           onError={() => setStatus("error")}

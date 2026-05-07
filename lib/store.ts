@@ -367,7 +367,10 @@ export const useWorkflowStore = create<WorkflowStore>()(
             const type         = node.type ?? "unknown";
             const count        = (s.nodeCounters[type] ?? 0) + 1;
             const label        = getNodeLabel(type, count);
-            const nodes        = [...s.nodes, { ...node, data: { ...node.data, label } }];
+            const nodes        = [
+              ...s.nodes.map((n) => n.selected ? { ...n, selected: false } : n),
+              { ...node, selected: true, data: { ...node.data, label } },
+            ];
             const nodeCounters = { ...s.nodeCounters, [type]: count };
             return {
               nodes,

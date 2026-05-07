@@ -204,10 +204,31 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
 
   /* Handle asset selected from the picker */
   const handleAssetPick = useCallback(
-    (url: string, mediaType: "image" | "video") => {
+    async (url: string, mediaType: "image" | "video") => {
       setPickerOpen(false);
       if (mediaType === "image") {
-        addNextToToolbar("imageInputNode", { inputImage: url, r2Url: url });
+        // Read dimensions from the thumbnail already cached in the browser
+        const thumbnailSrc = `/_next/image?url=${encodeURIComponent(url)}&w=128&q=75`;
+        const ratio = await new Promise<string | undefined>((resolve) => {
+          const img = new window.Image();
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            resolve(img.naturalWidth && img.naturalHeight
+              ? `${img.naturalWidth} / ${img.naturalHeight}`
+              : undefined);
+          };
+          img.onload = finish;
+          img.onerror = () => { done = true; resolve(undefined); };
+          img.src = thumbnailSrc;
+          if (img.complete && img.naturalWidth > 0) finish();
+        });
+        addNextToToolbar("imageInputNode", {
+          inputImage: url,
+          r2Url: url,
+          ...(ratio ? { imageNaturalRatio: ratio } : {}),
+        });
       } else {
         addNextToToolbar("videoInputNode", { videoUrl: url });
       }

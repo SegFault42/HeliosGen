@@ -557,22 +557,24 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       const flashSet = new Set<string>();
       let hasError = false;
 
-      // startFrame: not connected → flash handle; connected but empty → flash edge + source node
+      // startFrame: not connected → flash handle; connected but empty → flash handle + edge + source node
       if (!imageEdge) {
         flashSet.add("startFrame");
         hasError = true;
       } else if (!upstream.startFrameUrl) {
+        flashSet.add("startFrame");
         const srcNode = nodes.find((n) => n.id === imageEdge.source);
         if (srcNode) updateNodeData(srcNode.id, { hasError: true });
         flashEdgeError(imageEdge.id);
         hasError = true;
       }
 
-      // videoRef: not connected → flash handle; connected but empty → flash edge + source node
+      // videoRef: not connected → flash handle; connected but empty → flash handle + edge + source node
       if (!videoEdge) {
         flashSet.add("videoRef");
         hasError = true;
       } else if (!upstream.videoRefUrl) {
+        flashSet.add("videoRef");
         const srcNode = nodes.find((n) => n.id === videoEdge.source);
         if (srcNode) updateNodeData(srcNode.id, { hasError: true });
         flashEdgeError(videoEdge.id);
@@ -583,13 +585,19 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         setErrorHandles(flashSet);
         setTimeout(() => setErrorHandles(new Set()), 1400);
       }
-      if (hasError) return;
+      if (hasError) {
+        updateNodeData(id, { hasError: true });
+        return;
+      }
     }
 
     // For non-motion-control models: if startFrame is wired but source has no image yet, block
     if (!cfg.apiInput.useMotionControl) {
       const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame");
       if (sfEdge && !upstream.startFrameUrl) {
+        setErrorHandles(new Set(["startFrame"]));
+        setTimeout(() => setErrorHandles(new Set()), 1400);
+        updateNodeData(id, { hasError: true });
         const srcNode = nodes.find((n) => n.id === sfEdge.source);
         if (srcNode) updateNodeData(srcNode.id, { hasError: true });
         flashEdgeError(sfEdge.id);
@@ -797,7 +805,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           position={Position.Right}
           id={h.id}
           style={{ top: 20 + i * 32 }}
-          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
           onMouseEnter={() => setHoveredSourceHandle(h.id)}
           onMouseLeave={() => setHoveredSourceHandle(null)}
         >

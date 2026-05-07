@@ -205,6 +205,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const qualityPopup = useAnimatedPopup(qualityOpen);
   const azureQualityPopup = useAnimatedPopup(azureQualityOpen);
   const [loading, setLoading] = useState(false);
+  const [errorHandles, setErrorHandles] = useState<Set<string>>(new Set());
   const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -572,6 +573,9 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     };
 
     if (!resolvedPrompt.trim()) {
+      updateNodeData(id, { hasError: true });
+      setErrorHandles(new Set(["prompt"]));
+      setTimeout(() => setErrorHandles(new Set()), 1400);
       if (connectedPromptNodeId) {
         updateNodeData(connectedPromptNodeId, { hasError: true });
         const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
@@ -664,7 +668,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         position={Position.Left}
         id="prompt"
         style={{ top: `calc(100% - ${caps.supportsImages ? 90 : 52}px)` }}
-        className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}`}
+        className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}${errorHandles.has("prompt") ? " node-handle-error" : ""}`}
         onMouseEnter={() => setHoveredHandle("prompt")}
         onMouseLeave={() => setHoveredHandle(null)}
       >
@@ -714,7 +718,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         type="source"
         position={Position.Right}
         style={{ top: 20 }}
-        className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+        className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
         title="Image output"
       >
         <PhotoIcon />

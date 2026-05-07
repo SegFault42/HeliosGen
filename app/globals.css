@@ -601,25 +601,43 @@ body {
   border-bottom: none !important;
 }
 
-/* ── Prompt node error blink ─────────────────────────── */
+/* ── Node error blink ────────────────────────────────── */
+/* box-shadow handles the glow; the ::before pseudo-element overlays the border
+   so the red blink covers the purple selected border instead of appearing outside it. */
 @keyframes node-error-blink {
 
   0%,
   100% {
-    border-color: #333333;
     box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
   }
 
   20%,
   55% {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.4), 0 2px 20px rgba(239, 68, 68, 0.15);
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35), 0 0 28px rgba(239, 68, 68, 0.25);
   }
 
   37%,
   72% {
-    border-color: #333333;
     box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Pseudo-element overlays the node border — covers the purple selected border with red */
+@keyframes node-error-blink-border {
+
+  0%,
+  100% {
+    border-color: transparent;
+  }
+
+  20%,
+  55% {
+    border-color: #ef4444;
+  }
+
+  37%,
+  72% {
+    border-color: transparent;
   }
 }
 
@@ -643,6 +661,18 @@ body {
 
 .node-error-blink {
   animation: node-error-blink 1.4s ease 1 forwards;
+}
+
+/* Positioned over the node border, so the red ring covers the purple selected border */
+.node-card.node-error-blink::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  pointer-events: none;
+  z-index: 1;
+  animation: node-error-blink-border 1.4s ease 1 forwards;
 }
 
 .node-error-blink .node-above-label {
@@ -883,8 +913,8 @@ body {
 }
 
 /* ── Handle error blink ──────────────────────────────────────────────────── */
-/* border-color cannot be animated when the class uses !important (CSS spec ignores
-   !important inside @keyframes). Use box-shadow ring instead. */
+/* Glow via box-shadow; border overlay via ::before pseudo so the red covers
+   the role-color border instead of appearing as a ring outside it. */
 @keyframes handle-error-blink {
 
   0%,
@@ -894,7 +924,7 @@ body {
 
   20%,
   55% {
-    box-shadow: 0 0 0 2px #ef4444, 0 0 8px rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
   }
 
   37%,
@@ -903,8 +933,40 @@ body {
   }
 }
 
+/* Pseudo-element matches the handle's border position exactly */
+@keyframes handle-error-blink-border {
+
+  0%,
+  100% {
+    border-color: transparent;
+  }
+
+  20%,
+  55% {
+    border-color: #ef4444;
+  }
+
+  37%,
+  72% {
+    border-color: transparent;
+  }
+}
+
 .node-handle-error.react-flow__handle {
+  opacity: 1 !important;
   animation: handle-error-blink 1.4s ease 1 forwards;
+}
+
+/* Overlays the handle's role-color border with the blinking red border */
+.node-handle-icon.node-handle-error::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  pointer-events: none;
+  z-index: 1;
+  animation: handle-error-blink-border 1.4s ease 1 forwards;
 }
 
 /* ── Upload pulse (image node while uploading) ───────────────────────────── */

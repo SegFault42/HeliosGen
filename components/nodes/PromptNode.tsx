@@ -700,7 +700,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           type="source"
           position={Position.Right}
           style={{ top: 20 }}
-          className={`node-handle-icon node-handle-icon-out-text${sourceConnected ? " node-handle-connected" : ""}`}
+          className={`node-handle-icon node-handle-icon-out-text${sourceConnected ? " node-handle-connected" : ""}${hasError ? " node-handle-error" : ""}`}
           title="Text output"
         >
           <TextOutIcon />
