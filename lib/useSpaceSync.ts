@@ -13,14 +13,33 @@ export function useSpaceSync() {
 
   const [status,       setStatus]       = useState<SyncStatus>("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  // Block all Supabase writes until localStorage has fully rehydrated.
+  // In Zustand v5, persist rehydration is async — if we save before it
+  // completes, we'd write the default empty state and delete all real spaces.
+  const [hydrated, setHydrated] = useState(
+    () => useWorkflowStore.persist.hasHydrated()
+  );
 
   const timerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedRef  = useRef<number>(0); // epoch ms of last successful save
   const spacesRef      = useRef(spaces);
   spacesRef.current    = spaces;
 
-  // ── Load from DB on mount ────────────────────────────────────────────────────
   useEffect(() => {
+    if (hydrated) return;
+    // If hydration already finished before this effect ran (common in Next.js
+    // where SSR renders hasHydrated()=false but client is already hydrated)
+    if (useWorkflowStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    const unsub = useWorkflowStore.persist.onFinishHydration(() => setHydrated(true));
+    return unsub;
+  }, [hydrated]);
+
+  // ── Load from DB on mount (after hydration) ──────────────────────────────────
+  useEffect(() => {
+    if (!hydrated) return;
     (async () => {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -32,6 +51,7 @@ export function useSpaceSync() {
         .eq("user_id", session.user.id)
         .order("created_at", { ascending: true });
 
+      console.log("[SpaceSync] DB load:", { error, rows: data?.length, data, session: session.user.id });
       if (error || !data?.length) return;
 
       const dbSpaces: Space[] = data.map((row) => ({
@@ -52,7 +72,7 @@ export function useSpaceSync() {
       setStatus("synced");
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
+  }, [hydrated]); // run once after hydration
 
   // ── Core save (no rate-limit checks) ────────────────────────────────────────
   const save = useCallback(async () => {
@@ -115,9 +135,10 @@ export function useSpaceSync() {
   }, [save]);
 
   useEffect(() => {
+    if (!hydrated) return;
     syncDebounced();
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [spaces, syncDebounced]);
+  }, [spaces, syncDebounced, hydrated]);
 
   return { status, lastSyncedAt, syncNow };
 }
