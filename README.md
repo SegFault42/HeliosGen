@@ -1,154 +1,425 @@
 # HeliosGen
 
-A visual workflow builder for AI image and video generation. Connect nodes on a canvas to chain prompts, reference images, and generation models into automated pipelines.
+<p align="center">
+  <img src="./public/cover.png" alt="HeliosGen Banner" />
+</p>
+
+<p align="center">
+  <strong>Build AI image & video pipelines visually.</strong><br/>
+  Chain prompts, models, reference images, and automations on an infinite canvas.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Supabase-Backend-green?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Cloudflare-R2-orange?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/AI-Kie.ai-purple?style=for-the-badge" />
+</p>
 
 ---
 
-## Prerequisites
+# 📸 Screenshots
 
-- [Node.js](https://nodejs.org/) 20+
-- A [Supabase](https://supabase.com/) project (free tier works)
-- A [Cloudflare R2](https://www.cloudflare.com/developer-platform/r2/) bucket
-- A [Kie.ai](https://kie.ai) account with API access
+<p align="center">
+  <img src="./public/screenshot-1.png" width="100%" />
+</p>
 
 ---
 
-## 1. Clone & Install
+# ✨ Why HeliosGen Exists
+
+Most AI generation platforms today lock creators into expensive monthly subscriptions.
+
+You pay every month for credits that:
+- expire,
+- reset,
+- or disappear if unused.
+
+Platforms like Higgsfield, OpenArt, Freepik AI, and others optimize for recurring subscriptions.
+
+**HeliosGen takes the opposite approach.**
+
+---
+
+# 🔓 A Free & Open Source Alternative
+
+HeliosGen is a **free and open source** visual AI workflow builder designed for creators who want:
+
+- Full ownership
+- No vendor lock-in
+- No forced subscriptions
+- No disappearing credits
+- Self-hosted freedom
+
+Instead of renting access to a closed platform, you own the entire system.
+
+---
+
+# 💸 Credits That Never Expire
+
+With most AI platforms:
+
+> "Use your credits before the end of the month or lose them."
+
+HeliosGen is different.
+
+You connect your own AI provider accounts (like Kie.ai), meaning:
+
+- Your credits stay on your own account
+- Unused credits remain yours
+- No monthly reset
+- No hidden subscription trap
+- No artificial limits imposed by the platform
+
+You only pay for what you actually generate.
+
+---
+
+# 🖥️ Fully Self-Hostable
+
+HeliosGen can run entirely on your own infrastructure.
+
+That means you can:
+
+- Self-host the app
+- Control your storage
+- Manage your own API keys
+- Keep your workflows private
+- Customize the platform freely
+- Extend it however you want
+
+No dependency on a centralized SaaS.
+
+---
+
+# 🧠 Built for Power Users
+
+HeliosGen is not just another "prompt box."
+
+It's designed for creators building:
+- automated pipelines,
+- reusable workflows,
+- generation systems,
+- AI production chains,
+- and scalable creative tooling.
+
+Think:
+- ComfyUI flexibility
+- Modern SaaS UX
+- Open ecosystem
+- Creator ownership
+
+---
+
+# 🚀 The Goal
+
+Make AI generation:
+- more open,
+- more composable,
+- more affordable,
+- and more creator-owned.
+
+No subscriptions.
+No locked ecosystem.
+No disappearing credits.
+Just workflows.
+
+---
+
+# 🧩 Features
+
+- Infinite node-based canvas
+- AI image generation
+- AI video generation
+- Drag & connect workflow system
+- Reference image support
+- Multi-model pipelines
+- Persistent cloud storage
+- Per-user API keys
+- Real-time generation history
+- Modern responsive UI
+
+---
+
+# ⚡ Supported Models
+
+## Images
+
+- GPT-4o
+- Seedream
+- Z-Image
+- Grok Imagine
+- Nano Banana
+- More via Kie.ai
+
+## Videos
+
+- Kling 3.0
+- Kling 2.6 Motion Control
+- Seedance 2
+- Grok Imagine Video
+
+---
+
+# 🏗️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js + React + TypeScript |
+| Backend | Next.js API Routes |
+| Database | Supabase |
+| Storage | Cloudflare R2 |
+| AI Backend | Kie.ai |
+| Deployment | Vercel / Railway / Render |
+
+---
+
+# 🚀 Getting Started
+
+## 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd AIUI
-npm install
+git clone https://github.com/SegFault42/HeliosGen
+cd HeliosGen
 ```
 
 ---
 
-## 2. Environment Variables
+## 2. Install dependencies
 
-Create a `.env.local` file at the project root:
+```bash
+pnpm install
+```
+
+---
+
+## 3. Configure environment variables
+
+Create a `.env.local` file:
 
 ```env
-# ── Supabase ──────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Supabase
+# ─────────────────────────────────────────────────────────────
+
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# ── Cloudflare R2 ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# Cloudflare R2
+# ─────────────────────────────────────────────────────────────
+
 R2_ACCOUNT_ID=your_cloudflare_account_id
 R2_ACCESS_KEY_ID=your_r2_access_key_id
 R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
 R2_BUCKET_NAME=your_bucket_name
-# Public CDN URL for the bucket (enable public access in R2 dashboard)
+
+# Public CDN URL
 R2_PUBLIC_URL=https://pub-xxxxxxxxxxxx.r2.dev
 
-# ── Kie.ai ────────────────────────────────────────────────────────────────────
-# Public URL where kie.ai will POST generation results (webhook).
-# Must be reachable from the internet. Use ngrok or similar for local dev.
+# ─────────────────────────────────────────────────────────────
+# Kie.ai
+# ─────────────────────────────────────────────────────────────
+
+# Public webhook URL
 CALLBACK_BASE_URL=https://your-public-url.com
-# Optional server-side fallback key. Users can also set their own via Settings UI.
+
+# Optional shared fallback key
 KIE_API_TOKEN=your_kie_api_token
 
-# ── Replicate (optional) ──────────────────────────────────────────────────────
-# Required only if you use Replicate-backed image generation nodes.
-REPLICATE_API_TOKEN=your_replicate_api_token
+# ─────────────────────────────────────────────────────────────
+# Azure OpenAI (Optional)
+# ─────────────────────────────────────────────────────────────
 
-# ── Azure OpenAI (optional) ───────────────────────────────────────────────────
-# Required only if you route image models through Azure AI Foundry.
 AZURE_API_KEY=your_azure_api_key
 ```
 
 ---
 
-## 3. Supabase Setup
+# 🗄️ Supabase Setup
 
-### 3.1 Create a project
+## Create a project
 
-Go to [supabase.com](https://supabase.com), create a new project, then copy the **Project URL**, **anon key**, and **service role key** from **Settings → API** into your `.env.local`.
+Create a new Supabase project and copy:
 
-### 3.2 Enable Email Auth
+- Project URL
+- Anon Key
+- Service Role Key
 
-Go to **Authentication → Providers → Email** and make sure it is enabled.
-
-### 3.3 Run the SQL schema
-
-Open the **SQL Editor** in your Supabase dashboard and run the contents of [`supabase-setup.sql`](./supabase-setup.sql).
-
-This creates four tables:
-
-| Table | Purpose |
-|---|---|
-| `spaces` | Workflow canvases — nodes, edges, viewport per user |
-| `generations` | Job history (images & videos created) |
-| `user_uploads` | Gallery of files uploaded to R2 |
-| `user_settings` | Per-user Kie.ai API token (server-side only) |
+Into your `.env.local`.
 
 ---
 
-## 4. Cloudflare R2 Setup
+## Enable email authentication
 
-R2 stores all uploaded and generated assets (images, videos, reference frames) via the S3-compatible API.
+Go to:
 
-1. Log in to the [Cloudflare dashboard](https://dash.cloudflare.com) and open **R2 Object Storage**.
-2. Create a new bucket (e.g. `heliosgen-assets`).
-3. **Enable public access**: open the bucket → **Settings → Public Access** → allow public access. Copy the public URL (e.g. `https://pub-xxxx.r2.dev`) into `R2_PUBLIC_URL`.
-4. Create an **API token**: go to **R2 → Manage R2 API Tokens → Create API Token**. Grant **Object Read & Write** on your bucket. Copy the **Access Key ID** and **Secret Access Key**.
-5. Find your **Account ID** in the Cloudflare dashboard sidebar.
+```txt
+Authentication → Providers → Email
+```
 
-The app organises objects under these prefixes automatically:
+And enable Email Auth.
 
-| Prefix | Contents |
+---
+
+## Run the SQL schema
+
+Open the SQL editor and run:
+
+```txt
+supabase-setup.sql
+```
+
+### Tables created
+
+| Table | Description |
 |---|---|
-| `uploads/` | User-uploaded files |
-| `references/` | Reference images mirrored before sending to the API |
+| `spaces` | Stores workflow canvases |
+| `generations` | Image/video generation history |
+| `user_uploads` | Uploaded assets |
+| `user_settings` | Secure user API keys |
+
+---
+
+# ☁️ Cloudflare R2 Setup
+
+HeliosGen stores uploads, generations, references, and videos inside R2 using the S3-compatible API.
+
+## Setup steps
+
+1. Create a bucket
+2. Enable public access
+3. Create R2 API tokens
+4. Copy your Account ID
+5. Add credentials to `.env.local`
+
+---
+
+## Storage structure
+
+| Path | Purpose |
+|---|---|
+| `uploads/` | User uploads |
+| `references/` | Reference images |
 | `generated/` | Generated images |
 | `videos/` | Generated videos |
 
 ---
 
-## 5. Kie.ai Setup
+# 🤖 Kie.ai Setup
 
-[Kie.ai](https://kie.ai) is the primary backend for all AI generation (images and videos).
+Kie.ai powers all AI generations.
 
-There are two ways to provide a Kie.ai key:
+Users can either:
 
-- **Per-user (recommended):** each user creates an account at [kie.ai](https://kie.ai), generates an API token at [kie.ai/api-key](https://kie.ai/api-key), then pastes it in **Settings → API Keys** inside the app. Keys are stored server-side in Supabase and never exposed to the browser.
-- **Shared fallback:** set `KIE_API_TOKEN` in `.env.local`. This is used when a user has not set their own key.
-
-### Webhook (CALLBACK_BASE_URL)
-
-Kie.ai POSTs job results to `{CALLBACK_BASE_URL}/api/callback` when a generation finishes. This URL must be publicly reachable:
-
-- **Local dev:** run `ngrok http 3000` and set `CALLBACK_BASE_URL` to the HTTPS URL ngrok gives you.
-- **Production:** set it to your deployed domain (e.g. `https://your-app.vercel.app`).
-
-**Supported generation models via Kie.ai:**
-- **Images:** Seedream, Z-Image, Grok Imagine (X), GPT-4o, Nano Banana, and more
-- **Videos:** Kling 3.0, Kling 2.6 (motion-control), Seedance 2, Grok Imagine (X)
-
-Credits are consumed per generation from each user's own Kie.ai balance. Users can check their balance inside the app via the credit indicator in the top bar.
+- Use their own API key (recommended)
+- Or fallback to your shared server key
 
 ---
 
-## 6. Run the Project
+## Webhook Configuration
 
-```bash
-# Development
-npm run dev
+Kie.ai sends completed generations to:
 
-# Production build
-npm run build
-npm start
+```txt
+/api/callback
 ```
 
-The app runs on [http://localhost:3000](http://localhost:3000) by default.
+### Local development
+
+```bash
+ngrok http 3000
+```
+
+Then set:
+
+```env
+CALLBACK_BASE_URL=https://your-ngrok-url.ngrok-free.app
+```
 
 ---
 
-## Deployment
+## Production
 
-The app is a standard Next.js app and deploys to any Node.js-capable platform:
+```env
+CALLBACK_BASE_URL=https://your-domain.com
+```
 
-- **Vercel** (recommended): import the repo, add all env vars in project settings, and deploy. Set `CALLBACK_BASE_URL` to your Vercel deployment URL.
-- **Railway / Render / Fly.io**: set the same env vars and run `npm run build && npm start`.
+---
 
-Make sure `CALLBACK_BASE_URL` always points to the live public URL so Kie.ai webhooks reach your `/api/callback` route.
+# ▶️ Run the project
+
+## Development
+
+```bash
+pnpm run dev
+```
+
+## Production
+
+```bash
+pnpm run build
+pnpm start
+```
+
+App runs on:
+
+```txt
+http://localhost:3000
+```
+
+---
+
+# 🌍 Deployment
+
+HeliosGen can be deployed anywhere that supports Node.js.
+
+## Recommended: Vercel
+
+1. Import the repository
+2. Add environment variables
+3. Deploy
+
+Set:
+
+```env
+CALLBACK_BASE_URL=https://your-vercel-domain.vercel.app
+```
+
+---
+
+## Other platforms
+
+- Railway
+- Render
+- Fly.io
+
+Use:
+
+```bash
+npm run build && npm start
+```
+
+---
+
+# 🧠 Vision
+
+HeliosGen is designed to make AI generation composable.
+
+Not just prompting.
+
+But building reusable creative systems visually.
+
+---
+
+# 📄 License
+
+MIT License
+
+---
+
+<p align="center">
+  Built for creators building the future of AI workflows.
+</p>
