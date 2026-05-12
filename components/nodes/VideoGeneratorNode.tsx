@@ -163,6 +163,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const addToast  = useWorkflowStore((s) => s.addToast);
   const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
+  const onEdgesChange = useWorkflowStore((s) => s.onEdgesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
   const nodes = useWorkflowStore((s) => s.nodes);
@@ -211,6 +212,11 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const [isSaving, setIsSaving] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [scrubPos, setScrubPos] = useState(0);
+  const [capturing, setCapturing] = useState(false);
+  const [captureErr, setCaptureErr] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"video" | "frame">("video");
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
   const durLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -541,6 +547,92 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     setModeOpen(false); setGrokResOpen(false);
     setHovering(false);
   };
+
+  // Auto-open picker when connected to a downstream image handle via imagePickOut
+  const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
+  const imagePickEdges = edges.filter(
+    (e) => e.source === id &&
+           (IMAGE_HANDLES.has(e.targetHandle as string) || !e.targetHandle) &&
+           e.sourceHandle === "imagePickOut"
+  );
+  const imagePickEdgeCount = imagePickEdges.length;
+  const prevEdgeCountRef = useRef(imagePickEdgeCount);
+  const lastEdgeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (imagePickEdgeCount > prevEdgeCountRef.current) {
+      const v = videoRef.current;
+      if (v) { v.pause(); setScrubPos(v.currentTime / (v.duration || 1)); }
+      setPickerOpen(true);
+      // Track the ID of the edge that just triggered the picker
+      lastEdgeIdRef.current = imagePickEdges[imagePickEdges.length - 1]?.id ?? null;
+    }
+    prevEdgeCountRef.current = imagePickEdgeCount;
+  }, [imagePickEdgeCount, imagePickEdges]);
+
+  useEffect(() => {
+    if (!imagePickEdgeCount) {
+      setPickerOpen(false);
+      setViewMode("video");
+    }
+  }, [imagePickEdgeCount]);
+
+  const openPicker = useCallback(() => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      setScrubPos(v.currentTime / (v.duration || 1));
+    }
+    setPickerOpen(true);
+  }, []);
+
+  const captureFrame = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    setCaptureErr(null);
+    setCapturing(true);
+    try {
+      const seekTime = v.currentTime;
+      const srcUrl   = v.src;
+      if (!srcUrl) throw new Error("No video source");
+
+      const token = await (async () => {
+        try {
+          const { data } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
+          return data.session?.access_token;
+        } catch { return undefined; }
+      })();
+
+      const res = await fetch("/api/extract-frame", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ videoUrl: srcUrl, timeSeconds: seekTime }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Extraction failed");
+
+      if (j.cdnUrl) {
+        updateNodeData(id, { capturedFrameUrl: j.cdnUrl });
+        setViewMode("frame");
+        // Also update any connected ImageInputNodes
+        const pickEdges = edges.filter((e) => e.source === id && e.sourceHandle === "imagePickOut");
+        for (const pe of pickEdges) {
+          const tgt = nodes.find((n) => n.id === pe.target);
+          if (tgt?.type === "imageInputNode") {
+            updateNodeData(tgt.id, { r2Url: j.cdnUrl, inputImage: j.cdnUrl });
+          }
+        }
+      }
+      setPickerOpen(false);
+    } catch (e: any) {
+      setCaptureErr(e.message || "Failed to capture frame");
+    } finally {
+      setCapturing(false);
+    }
+  }, [id, updateNodeData, edges, nodes]);
 
   const textEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
   const textNode = textEdge ? nodes.find((n) => n.id === textEdge.source) : undefined;
@@ -1057,6 +1149,176 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 <span className="text-[11px] text-[#555]">{textNode.data.label as string}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Frame view overlay — shown when toggle is set to "frame" */}
+        {viewMode === "frame" && (data.capturedFrameUrl as string | undefined) && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={data.capturedFrameUrl as string}
+            alt="Captured frame"
+            className="absolute inset-0 w-full h-full block"
+            style={{ objectFit: "fill", zIndex: 5 }}
+          />
+        )}
+
+        {/* ── Normal player controls (hidden while picker is open) ── */}
+        {!pickerOpen && (
+          <>
+            {/* Video / Frame toggle switch — top-left, visible on hover */}
+            {!busy && (data.capturedFrameUrl as string | undefined) && (
+              <div
+                className="absolute top-2 left-2 z-10 flex items-center p-1 rounded-full gap-0.5 opacity-0 group-hover/player:opacity-100 transition-opacity node-slide-reveal"
+                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {/* Sliding active indicator */}
+                <div style={{
+                  position: "absolute",
+                  top: 4, left: 4,
+                  width: 28, height: 28,
+                  borderRadius: "50%",
+                  background: viewMode === "frame" ? "transparent" : "rgba(255,255,255,0.18)",
+                  border: "1.5px solid rgba(255,255,255,0.45)",
+                  transform: `translateX(${viewMode === "frame" ? 30 : 0}px)`,
+                  transition: "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  pointerEvents: "none",
+                  zIndex: 20,
+                }} />
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewMode("video"); }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                  title="Show video"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={viewMode === "video" ? "white" : "#777"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke 220ms" }}>
+                    <rect width="15" height="14" x="2" y="5" rx="2" />
+                    <path d="m17 8 5-3v14l-5-3V8Z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setViewMode("frame"); }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
+                  title="Show frame"
+                >
+                  <div style={{
+                    width: 20, height: 20, borderRadius: "50%",
+                    backgroundImage: `url(${data.capturedFrameUrl as string})`,
+                    backgroundSize: "cover", backgroundPosition: "center",
+                    flexShrink: 0,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                  }} />
+                </button>
+              </div>
+            )}
+
+            {/* Mute button — top right, shown on hover when video is ready */}
+            {typeof generations[currentGenIdx] === "string" && (
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); setGlobalMuted(!muted); }}
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-20 node-slide-reveal"
+                title={muted ? "Unmute" : "Mute"}
+              >
+                {muted ? (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <line x1="23" y1="9" x2="17" y2="15" />
+                    <line x1="17" y1="9" x2="23" y2="15" />
+                  </svg>
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 5L6 9H2V15H6L11 19V5Z" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </svg>
+                )}
+              </button>
+            )}
+
+            {/* Carousel indicators */}
+            {generations.length > 1 && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-20 pointer-events-none opacity-0 group-hover/player:opacity-100 transition-opacity duration-200">
+                {generations.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1 rounded-full transition-all duration-300 ${i === currentGenIdx ? "w-4 bg-white" : "w-1 bg-white/30"}`}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Frame picker overlay ─────────────────────────────────── */}
+        {pickerOpen && (
+          <div
+            className="nodrag absolute inset-0 flex flex-col z-30 bg-transparent"
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {/* Scrubber + time */}
+            <div className="mt-auto px-3 pb-3 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-white font-mono tabular-nums">{fmtTime(currentSec)}</span>
+                {captureErr
+                  ? <span className="text-[10px] text-red-400">{captureErr}</span>
+                  : <span className="text-[10px] text-white/40">drag to seek</span>
+                }
+              </div>
+              <input
+                type="range" min={0} max={1} step={0.0001}
+                value={scrubPos}
+                onChange={(e) => {
+                  const pct = parseFloat(e.target.value);
+                  setScrubPos(pct);
+                  const v = videoRef.current;
+                  if (v && v.duration) v.currentTime = pct * v.duration;
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="nodrag w-full cursor-pointer accent-white"
+              />
+              <div className="flex gap-2">
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); captureFrame(); }}
+                  disabled={capturing}
+                  className="nodrag flex-1 h-7 rounded-full bg-white/90 text-black text-[11px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {capturing ? (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 22 22" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
+                        <circle cx="11" cy="11" r="8" stroke="#333" strokeWidth="2.5" />
+                        <path d="M11 3A8 8 0 0 1 19 11" stroke="#000" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                      Capturing…
+                    </>
+                  ) : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3" /><path d="M20 7h-3.2L15 5H9L7.2 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
+                      </svg>
+                      Use this frame
+                    </>
+                  )}
+                </button>
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    videoRef.current?.play().catch(() => {});
+                    if (lastEdgeIdRef.current) onEdgesChange([{ type: "remove", id: lastEdgeIdRef.current }]);
+                    setPickerOpen(false);
+                    lastEdgeIdRef.current = null;
+                  }}
+                  className="nodrag h-7 px-3 rounded-full bg-white/10 text-white text-[11px] flex items-center justify-center cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

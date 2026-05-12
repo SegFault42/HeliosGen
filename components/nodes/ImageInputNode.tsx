@@ -352,15 +352,26 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         </div>
 
         {/* Handle rendered last so it sits above the image div in stacking order */}
-        <Handle
-          type="source"
-          position={Position.Right}
-          style={{ top: 20 }}
-          className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
-          title="Image output"
-        >
-          <ImageOutIcon />
-        </Handle>
+              <Handle
+                type="target"
+                position={Position.Left}
+                style={{ top: 20 }}
+                className="node-handle-icon node-handle-icon-image"
+                title="Image input"
+              >
+                <ImageInIcon />
+              </Handle>
+
+              <Handle
+                type="source"
+                position={Position.Right}
+                style={{ top: 20 }}
+                className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
+                title="Image output"
+              >
+                <ImageOutIcon />
+              </Handle>
+
 
         <input
           ref={fileRef}
@@ -432,6 +443,17 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
+
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ top: 20 }}
+        className="node-handle-icon node-handle-icon-image"
+        title="Image input"
+      >
+        <ImageInIcon />
+      </Handle>
+
       <Handle
         type="source"
         position={Position.Right}
@@ -485,6 +507,16 @@ function ImageOutIcon() {
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
       <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
       <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </svg>
+  );
+}
+
+function ImageInIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <path d="M12 8v8" />
+      <path d="M8 12h8" />
     </svg>
   );
 }

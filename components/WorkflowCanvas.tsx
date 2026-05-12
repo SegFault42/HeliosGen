@@ -247,7 +247,7 @@ export default function WorkflowCanvas() {
       (c) => c.type !== "remove" || !suppressedEdgeRemovesRef.current.has(c.id)
     );
 
-    // Clear capturedFrameUrl from VideoInputNodes when their frame-bearing edge is removed
+    // Clear capturedFrameUrl from source nodes when their frame-bearing edge is removed
     for (const c of filtered) {
       if (c.type !== "remove") continue;
       const edge = edges.find((e) => e.id === c.id);
@@ -255,15 +255,16 @@ export default function WorkflowCanvas() {
       const isFrameEdge =
         (edge.targetHandle === "image" && nodes.find((n) => n.id === edge.target)?.type === "generateNode") ||
         (edge.targetHandle === "startFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode") ||
-        (edge.targetHandle === "endFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode");
+        (edge.targetHandle === "endFrame" && nodes.find((n) => n.id === edge.target)?.type === "videoGeneratorNode") ||
+        edge.sourceHandle === "imagePickOut";
       if (!isFrameEdge) continue;
       const srcNode = nodes.find((n) => n.id === edge.source);
-      if (srcNode?.type !== "videoInputNode") continue;
-      // Only clear if no other frame-bearing edges from this VideoInputNode remain
+      if (srcNode?.type !== "videoInputNode" && srcNode?.type !== "videoGeneratorNode") continue;
+      // Only clear if no other frame-bearing edges from this source remain
       const remaining = edges.filter((e) =>
         e.id !== edge.id &&
         e.source === edge.source &&
-        (e.targetHandle === "image" || e.targetHandle === "startFrame" || e.targetHandle === "endFrame")
+        (e.targetHandle === "image" || e.targetHandle === "startFrame" || e.targetHandle === "endFrame" || e.sourceHandle === "imagePickOut")
       );
       if (remaining.length === 0) {
         updateNodeData(edge.source, { capturedFrameUrl: undefined });
@@ -721,28 +722,34 @@ export default function WorkflowCanvas() {
   const handleConnect = useCallback((connection: Connection) => {
     onConnect(connection);
 
-    // Extract frame immediately when a VideoInputNode is wired to an image-consuming handle.
+    // Extract frame immediately when a Video source is wired to an image-consuming handle.
     // Exception: imagePickOut → user picks manually via the frame picker, no auto-extraction.
     const th = connection.targetHandle;
     const sh = connection.sourceHandle;
-    if ((th === "image" || th === "startFrame" || th === "endFrame") && sh !== "imagePickOut") {
+    const IMAGE_TARGET_HANDLES = new Set(["image", "startFrame", "endFrame", "resource"]);
+    const isImageTarget = !th || IMAGE_TARGET_HANDLES.has(th);
+
+    if (isImageTarget && sh !== "imagePickOut") {
       const srcNode = nodes.find((n) => n.id === connection.source);
       const tgtNode = nodes.find((n) => n.id === connection.target);
       const validTarget =
         (th === "image" && tgtNode?.type === "generateNode") ||
         (th === "startFrame" && tgtNode?.type === "videoGeneratorNode") ||
-        (th === "endFrame" && tgtNode?.type === "videoGeneratorNode");
-      if (srcNode?.type === "videoInputNode" && validTarget) {
+        (th === "endFrame" && tgtNode?.type === "videoGeneratorNode") ||
+        (th === "resource" && tgtNode?.type === "videoGeneratorNode") ||
+        (!th && tgtNode?.type === "imageInputNode");
+
+      if ((srcNode?.type === "videoInputNode" || srcNode?.type === "videoGeneratorNode") && validTarget) {
         const videoUrl = (srcNode.data.videoUrl ?? srcNode.data.r2Url) as string | undefined;
         // For startFrame/endFrame always re-extract (user is declaring which frame they want).
         // For image handle, skip if already extracted to avoid redundant uploads.
         const alreadyExtracted = !!(srcNode.data.capturedFrameUrl as string | undefined);
-        if (videoUrl && !videoUrl.startsWith("blob:") && (th !== "image" || !alreadyExtracted)) {
+        const shouldExtract = videoUrl && !videoUrl.startsWith("blob:") &&
+          (th === "startFrame" || th === "endFrame" || !alreadyExtracted);
+
+        if (shouldExtract) {
           const trimEnd = srcNode.data.trimEnd as number | undefined;
           const trimStart = srcNode.data.trimStart as number | undefined;
-          // startFrame → first frame of trim range (or video start)
-          // endFrame   → last frame of trim range (or video end via lastFrame:true)
-          // image      → use trimEnd heuristic (end frame if trim set, else start)
           let extractBody: Record<string, unknown>;
           if (th === "startFrame") {
             extractBody = { videoUrl, timeSeconds: trimStart ?? 0 };
@@ -756,6 +763,7 @@ export default function WorkflowCanvas() {
               : { videoUrl, timeSeconds: trimStart ?? 0 };
           }
           const srcId = srcNode.id;
+          const tgtId = tgtNode?.id;
           updateNodeDataRef.current(srcId, { extractingFrame: true });
           getAccessToken().then((token) => {
             if (!token) { updateNodeDataRef.current(srcId, { extractingFrame: false }); return; }
@@ -764,11 +772,24 @@ export default function WorkflowCanvas() {
               headers: authHeaders(token),
               body: JSON.stringify(extractBody),
             }).then((r) => r.json()).then((j) => {
-              if (j.cdnUrl) updateNodeDataRef.current(srcId, { capturedFrameUrl: j.cdnUrl });
+              if (j.cdnUrl) {
+                updateNodeDataRef.current(srcId, { capturedFrameUrl: j.cdnUrl });
+                if (tgtNode?.type === "imageInputNode" && tgtId) {
+                  updateNodeDataRef.current(tgtId, { r2Url: j.cdnUrl, inputImage: j.cdnUrl });
+                }
+              }
             }).catch(() => { }).finally(() => {
               updateNodeDataRef.current(srcId, { extractingFrame: false });
             });
           });
+        } else if (videoUrl && (th === "startFrame" || th === "endFrame" || alreadyExtracted)) {
+          // If already extracted or using existing frame, and target is ImageInputNode, update it immediately
+          if (tgtNode?.type === "imageInputNode") {
+            const frameUrl = srcNode.data.capturedFrameUrl as string | undefined;
+            if (frameUrl) {
+              updateNodeDataRef.current(tgtNode.id, { r2Url: frameUrl, inputImage: frameUrl });
+            }
+          }
         }
       }
     }

@@ -231,7 +231,17 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Upload failed");
 
-      updateNodeData(id, { capturedFrameUrl: json.cdnUrl, capturedFrameBlurUrl: blurDataUrl });
+      if (json.cdnUrl) {
+        updateNodeData(id, { capturedFrameUrl: json.cdnUrl, capturedFrameBlurUrl: blurDataUrl });
+        // Also update any connected ImageInputNodes
+        const pickEdges = edges.filter((e) => e.source === id && e.sourceHandle === "imagePickOut");
+        for (const pe of pickEdges) {
+          const tgt = nodes.find((n) => n.id === pe.target);
+          if (tgt?.type === "imageInputNode") {
+            updateNodeData(tgt.id, { r2Url: json.cdnUrl, inputImage: json.cdnUrl });
+          }
+        }
+      }
       setPickerOpen(false);
       setShowFramePreview(false);
       videoRef.current?.play().catch(() => {});
@@ -240,23 +250,32 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     } finally {
       setCapturing(false);
     }
-  }, [id, updateNodeData]);
+  }, [id, updateNodeData, edges, nodes]);
 
   // Auto-open picker when connected; close picker + unlock when edge is cut
-  const imageEdgeId = imageEdge?.id ?? null;
+  const imagePickEdges = edges.filter((e) => e.source === id && e.sourceHandle === "imagePickOut");
+  const imagePickEdgeCount = imagePickEdges.length;
+  const prevEdgeCountRef = useRef(imagePickEdgeCount);
+  const lastEdgeIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (imageEdgeId && !capturedFrameRef.current) {
+    if (imagePickEdgeCount > prevEdgeCountRef.current) {
       const v = videoRef.current;
       if (v) { v.pause(); setScrubPos(v.currentTime / (v.duration || 1)); }
       setPickerOpen(true);
+      lastEdgeIdRef.current = imagePickEdges[imagePickEdges.length - 1]?.id ?? null;
     }
-    if (!imageEdgeId) {
+    prevEdgeCountRef.current = imagePickEdgeCount;
+  }, [imagePickEdgeCount, imagePickEdges]);
+
+  useEffect(() => {
+    if (!imagePickEdgeCount) {
       setPickerOpen(false);
       setViewMode("video");
       if (capturedFrameRef.current) updateNodeData(id, { capturedFrameUrl: undefined });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageEdgeId]);
+  }, [imagePickEdgeCount]);
 
   // ── Video upload ─────────────────────────────────────────────────────────────
 
@@ -1121,8 +1140,9 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                     onClick={(e) => {
                       e.stopPropagation();
                       videoRef.current?.play().catch(() => {});
-                      if (imageEdgeId) deleteElements({ edges: [{ id: imageEdgeId }] });
+                      if (lastEdgeIdRef.current) deleteElements({ edges: [{ id: lastEdgeIdRef.current }] });
                       else setPickerOpen(false);
+                      lastEdgeIdRef.current = null;
                     }}
                     className="nodrag h-7 px-3 rounded-full bg-white/10 text-white text-[11px] flex items-center justify-center cursor-pointer"
                   >

@@ -108,27 +108,14 @@ export function resolveInputs(
 
     // "image" handle — multi-image input for generateNode (up to 14)
     if (edge.targetHandle === "image") {
-      if (src.type === "imageInputNode") {
-        // Prefer R2 CDN URL; fall back to base64 data URL if not yet uploaded
-        const imgSrc = (src.data.r2Url ?? src.data.inputImage) as string | undefined;
-        if (imgSrc) {
-          result.imageUrls.push(imgSrc);
-          result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
-        }
+      const imgSrc = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
+      if (imgSrc) {
+        result.imageUrls.push(imgSrc);
+        result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
       }
-      if (src.type === "videoInputNode") {
-        const imgSrc = src.data.capturedFrameUrl as string | undefined;
-        if (imgSrc) {
-          result.imageUrls.push(imgSrc);
-          result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
-        }
-      }
-      if (src.type === "generateNode") {
-        if (src.data.imageUrl) {
-          result.imageUrls.push(src.data.imageUrl as string);
-          result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
-        }
-        if (src.data.prompt && !result.prompt) result.prompt = src.data.prompt as string;
+      // Carry upstream prompt if current node doesn't have one
+      if ((src.type === "generateNode" || src.type === "videoGeneratorNode") && src.data.prompt && !result.prompt) {
+        result.prompt = src.data.prompt as string;
       }
     }
 
