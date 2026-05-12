@@ -1,6 +1,6 @@
 "use client";
 import {
-  useRef, useState, useCallback, useEffect, useLayoutEffect,
+  useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -71,6 +71,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const selectedRef = useRef(selected);
   const prevSelectedRef = useRef(selected);
 
+  const [textMode, setTextMode] = useState<"text" | "json">("text");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [hasScrollTop, setHasScrollTop] = useState(false);
@@ -139,6 +140,11 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   // localText drives the overlay and placeholder — always in sync with what's
   // actually in the textarea (updated on every keystroke via handleChange).
   const [localText, setLocalText] = useState(storePrompt);
+
+  const jsonErrorPos = useMemo<number | null>(() => {
+    if (textMode !== "json" || !localText) return null;
+    return getJsonErrorPos(localText);
+  }, [textMode, localText]);
 
   // ── Keep uncontrolled textarea in sync with external store changes ────────
   // (e.g. when the whole canvas is loaded from saved state, or programmatic
@@ -426,6 +432,22 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     ta.selectionEnd = pos;
   });
 
+  // Format JSON immediately when switching to JSON mode
+  useEffect(() => {
+    if (textMode !== "json") return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    try {
+      const formatted = JSON.stringify(JSON.parse(ta.value), null, 2);
+      if (formatted !== ta.value) {
+        ta.value = formatted;
+        setLocalText(formatted);
+        updateNodeData(id, { prompt: formatted });
+      }
+    } catch { /* invalid JSON — leave as-is */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textMode]);
+
   // When modal opens, seed & focus its textarea
   useEffect(() => {
     if (!expandOpen) return;
@@ -581,32 +603,59 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
           </button>
         </div>
 
+        {/* ── Text / JSON tab toggle ───────────────────────────────────────── */}
+        <div
+          className="shrink-0 flex items-center px-2.5 pt-2 pb-1"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-px rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextMode("text"); }}
+              className="px-2 py-px rounded-full text-[10px] font-medium transition-colors duration-150"
+              style={{ color: textMode === "text" ? "white" : "#555", background: textMode === "text" ? "rgba(255,255,255,0.13)" : "transparent" }}
+            >
+              Text
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setTextMode("json"); }}
+              className="px-2 py-px rounded-full text-[10px] font-medium transition-colors duration-150"
+              style={{ color: textMode === "json" ? "white" : "#555", background: textMode === "json" ? "rgba(255,255,255,0.13)" : "transparent" }}
+            >
+              JSON
+            </button>
+          </div>
+        </div>
+
         {/* Padding zone — fills remaining height; clicking here drags the node */}
-        <div className="flex-1 p-2.5 min-h-0">
+        <div className="flex-1 px-2.5 pb-2.5 min-h-0">
           {/* Text zone — stops propagation so clicking edits text, not drags node */}
           <div
             ref={textZoneRef}
             className="relative h-full rounded-[7px] overflow-hidden"
           >
-            {/* Highlight overlay — driven by localText so it updates on every keystroke */}
+            {/* Highlight overlay — text mode: mention chips; json mode: syntax colours */}
             <div
               ref={highlightRef}
               aria-hidden
-              className="absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words overflow-hidden select-none"
+              className={`absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words select-none${textMode === "json" ? " font-mono" : " overflow-hidden"}`}
+              style={textMode === "json" ? { overflowY: "scroll" } : undefined}
             >
-              {promptMaxLength !== null && localText.length > promptMaxLength ? (
-                <>
-                  {renderWithMentions(localText.slice(0, promptMaxLength), knownLabels)}
-                  <span style={{ background: "rgba(239,68,68,0.22)", color: "#f87171", borderRadius: 2 }}>
-                    {localText.slice(promptMaxLength)}
-                  </span>
-                </>
-              ) : renderWithMentions(localText, knownLabels)}
+              {textMode === "json"
+                ? syntaxHighlightJson(localText, jsonErrorPos ?? undefined)
+                : promptMaxLength !== null && localText.length > promptMaxLength
+                  ? <>
+                      {renderWithMentions(localText.slice(0, promptMaxLength), knownLabels)}
+                      <span style={{ background: "rgba(239,68,68,0.22)", color: "#f87171", borderRadius: 2 }}>
+                        {localText.slice(promptMaxLength)}
+                      </span>
+                    </>
+                  : renderWithMentions(localText, knownLabels)
+              }
               {"\u200b"}
             </div>
 
             {/* Placeholder */}
-            {!localText && (
+            {!localText && textMode === "text" && (
               <div
                 aria-hidden
                 className="absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-[#444444] leading-[1.6] pointer-events-none select-none"
@@ -619,10 +668,35 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             React never writes .value, so cursor position is never reset. */}
             <textarea
               ref={textareaRef}
-              className="relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[13px] leading-[1.6] resize-none outline-none overflow-y-auto z-10"
-              style={{ color: "transparent", caretColor: "white", overscrollBehavior: "contain" }}
+              className={`relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[13px] leading-[1.6] resize-none outline-none overflow-y-auto z-10${textMode === "json" ? " font-mono" : ""}`}
+              style={{ color: "transparent", caretColor: "white", overscrollBehavior: "contain", ...(textMode === "json" ? { overflowY: "scroll" as const } : {}) }}
               defaultValue={storePrompt}
               onChange={handleChange}
+              onPaste={textMode === "json" ? () => {
+                requestAnimationFrame(() => {
+                  const ta = textareaRef.current;
+                  if (!ta) return;
+                  try {
+                    const formatted = JSON.stringify(JSON.parse(ta.value), null, 2);
+                    ta.value = formatted;
+                    setLocalText(formatted);
+                    updateNodeData(id, { prompt: formatted });
+                  } catch { /* invalid JSON */ }
+                });
+              } : undefined}
+              onBlur={() => {
+                if (textMode !== "json") return;
+                const ta = textareaRef.current;
+                if (!ta) return;
+                try {
+                  const formatted = JSON.stringify(JSON.parse(ta.value), null, 2);
+                  if (formatted !== ta.value) {
+                    ta.value = formatted;
+                    setLocalText(formatted);
+                    updateNodeData(id, { prompt: formatted });
+                  }
+                } catch { /* invalid JSON — leave as-is */ }
+              }}
               onScroll={() => { syncScroll(); checkScrollState(); }}
               onKeyDown={(e) => {
                 const ta = textareaRef.current;
@@ -967,4 +1041,71 @@ function TextOutIcon() {
       <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
     </svg>
   );
+}
+
+function getJsonErrorPos(text: string): number | null {
+  try { JSON.parse(text); return null; }
+  catch (e) {
+    if (!(e instanceof SyntaxError)) return null;
+    const msg = e.message;
+    // Chrome/Edge: "... at position N"
+    const posMatch = msg.match(/\bat position (\d+)/);
+    if (posMatch) return Math.min(parseInt(posMatch[1], 10), text.length - 1);
+    // Firefox/Safari: "at line L column C"
+    const lcMatch = msg.match(/\bat line (\d+) column (\d+)/);
+    if (lcMatch) {
+      const lines = text.split("\n");
+      let pos = 0;
+      for (let i = 0; i < parseInt(lcMatch[1], 10) - 1; i++) pos += (lines[i]?.length ?? 0) + 1;
+      return Math.min(pos + parseInt(lcMatch[2], 10) - 1, text.length - 1);
+    }
+    return null;
+  }
+}
+
+function syntaxHighlightJson(json: string, errorPos?: number): ReactNode {
+  const parts: ReactNode[] = [];
+  let k = 0;
+
+  const push = (from: number, to: number, color?: string) => {
+    if (from >= to) return;
+    // If the error position falls inside this slice, split around it
+    if (errorPos !== undefined && errorPos >= from && errorPos < to) {
+      if (errorPos > from)
+        parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(from, errorPos)}</span>);
+      parts.push(
+        <mark key={k++} style={{ background: "rgba(239,68,68,0.45)", color: "#f87171", borderRadius: 2, padding: "0 1px" }}>
+          {json[errorPos] ?? " "}
+        </mark>
+      );
+      if (errorPos + 1 < to)
+        parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(errorPos + 1, to)}</span>);
+    } else {
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(from, to)}</span>);
+    }
+  };
+
+  const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}\[\],])/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(json)) !== null) {
+    push(last, m.index); // whitespace / indentation
+    if (m[1] !== undefined) {
+      if (m[2] !== undefined) {
+        push(m.index, m.index + m[1].length, "#c678dd");             // key
+        push(m.index + m[1].length, m.index + m[0].length, "#6b7280"); // colon
+      } else {
+        push(m.index, m.index + m[1].length, "white");               // string value
+      }
+    } else if (m[3] !== undefined) {
+      push(m.index, m.index + m[3].length, "white");                 // number
+    } else if (m[4] !== undefined) {
+      push(m.index, m.index + m[4].length, "white");                 // boolean / null
+    } else if (m[5] !== undefined) {
+      push(m.index, m.index + m[5].length, "#6b7280");               // punctuation
+    }
+    last = re.lastIndex;
+  }
+  push(last, json.length); // trailing text
+  return <>{parts}</>;
 }
