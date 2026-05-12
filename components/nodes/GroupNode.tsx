@@ -353,6 +353,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
           border: "1px solid rgba(255,255,255,0.07)",
           boxShadow: "0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)",
           whiteSpace: "nowrap",
+          zIndex: 10,
         }}
       >
         {locked ? (

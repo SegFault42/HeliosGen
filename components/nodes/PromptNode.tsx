@@ -220,7 +220,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     const rfNode = cardRef.current?.closest<HTMLElement>(".react-flow__node");
     if (!rfNode) return;
     if (mentionQuery !== null && filteredMentions.length > 0) {
-      rfNode.style.zIndex = "1000";
+      rfNode.style.zIndex = "10000";
     } else {
       rfNode.style.zIndex = "";
     }

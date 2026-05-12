@@ -176,7 +176,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
     const count  = nodesInStore.filter((n) => n.type === type).length + 1;
     const label  = `${NODE_DISPLAY_NAMES[type] ?? type} #${count}`;
 
-    const nodeStyle = type === "imageInputNode" || type === "videoInputNode"
+    const nodeStyle = ["imageInputNode", "videoInputNode", "generateNode", "videoGeneratorNode"].includes(type)
       ? { width: size.w }
       : { width: size.w, height: size.h };
 

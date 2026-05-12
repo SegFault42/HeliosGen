@@ -222,6 +222,19 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const durLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlBarRef = useRef<HTMLDivElement>(null);
 
+  // ── Elevate the RF node z-index while any dropdown is open ──────────────────
+  useEffect(() => {
+    const rfNode = cardRef.current?.closest<HTMLElement>(".react-flow__node");
+    if (!rfNode) return;
+    const anyOpen = modelOpen || ratioOpen || durOpen || modeOpen || grokResOpen;
+    if (anyOpen) {
+      rfNode.style.zIndex = "10000";
+    } else {
+      rfNode.style.zIndex = "";
+    }
+    return () => { rfNode.style.zIndex = ""; };
+  }, [modelOpen, ratioOpen, durOpen, modeOpen, grokResOpen]);
+
   useEffect(() => {
     const anyOpen = modelOpen || ratioOpen || durOpen || modeOpen || grokResOpen;
     if (!anyOpen) return;
@@ -929,7 +942,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     <div
       ref={cardRef}
       className={`video-node-card node-card w-full${animBusy ? " node-generating" : ""}${(data.hasError as boolean) ? " node-error-blink" : ""}`}
-      style={{ minWidth: 320, minHeight: 280 }}
+      style={{
+        minWidth: 320,
+        aspectRatio: (data.imageNaturalRatio as string | undefined) ?? aspectRatio.replace(":", " / "),
+      }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={closeAll}
       onAnimationEnd={(e) => { if (e.animationName === "node-error-blink") updateNodeData(id, { hasError: false }); }}
@@ -1059,109 +1075,116 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
       {/* ── Full-card media container — all controls overlaid inside ── */}
       <div
-        className="relative bg-[#090B0D] overflow-hidden rounded-[8px] group/player group/gen"
-        style={{ aspectRatio: (data.imageNaturalRatio as string | undefined) ?? aspectRatio.replace(":", " / "), width: "100%", transition: "aspect-ratio 0.35s cubic-bezier(0.4, 0, 0.2, 1)" }}
+        className="relative bg-[#090B0D] group/player group/gen"
+        style={{
+          aspectRatio: (data.imageNaturalRatio as string | undefined) ?? aspectRatio.replace(":", " / "),
+          width: "100%",
+          transition: "aspect-ratio 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
       >
-        {/* Video carousel strip */}
-        {generations.length > 0 ? (
-          <div
-            style={{
-              display: "flex",
-              height: "100%",
-              transform: `translateX(${-currentGenIdx * 100}%)`,
-              transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
-              willChange: "transform",
-            }}
-          >
-            {generations.map((entry, i) => (
-              <div key={i} style={{ minWidth: "100%", height: "100%", flexShrink: 0, position: "relative", background: "#090B0D" }}>
-                {entry === null ? (
-                  <div className="absolute inset-0" style={{ background: "#090B0D" }} />
-                ) : typeof entry === "object" ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                      <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                      <circle cx="12" cy="16" r="1" fill="#c04040" />
-                    </svg>
-                    <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
-                    <button
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); deleteGen(i); }}
-                      className="flex items-center gap-1.5 h-7 px-3 rounded-full transition-all hover:bg-red-900/60"
-                      style={{ background: "rgba(40,0,0,0.7)", backdropFilter: "blur(10px)", border: "1px solid rgba(200,50,50,0.35)" }}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-red-400">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6M14 11v6" />
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+        {/* Clipped media layer */}
+        <div className="absolute inset-0 overflow-hidden rounded-[8px] z-0">
+          {/* Video carousel strip */}
+          {generations.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                height: "100%",
+                transform: `translateX(${-currentGenIdx * 100}%)`,
+                transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
+                willChange: "transform",
+              }}
+            >
+              {generations.map((entry, i) => (
+                <div key={i} style={{ minWidth: "100%", height: "100%", flexShrink: 0, position: "relative", background: "#090B0D" }}>
+                  {entry === null ? (
+                    <div className="absolute inset-0" style={{ background: "#090B0D" }} />
+                  ) : typeof entry === "object" ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                        <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="12" cy="16" r="1" fill="#c04040" />
                       </svg>
-                      <span className="text-[11px] font-medium text-red-400">Delete</span>
-                    </button>
-                  </div>
-                ) : (
-                  // eslint-disable-next-line jsx-a11y/media-has-caption
-                  <video
-                    ref={(el) => {
-                      if (el) { videoRefs.current.set(i, el); if (i === currentGenIdx) (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el; }
-                      else videoRefs.current.delete(i);
-                    }}
-                    src={entry}
-                    className="w-full h-full block"
-                    style={{ objectFit: "fill" }}
-                    loop
-                    playsInline
-                    muted={i !== currentGenIdx || muted || !hovering}
-                    onPlay={i === currentGenIdx ? () => setIsPlaying(true) : undefined}
-                    onPause={i === currentGenIdx ? () => setIsPlaying(false) : undefined}
-                    onLoadedMetadata={i === currentGenIdx ? handleVideoMeta : undefined}
-                    onTimeUpdate={i === currentGenIdx ? (e) => {
-                      const v = e.currentTarget;
-                      setCurrentSec(v.currentTime);
-                      if (v.duration) setProgress(v.currentTime / v.duration);
-                    } : undefined}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        ) : status === "error" ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
-            <div className="flex items-center gap-2.5">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="12" cy="16" r="1" fill="#c04040" />
-              </svg>
-              <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
-                Credits refunded
-              </span>
+                      <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                      <button
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); deleteGen(i); }}
+                        className="flex items-center gap-1.5 h-7 px-3 rounded-full transition-all hover:bg-red-900/60"
+                        style={{ background: "rgba(40,0,0,0.7)", backdropFilter: "blur(10px)", border: "1px solid rgba(200,50,50,0.35)" }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-red-400">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                        <span className="text-[11px] font-medium text-red-400">Delete</span>
+                      </button>
+                    </div>
+                  ) : (
+                    // eslint-disable-next-line jsx-a11y/media-has-caption
+                    <video
+                      ref={(el) => {
+                        if (el) { videoRefs.current.set(i, el); if (i === currentGenIdx) (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el; }
+                        else videoRefs.current.delete(i);
+                      }}
+                      src={entry}
+                      className="w-full h-full block"
+                      style={{ objectFit: "fill" }}
+                      loop
+                      playsInline
+                      muted={i !== currentGenIdx || muted || !hovering}
+                      onPlay={i === currentGenIdx ? () => setIsPlaying(true) : undefined}
+                      onPause={i === currentGenIdx ? () => setIsPlaying(false) : undefined}
+                      onLoadedMetadata={i === currentGenIdx ? handleVideoMeta : undefined}
+                      onTimeUpdate={i === currentGenIdx ? (e) => {
+                        const v = e.currentTarget;
+                        setCurrentSec(v.currentTime);
+                        if (v.duration) setProgress(v.currentTime / v.duration);
+                      } : undefined}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-            <p className="text-white text-[12px] font-semibold leading-snug">Oops! Something went wrong.</p>
-            <p className="text-[#555] text-[10px] leading-[1.5] break-words">{(data.errorMsg as string) ?? "Generation failed"}</p>
-          </div>
-        ) : (
-          <div className="w-full h-full">
-            {textNode && (
-              <div className="absolute bottom-12 left-4 flex items-center gap-1.5 z-10">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ff3df5] shrink-0" />
-                <span className="text-[11px] text-[#555]">{textNode.data.label as string}</span>
+          ) : status === "error" ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
+              <div className="flex items-center gap-2.5">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                  <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="12" cy="16" r="1" fill="#c04040" />
+                </svg>
+                <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
+                  Credits refunded
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              <p className="text-white text-[12px] font-semibold leading-snug">Oops! Something went wrong.</p>
+              <p className="text-[#555] text-[10px] leading-[1.5] break-words">{(data.errorMsg as string) ?? "Generation failed"}</p>
+            </div>
+          ) : (
+            <div className="w-full h-full">
+              {textNode && (
+                <div className="absolute bottom-12 left-4 flex items-center gap-1.5 z-10">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#ff3df5] shrink-0" />
+                  <span className="text-[11px] text-[#555]">{textNode.data.label as string}</span>
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Frame view overlay — shown when toggle is set to "frame" */}
-        {viewMode === "frame" && (data.capturedFrameUrl as string | undefined) && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={data.capturedFrameUrl as string}
-            alt="Captured frame"
-            className="absolute inset-0 w-full h-full block"
-            style={{ objectFit: "fill", zIndex: 5 }}
-          />
-        )}
+          {/* Frame view overlay — shown when toggle is set to "frame" */}
+          {viewMode === "frame" && (data.capturedFrameUrl as string | undefined) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.capturedFrameUrl as string}
+              alt="Captured frame"
+              className="absolute inset-0 w-full h-full block"
+              style={{ objectFit: "fill", zIndex: 5 }}
+            />
+          )}
+        </div>
 
         {/* ── Normal player controls (hidden while picker is open) ── */}
         {!pickerOpen && (
@@ -1482,7 +1505,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           return (
             <div
               ref={controlBarRef}
-              className={`absolute left-0 right-0 flex items-end gap-2 px-2.5 pb-2 pt-1 z-10 transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              className={`absolute left-0 right-0 flex items-end gap-2 px-2.5 pb-2 pt-1 z-[1001] transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
               style={{ bottom: 36 }}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -1747,7 +1770,7 @@ function FloatMenu({ children, fullWidth = false, open }: { children: React.Reac
   const { visible, className } = useAnimatedPopup(open);
   if (!visible) return null;
   return (
-    <div className={`absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl overflow-hidden z-50 shadow-2xl ${fullWidth ? "w-full" : "min-w-max"} ${className}`}>
+    <div className={`absolute bottom-full left-0 mb-1.5 bg-[#0F1214] border border-[#222] rounded-xl overflow-hidden z-[1002] shadow-2xl ${className}`}>
       {children}
     </div>
   );

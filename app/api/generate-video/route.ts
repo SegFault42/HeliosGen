@@ -155,6 +155,42 @@ export async function POST(req: NextRequest) {
       if (maybeSeed !== undefined && apiInput.seedKey) input[apiInput.seedKey] = maybeSeed;
     }
 
+  } else if (apiInput.useGoogleVeo) {
+    // ── Google Veo 3.1 ───────────────────────────────────────────────────────
+    const [startFrameUrl, endFrameUrl, refImages] = await Promise.all([
+      rawStartFrame ? ensureR2(rawStartFrame, "references").catch(() => rawStartFrame) : Promise.resolve(undefined),
+      rawEndFrame   ? ensureR2(rawEndFrame,   "references").catch(() => rawEndFrame)   : Promise.resolve(undefined),
+      Promise.all((rawRefImages as string[]).map((u) => ensureR2(u, "references").catch(() => u))),
+    ]);
+
+    const imageUrls: string[] = [];
+    let generationType = "TEXT_2_VIDEO";
+
+    // For veo3.1 lite, if an image is attached use: Image to video, just a text is attached, use text to video.
+    // On the two other models (fast/quality), one more element is present: reference.
+    const isLite = cfg.id === "google-veo-3-lite";
+
+    if (!isLite && refImages.length > 0) {
+      generationType = "REFERENCE_2_VIDEO";
+      imageUrls.push(...refImages.slice(0, 3));
+    } else if (startFrameUrl || endFrameUrl) {
+      generationType = "FIRST_AND_LAST_FRAMES_2_VIDEO";
+      if (startFrameUrl) imageUrls.push(startFrameUrl);
+      if (endFrameUrl) imageUrls.push(endFrameUrl);
+    }
+
+    effectiveApiId = "google/veo";
+    input = {
+      prompt: prompt ?? "",
+      model: cfg.apiId,
+      generationType,
+      [apiInput.aspectRatioKey!]: aspectRatio,
+      [apiInput.resolutionKey!]: resolution,
+      enableTranslation: true,
+    };
+    if (imageUrls.length > 0) input.imageUrls = imageUrls;
+    if (apiInput.extra) Object.assign(input, apiInput.extra);
+
   } else if (apiInput.referenceImagesKey) {
     // ── Reference-image-based models (Grok Imagine) ───────────────────────────
     const refImageUrls = (

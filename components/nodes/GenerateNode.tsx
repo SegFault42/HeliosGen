@@ -216,6 +216,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const nodeImgRef = useRef<HTMLImageElement>(null);
   const controlBarRef = useRef<HTMLDivElement>(null);
 
+  // ── Elevate the RF node z-index while any dropdown is open ──────────────────
+  useEffect(() => {
+    const rfNode = cardRef.current?.closest<HTMLElement>(".react-flow__node");
+    if (!rfNode) return;
+    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen;
+    if (anyOpen) {
+      rfNode.style.zIndex = "10000";
+    } else {
+      rfNode.style.zIndex = "";
+    }
+    return () => { rfNode.style.zIndex = ""; };
+  }, [modelOpen, ratioOpen, qualityOpen, azureQualityOpen]);
+
   useEffect(() => {
     const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen;
     if (!anyOpen) return;
@@ -672,7 +685,10 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     <div
       ref={cardRef}
       className={`node-card w-full${animBusy ? " node-generating" : ""}${(data.hasError as boolean) ? " node-error-blink" : ""}`}
-      style={{ minWidth: 280 }}
+      style={{
+        minWidth: 280,
+        aspectRatio: (data.imageNaturalRatio as string | undefined) ?? cssRatio,
+      }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => { setHovering(false); closeDropdowns(); }}
       onAnimationEnd={() => updateNodeData(id, { hasError: false })}
@@ -764,7 +780,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
       {/* ── Full-card media container — all controls overlaid inside ── */}
       <div
-        className="relative bg-[#090B0D] overflow-hidden rounded-[8px] group/gen"
+        className="relative bg-[#090B0D] group/gen"
         style={{
           aspectRatio: (data.imageNaturalRatio as string | undefined) ?? cssRatio,
           width: "100%",
@@ -772,122 +788,125 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         }}
         onDoubleClick={() => { if (data.imageUrl) openLightbox(); }}
       >
-        {busy && generations[currentGenIdx] === null && (
-          <>
-            <div
-              className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
-              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: isPending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(168,85,247,0.25)" }}
-            >
-              {isPending ? (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-                  <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              ) : (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-                  <circle cx="5" cy="5" r="4" stroke="rgba(168,85,247,0.25)" strokeWidth="1.5" />
-                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              )}
-              <span className="text-[11px] font-medium" style={{ color: isPending ? "#888" : "#a855f7" }}>
-                {isPending ? "Pending" : (phaseLabel || "Generating…")}
-              </span>
-            </div>
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
-              className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
-              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="9" />
-                <path d="m6 6 12 12" />
-              </svg>
-              <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
-            </button>
-          </>
-        )}
-        {generations.length > 0 ? (
-          <div
-            style={{
-              display: "flex",
-              height: "100%",
-              transform: `translateX(${-currentGenIdx * 100}%)`,
-              transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
-              willChange: "transform",
-            }}
-          >
-            {generations.map((entry, i) => (
-              <div key={i} style={{ minWidth: "100%", height: "100%", position: "relative", flexShrink: 0 }}>
-                {entry === null ? (
-                  <div className="absolute inset-0" style={{ background: "#090B0D" }} />
-                ) : typeof entry === "object" && !Array.isArray(entry) ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20" style={{ background: "#090B0D" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                      <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                      <circle cx="12" cy="16" r="1" fill="#c04040" />
-                    </svg>
-                    <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
-                    <button
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
-                      className="flex items-center gap-1.5 h-7 px-3 rounded-full transition-all hover:bg-red-900/60"
-                      style={{ background: "rgba(40,0,0,0.7)", backdropFilter: "blur(10px)", border: "1px solid rgba(200,50,50,0.35)" }}
-                    >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-red-400">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6l-1 14H6L5 6" />
-                        <path d="M10 11v6M14 11v6" />
-                        <path d="M9 6V4h6v2" />
-                      </svg>
-                      <span className="text-[11px] font-medium text-red-400">Delete</span>
-                    </button>
-                  </div>
+        {/* Clipped media layer */}
+        <div className="absolute inset-0 overflow-hidden rounded-[8px] z-0">
+          {busy && generations[currentGenIdx] === null && (
+            <>
+              <div
+                className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: isPending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(168,85,247,0.25)" }}
+              >
+                {isPending ? (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+                    <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+                    <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
                 ) : (
-                  <Image
-                    ref={i === currentGenIdx ? nodeImgRef : undefined}
-                    src={entry}
-                    alt="Generated"
-                    fill
-                    quality={30}
-                    sizes="400px"
-                    style={{ objectFit: "fill" }}
-                    onLoad={i === currentGenIdx ? () => {
-                      requestAnimationFrame(() => {
-                        if (!cardRef.current) return;
-                        const w = cardRef.current.offsetWidth;
-                        const h = cardRef.current.offsetHeight;
-                        if (w > 0 && h > 0) updateNodeSize(id, w, h);
-                      });
-                    } : undefined}
-                  />
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+                    <circle cx="5" cy="5" r="4" stroke="rgba(168,85,247,0.25)" strokeWidth="1.5" />
+                    <path d="M5 1 A4 4 0 0 1 9 5" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
                 )}
+                <span className="text-[11px] font-medium" style={{ color: isPending ? "#888" : "#a855f7" }}>
+                  {isPending ? "Pending" : (phaseLabel || "Generating…")}
+                </span>
               </div>
-            ))}
-          </div>
-        ) : status === "error" ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
-            <div className="flex items-center gap-2.5">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="12" cy="16" r="1" fill="#c04040" />
-              </svg>
-              <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
-                Credits refunded
-              </span>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+                className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
+                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="m6 6 12 12" />
+                </svg>
+                <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
+              </button>
+            </>
+          )}
+          {generations.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                height: "100%",
+                transform: `translateX(${-currentGenIdx * 100}%)`,
+                transition: "transform 320ms cubic-bezier(0.4, 0, 0.2, 1)",
+                willChange: "transform",
+              }}
+            >
+              {generations.map((entry, i) => (
+                <div key={i} style={{ minWidth: "100%", height: "100%", position: "relative", flexShrink: 0 }}>
+                  {entry === null ? (
+                    <div className="absolute inset-0" style={{ background: "#090B0D" }} />
+                  ) : typeof entry === "object" && !Array.isArray(entry) ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20" style={{ background: "#090B0D" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                        <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="12" cy="16" r="1" fill="#c04040" />
+                      </svg>
+                      <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                      <button
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
+                        className="flex items-center gap-1.5 h-7 px-3 rounded-full transition-all hover:bg-red-900/60"
+                        style={{ background: "rgba(40,0,0,0.7)", backdropFilter: "blur(10px)", border: "1px solid rgba(200,50,50,0.35)" }}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-red-400">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4h6v2" />
+                        </svg>
+                        <span className="text-[11px] font-medium text-red-400">Delete</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <Image
+                      ref={i === currentGenIdx ? nodeImgRef : undefined}
+                      src={entry}
+                      alt="Generated"
+                      fill
+                      quality={30}
+                      sizes="400px"
+                      style={{ objectFit: "fill" }}
+                      onLoad={i === currentGenIdx ? () => {
+                        requestAnimationFrame(() => {
+                          if (!cardRef.current) return;
+                          const w = cardRef.current.offsetWidth;
+                          const h = cardRef.current.offsetHeight;
+                          if (w > 0 && h > 0) updateNodeSize(id, w, h);
+                        });
+                      } : undefined}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-            <p className="text-white text-[12px] font-semibold leading-snug">
-              Oops! Something went wrong.
-            </p>
-            <p className="text-[#555] text-[10px] leading-[1.5] break-words">
-              {(data.errorMsg as string) ?? "Generation failed"}
-            </p>
-          </div>
-        ) : (
-          <div className="w-full h-full" />
-        )}
+          ) : status === "error" ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
+              <div className="flex items-center gap-2.5">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
+                  <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="12" cy="16" r="1" fill="#c04040" />
+                </svg>
+                <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
+                  Credits refunded
+                </span>
+              </div>
+              <p className="text-white text-[12px] font-semibold leading-snug">
+                Oops! Something went wrong.
+              </p>
+              <p className="text-[#555] text-[10px] leading-[1.5] break-words">
+                {(data.errorMsg as string) ?? "Generation failed"}
+              </p>
+            </div>
+          ) : (
+            <div className="w-full h-full" />
+          )}
+        </div>
 
         {natW > 0 && natH > 0 && (
           <div
@@ -902,7 +921,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         {/* ── Bottom floating controls ── */}
         <div
           ref={controlBarRef}
-          className={`absolute bottom-0 left-0 right-0 flex items-end gap-2 px-2.5 pb-2.5 pt-1 z-10 transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+          className={`absolute bottom-0 left-0 right-0 flex items-end gap-2 px-2.5 pb-2.5 pt-1 z-[1001] transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
           onMouseDown={(e) => e.stopPropagation()}
         >
           {/* Pills — wrap freely */}
@@ -929,7 +948,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               {!data.imageUrl && <ChevronIcon open={modelOpen} />}
             </button>
             {modelPopup.visible && (
-              <div className={`absolute bottom-full left-0 mb-2 w-48 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${modelPopup.className}`}>
+              <div className={`absolute bottom-full left-0 mb-2 w-48 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${modelPopup.className}`}>
                 {[...new Set(MODELS.map(m => m.meta))].map((provider, pi) => (
                   <Fragment key={provider}>
                     {pi > 0 && <div className="border-t border-white/[0.06] mx-2 my-0.5" />}
@@ -974,7 +993,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               <ChevronIcon open={ratioOpen} />
             </button>
             {ratioPopup.visible && (
-              <div className={`absolute bottom-full left-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${ratioPopup.className}`}>
+              <div className={`absolute bottom-full left-0 mb-2 w-32 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${ratioPopup.className}`}>
                 {caps.ratios.map((r) => {
                   const { rw: iw, rh: ih, x, y } = ratioRect(r);
                   const active = r === aspectRatio;
@@ -1010,7 +1029,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                 <ChevronIcon open={qualityOpen} />
               </button>
               {qualityPopup.visible && (
-                <div className={`absolute bottom-full left-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${qualityPopup.className}`}>
+                <div className={`absolute bottom-full left-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${qualityPopup.className}`}>
                   {caps.qualityKey === "resolution" && (
                     <div className="px-3 py-1.5 border-b border-[#1E1410]">
                       <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Resolution</span>
@@ -1052,7 +1071,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                 <ChevronIcon open={azureQualityOpen} />
               </button>
               {azureQualityPopup.visible && (
-                <div className={`absolute bottom-full left-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${azureQualityPopup.className}`}>
+                <div className={`absolute bottom-full left-0 mb-2 w-36 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${azureQualityPopup.className}`}>
                   <div className="px-3 py-1.5 border-b border-[#1E1410]">
                     <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Azure Quality</span>
                   </div>

@@ -53,6 +53,18 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const modelPopup = useAnimatedPopup(modelOpen);
   const modelBarRef = useRef<HTMLDivElement>(null);
 
+  // ── Elevate the RF node z-index while the menu is open ───────────────────
+  useEffect(() => {
+    const rfNode = cardRef.current?.closest<HTMLElement>(".react-flow__node");
+    if (!rfNode) return;
+    if (modelOpen) {
+      rfNode.style.zIndex = "10000";
+    } else {
+      rfNode.style.zIndex = "";
+    }
+    return () => { rfNode.style.zIndex = ""; };
+  }, [modelOpen]);
+
   useEffect(() => {
     if (!modelOpen) return;
     const handler = (e: MouseEvent) => {
@@ -347,7 +359,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
           {/* ── Bottom controls ────────────────────────────────────────── */}
           <div
             ref={modelBarRef}
-            className="absolute bottom-0 inset-x-0 px-2.5 pb-1.5 pt-1 flex items-center justify-between z-20"
+            className="absolute bottom-0 inset-x-0 px-2.5 pb-1.5 pt-1 flex items-center justify-between z-[1001]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Model dropdown */}
@@ -364,7 +376,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
               </button>
 
               {modelPopup.visible && (
-                <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-50 shadow-2xl ${modelPopup.className}`}>
+                <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${modelPopup.className}`}>
                   {MODELS.map((m) => (
                     <button
                       key={m.id}

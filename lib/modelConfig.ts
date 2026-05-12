@@ -326,10 +326,90 @@ export interface VideoModel {
     seedKey?: string;
     /** When true, use HappyHorse multi-endpoint routing */
     useHappyHorse?: boolean;
+    /** When true, use Google-specific payload and routing */
+    useGoogleVeo?: boolean;
   };
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
+  // ── Google ──────────────────────────────────────────────────────────────────
+  {
+    id: "google-veo-3-lite",
+    apiId: "veo3_lite",
+    name: "Veo 3.1 Lite",
+    provider: "Google",
+    ratios: ["16:9", "9:16", "Auto"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "16:9",
+    handles: ["prompt", "startFrame", "endFrame"],
+    sound: false,
+    resolutions: ["720p", "1080p", "4k"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 10000,
+      durationMin: 0,
+      durationMax: 0,
+      extra: {
+        enableTranslation: true,
+      },
+      useGoogleVeo: true,
+    },
+  },
+  {
+    id: "google-veo-3-fast",
+    apiId: "veo3_fast",
+    name: "Veo 3.1 Fast",
+    provider: "Google",
+    ratios: ["16:9", "9:16", "Auto"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "16:9",
+    handles: ["prompt", "startFrame", "endFrame", "resource"],
+    sound: false,
+    maxResources: 3,
+    resolutions: ["720p", "1080p", "4k"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 10000,
+      durationMin: 0,
+      durationMax: 0,
+      extra: {
+        enableTranslation: true,
+      },
+      useGoogleVeo: true,
+    },
+  },
+  {
+    id: "google-veo-3-quality",
+    apiId: "veo3",
+    name: "Veo 3.1 Quality",
+    provider: "Google",
+    ratios: ["16:9", "9:16", "Auto"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "16:9",
+    handles: ["prompt", "startFrame", "endFrame", "resource"],
+    sound: false,
+    maxResources: 3,
+    resolutions: ["720p", "1080p", "4k"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 10000,
+      durationMin: 0,
+      durationMax: 0,
+      extra: {
+        enableTranslation: true,
+      },
+      useGoogleVeo: true,
+    },
+  },
   // ── Kling ───────────────────────────────────────────────────────────────────
   {
     id: "kling-3.0",
