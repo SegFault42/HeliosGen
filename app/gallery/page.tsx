@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
@@ -260,9 +260,13 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
 // ── Inner page ────────────────────────────────────────────────────────────────
 
 function GalleryInner() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
   const tab = (rawTab === "videos" ? "videos" : "images") as Tab;
+  const rawSource = searchParams.get("source");
+  const initialSource = (rawSource === "uploaded" ? "uploaded" : "generated") as "generated" | "uploaded";
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
@@ -326,7 +330,13 @@ function GalleryInner() {
   const addToast    = useWorkflowStore((s) => s.addToast);
   const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
   const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
-  const [sourceFilter, setSourceFilter] = useState<"generated" | "uploaded">("generated");
+  const [sourceFilter, setSourceFilter] = useState<"generated" | "uploaded">(initialSource);
+
+  useEffect(() => {
+    if (rawSource === "uploaded" || rawSource === "generated") {
+      setSourceFilter(rawSource);
+    }
+  }, [rawSource]);
   const [zoom, setZoom] = useState(6);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridOuterRef = useRef<HTMLDivElement>(null);
@@ -1565,7 +1575,7 @@ function GalleryInner() {
   }
 
   return (
-    <div style={{ flex: 1, background: "#1A1A1C", display: "flex", flexDirection: "column", overflow: "hidden", color: "#fff" }}>
+    <div style={{ flex: 1, background: "#1A1A1C", display: "flex", flexDirection: "column", overflow: "hidden", color: "#fff", position: "relative" }}>
 
       {/* ── Sub-navbar ── */}
       <div style={{
@@ -1582,7 +1592,12 @@ function GalleryInner() {
           {(["generated", "uploaded"] as const).map(src => (
             <button
               key={src}
-              onClick={() => setSourceFilter(src)}
+              onClick={() => {
+                setSourceFilter(src);
+                const params = new URLSearchParams(searchParams.toString());
+                params.set("source", src);
+                router.replace(`${pathname}?${params.toString()}`);
+              }}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1888,7 +1903,7 @@ function GalleryInner() {
       <div
         ref={promptBarRef}
         style={{
-          position: "fixed",
+          position: "absolute",
           bottom: "20px",
           left: "50%",
           transform: `translateX(-50%) translateY(${anySelected ? "160px" : "0"})`,
@@ -2020,7 +2035,7 @@ function GalleryInner() {
                           {hoveredRefId === hovId && (
                             <div onClick={() => setRefPreview({ url: thumb, mediaKind: "image" })} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in", zIndex: 1 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
                           )}
-                          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 4px 3px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", textAlign: "center" }}><span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", padding: "0 4px" }}>{slot.label.toUpperCase()}</span></div>
+                          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 4px 3px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", textAlign: "center" }}><span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em", color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", padding: "0 4px" }}>{el.name.toUpperCase()}</span></div>
                           <button onClick={() => setVidElements(prev => prev.filter(e => e.id !== el.id))} style={{ position: "absolute", top: "3px", right: "3px", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "background 120ms", zIndex: 2 }}><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
                         </div>
                         );

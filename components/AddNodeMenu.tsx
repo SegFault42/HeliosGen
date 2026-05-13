@@ -6,6 +6,8 @@ import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META } from "@/lib/nodeTypes";
 import { getToken } from "@/lib/galleryUtils";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 
+import { Search, X, Upload, LayoutGrid } from "lucide-react";
+
 const TOOLBAR_OFFSET_PX = 80;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
@@ -314,7 +316,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
     bg: string;
     label: string;
     description: string;
-    onClick: () => void;
+    onClick: (e: React.MouseEvent) => void;
   }) {
     const isHovered = focused === id;
     return (
@@ -379,9 +381,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
 
         {/* Search bar */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-          </svg>
+          <Search size={14} color="rgba(255,255,255,0.3)" />
           <input
             ref={searchRef}
             id="add-node-search"
@@ -391,7 +391,9 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "rgba(255,255,255,0.82)", fontSize: "13px", caretColor: "#ff3df5" }}
           />
           {query && (
-            <button onClick={() => setQuery("")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, lineHeight: 1 }}>×</button>
+            <button onClick={() => setQuery("")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, lineHeight: 1 }}>
+              <X size={14} />
+            </button>
           )}
         </div>
 
@@ -420,13 +422,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
                       description="Image or video — auto-detects type"
                       accent="#34d399"
                       bg="#052e16"
-                      icon={
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                      }
+                      icon={<Upload size={18} strokeWidth={1.8} />}
                       onClick={() => fileInputRef.current?.click()}
                     />
                     <CustomRow
@@ -435,15 +431,8 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
                       description="Browse your generations & uploads"
                       accent="#60a5fa"
                       bg="#0c1a3b"
-                      icon={
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="3" y="3" width="7" height="7" rx="1" />
-                          <rect x="14" y="3" width="7" height="7" rx="1" />
-                          <rect x="3" y="14" width="7" height="7" rx="1" />
-                          <rect x="14" y="14" width="7" height="7" rx="1" />
-                        </svg>
-                      }
-                      onClick={(e: React.MouseEvent) => {
+                      icon={<LayoutGrid size={18} strokeWidth={1.8} />}
+                      onClick={(e) => {
                         setPickerPos({ x: e.clientX, y: e.clientY });
                         setPickerOpen(true);
                       }}

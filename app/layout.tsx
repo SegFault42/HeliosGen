@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import NavigationSidebar from "@/components/NavigationSidebar";
 import GlobalModals from "@/components/GlobalModals";
 
 const geistSans = Geist({
@@ -30,9 +30,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}
       style={{ height: "100%" }}
     >
-      <body style={{ height: "100%", background: "#1A1A1C", color: "#fff", display: "flex", flexDirection: "column" }}>
-        <Navbar />
-        <main style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <body style={{ height: "100%", background: "#1A1A1C", color: "#fff", display: "flex", flexDirection: "row", overflow: "hidden" }}>
+        <NavigationSidebar />
+        <main style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", minWidth: 0 }}>
           {children}
         </main>
         <GlobalModals />

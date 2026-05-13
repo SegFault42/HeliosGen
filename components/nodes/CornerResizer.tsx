@@ -1,6 +1,6 @@
 "use client";
 import { NodeResizeControl } from "@xyflow/react";
-import type { ResizeControlPosition } from "@xyflow/react";
+import type { ControlPosition } from "@xyflow/react";
 
 interface Props {
   keepAspectRatio?: boolean;
@@ -15,12 +15,12 @@ const O = -6;    // offset: push handle outside the card border
 const C = "#707070"; // muted gray
 
 type CornerDef = {
-  position: ResizeControlPosition;
+  position: ControlPosition;
   style: React.CSSProperties;
 };
 
 function corner(
-  position: ResizeControlPosition,
+  position: ControlPosition,
   borderStyle: React.CSSProperties,
   offset: { top?: number; right?: number; bottom?: number; left?: number }
 ): CornerDef {

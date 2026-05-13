@@ -196,6 +196,8 @@ interface WorkflowStore {
   setShowDashboard:          (v: boolean) => void;
   globalMuted:               boolean;
   setGlobalMuted:            (v: boolean) => void;
+  sidebarCollapsed:          boolean;
+  setSidebarCollapsed:       (v: boolean) => void;
   saveViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   loadSpacesFromDB: (spaces: Space[]) => void;
 }
@@ -600,6 +602,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
         setShowDashboard:          (v) => set({ showDashboard: v }),
         globalMuted:               true,
         setGlobalMuted:            (v) => set({ globalMuted: v }),
+        sidebarCollapsed:          false,
+        setSidebarCollapsed:       (v: boolean) => set({ sidebarCollapsed: v }),
       };
     },
     {
@@ -624,6 +628,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
         edges:        s.edges,
         nodeCounters: s.nodeCounters,
         debugMode:    s.debugMode,
+        sidebarCollapsed: s.sidebarCollapsed,
       }),
 
       // Migration: v0 had flat nodes/edges/nodeCounters; wrap them in a space
