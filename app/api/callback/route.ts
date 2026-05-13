@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (state === "success") {
-    const kieUrls = extractUrls(data.resultJson);
+    let kieUrls = extractUrls(data.resultJson);
+    if (kieUrls.length === 0 && data.videoUrl) {
+      kieUrls = [data.videoUrl];
+    }
     if (kieUrls.length === 0 && (data.output?.[0] ?? data.output)) {
       kieUrls.push(data.output?.[0] ?? data.output);
     }

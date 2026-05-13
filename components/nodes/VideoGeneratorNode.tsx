@@ -1676,11 +1676,18 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               {isVeo && (videoModelId === "veo3" || videoModelId === "veo3_fast") && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => updateNodeData(id, { veoMode: veoMode === "frames" ? "references" : "frames" })}
+                  onClick={() => {
+                    const next = veoMode === "frames" ? "references" : "frames";
+                    updateNodeData(id, { veoMode: next });
+                    if (next === "references") {
+                      killEdgesForHandles(id, ["startFrame", "endFrame"]);
+                    } else {
+                      killEdgesForHandles(id, ["resource"]);
+                    }
+                  }}
                   className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
                   style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
-                >
-                  <ToggleSwitch on={veoMode === "references"} activeColor="#fb923c" />
+                >                  <ToggleSwitch on={veoMode === "references"} activeColor="#fb923c" />
                   <span className="text-[11px] text-white/70">{veoMode === "references" ? "References" : "Frames"}</span>
                 </button>
               )}

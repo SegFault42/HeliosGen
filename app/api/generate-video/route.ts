@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     duration        = 5,
     aspectRatio     = body.aspect_ratio || "16:9",
     mode            = "pro",
-    resolution      = "480p",
+    resolution:     rawResolution,
     seed,
     veoMode,
     generationType: rawGenerationType,
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
 
+  const resolution = rawResolution || cfg.defaultResolution || "480p";
   const { apiInput } = cfg;
 
   // Clamp duration to model limits (motion-control has no duration field)
@@ -185,17 +186,18 @@ export async function POST(req: NextRequest) {
     }
 
     effectiveApiId = cfg.apiId; // Use veo3, veo3_fast, or veo3_lite directly
+
     input = {
       prompt: prompt ?? "",
       generationType: rawGenerationType || generationType,
       [apiInput.aspectRatioKey!]: aspectRatio,
       [apiInput.resolutionKey!]: resolution,
+      imageUrls: imageUrls,
       watermark: "",
       enableFallback: false,
       enableTranslation: true,
       callBackUrl,
     };
-    if (imageUrls.length > 0) input.imageUrls = imageUrls;
     if (apiInput.extra) Object.assign(input, apiInput.extra);
 
   } else if (apiInput.referenceImagesKey) {
@@ -283,17 +285,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Debug mode — return the exact kie.ai payload without submitting
+  // Submit task to kie.ai
+  // Google Veo models require a dedicated endpoint and a flattened structure
+  const endpoint = apiInput.useGoogleVeo
+    ? `${KIE_BASE}/api/v1/veo/generate`
+    : `${KIE_BASE}/api/v1/jobs/createTask`;
+
+  const kieBody = apiInput.useGoogleVeo
+    ? { model: effectiveApiId, ...input }
+    : { model: effectiveApiId, callBackUrl, input };
+
+  // Debug mode — return the exact kie.ai payload and endpoint without submitting
   if (debugOnly) {
-    const debugKieBody = { model: effectiveApiId, callBackUrl, input };
-    return NextResponse.json({ debugPayload: debugKieBody });
+    return NextResponse.json({ debugPayload: kieBody, debugEndpoint: endpoint });
   }
 
-  // Submit task to kie.ai
-  const kieBody = { model: effectiveApiId, callBackUrl, input };
-
-  console.log("[generate-video] sending to kie.ai:", JSON.stringify(kieBody));
-  const createRes = await fetch(`${KIE_BASE}/api/v1/jobs/createTask`, {
+  console.log(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
+  const createRes = await fetch(endpoint, {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body:    JSON.stringify(kieBody),
@@ -307,7 +315,7 @@ export async function POST(req: NextRequest) {
 
   const createdText = await createRes.text();
   console.log("[generate-video] kie.ai response:", createdText);
-  let created: { code?: number; msg?: string; data?: { taskId?: string } };
+  let created: { code?: number; msg?: string; data?: { taskId?: string; id?: string } };
   try {
     created = JSON.parse(createdText);
   } catch {
@@ -318,7 +326,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: created.msg ?? "Task creation failed" }, { status: 500 });
   }
 
-  const taskId = created.data?.taskId;
+  const taskId = created.data?.taskId || created.data?.id;
   if (!taskId) return NextResponse.json({ error: "No taskId returned" }, { status: 500 });
 
   // Register as pending so the frontend can poll job-status

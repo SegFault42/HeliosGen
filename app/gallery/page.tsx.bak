@@ -9,7 +9,6 @@ import { useGeneratingPhase } from "@/lib/useGeneratingPhase";
 import type { User } from "@supabase/supabase-js";
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
-import { useSidebar } from "@/components/ui/sidebar";
 
 function thumbSrc(url: string, w = 128): string {
   if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
@@ -261,7 +260,6 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
 // ── Inner page ────────────────────────────────────────────────────────────────
 
 function GalleryInner() {
-  const { state, isMobile } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -339,11 +337,7 @@ function GalleryInner() {
       setSourceFilter(rawSource);
     }
   }, [rawSource]);
-  const [zoom, setZoom] = useState<number>(() => {
-    if (typeof window === "undefined") return 6;
-    const saved = localStorage.getItem("aiui-gallery-zoom");
-    return saved ? parseInt(saved, 10) : 6;
-  });
+  const [zoom, setZoom] = useState(6);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridOuterRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -645,18 +639,15 @@ function GalleryInner() {
   // Infinite scroll
   useEffect(() => {
     const sentinel = sentinelRef.current;
-    if (!sentinel || !hasMore || loading || loadingMore) return;
-    
+    if (!sentinel) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        loadItems(tab, pageRef.current + 1);
+      if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+        loadItems(tabRef.current, pageRef.current + 1);
       }
-    }, { 
-      rootMargin: "800px" 
-    });
+    }, { rootMargin: "400px" });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, loadItems, tab]);
+  }, [hasMore, loadingMore, loading, loadItems]);
 
   // Persist settings
   useEffect(() => {
@@ -666,22 +657,15 @@ function GalleryInner() {
     saveSettings(tab, { prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls });
   }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages]);
 
-  // Track window width; set initial zoom from breakpoints only if NOT saved
+  // Track window width; set initial zoom from breakpoints
   useEffect(() => {
     const w = window.innerWidth;
     setWindowWidth(w);
-    if (!localStorage.getItem("aiui-gallery-zoom")) {
-      setZoom(w >= 1400 ? 6 : w >= 900 ? 5 : w >= 640 ? 5 : 4);
-    }
+    setZoom(w >= 1400 ? 6 : w >= 900 ? 5 : w >= 640 ? 5 : 4);
     const handler = () => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
-
-  // Save zoom to localStorage
-  useEffect(() => {
-    localStorage.setItem("aiui-gallery-zoom", zoom.toString());
-  }, [zoom]);
 
   useEffect(() => {
     const el = gridOuterRef.current;
@@ -1321,68 +1305,18 @@ function GalleryInner() {
   }, [refImages, maxImgs]);
 
   const handleCopyPrompt = useCallback((text: string, refUrls?: string[]) => {
-    const newRefs = (refUrls ?? []).map(url => ({
-      id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false,
-    }));
-
-    let processedText = text;
-    const tagged: TaggedImage[] = [];
-
-    if (refUrls?.length) {
-      // Attempt to un-resolve mentions: <<<image N>>> or @imageN -> @imgN
-      processedText = text.replace(/<<<image (\d+)>>>|@image(\d+)/gi, (m, g1, g2) => {
-        const n = parseInt(g1 || g2);
-        const url = refUrls[n - 1];
-        if (url) {
-          const label = `img${n}`;
-          if (!tagged.some(t => t.label === label)) {
-            tagged.push({ label, refId: url, url });
-          }
-          return `@${label}`;
-        }
-        return m;
-      });
-    }
-
-    if (tab === "videos") {
-      const vm = VIDEO_MODELS.find(m => m.id === modelId);
-      const handles = vm?.handles ?? [];
-      
-      // Clear existing video refs
-      setVidStartFrame(null);
-      setVidEndFrame(null);
-      setVidResources([]);
-      setVidVideoRef(null);
-      setVidRefVideos([]);
-      setVidRefAudios([]);
-      setVidElements([]);
-
-      let remaining = [...newRefs];
-      if (handles.includes("startFrame") && remaining.length > 0) {
-        setVidStartFrame(remaining.shift()!);
-      }
-      if (handles.includes("endFrame") && remaining.length > 0) {
-        setVidEndFrame(remaining.shift()!);
-      }
-      if (handles.includes("videoRef") && remaining.length > 0) {
-        setVidVideoRef(remaining.shift()!);
-      }
-      if (handles.includes("resource") && remaining.length > 0) {
-        setVidResources(remaining);
-      }
-    } else {
-      setRefImages(prev => {
-        prev.forEach(r => URL.revokeObjectURL(r.objectUrl));
-        return newRefs;
-      });
-    }
-
-    setTaggedImages(tagged);
-    setPrompt(processedText);
+    setRefImages(prev => {
+      prev.forEach(r => URL.revokeObjectURL(r.objectUrl));
+      return (refUrls ?? []).map(url => ({
+        id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false,
+      }));
+    });
+    setTaggedImages([]);
+    setPrompt(text);
     requestAnimationFrame(() => {
       if (inputRef.current) resizeTextarea(inputRef.current);
     });
-  }, [tab, modelId]);
+  }, []);
 
   const clearDeletedFromNodes = useCallback((deletedUrls: Set<string>) => {
     const { nodes, updateNodeData } = useWorkflowStore.getState();
@@ -1572,6 +1506,20 @@ function GalleryInner() {
   }, [containerWidth, zoom, pendingGens, filteredItems, GALLERY_GAP, natRatioVersion, tab, sourceFilter]);
 
 
+  // True when there are upload items whose dimensions aren't cached yet.
+  // Re-evaluates synchronously each render (same render cycle as filteredItems update),
+  // so the skeleton condition below blocks painting before probes complete.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const needsProbing = useMemo(() =>
+    filteredItems.some(
+      item => item.source === "upload" &&
+              (!item.aspect_ratio || item.aspect_ratio === "auto") &&
+              !naturalRatioCache.has(item.url),
+    ),
+  // natRatioVersion causes re-check once the probes write their results
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [filteredItems, natRatioVersion]);
+
   // Fire probes for every uncached item without a stored aspect_ratio.
   // Images: 32px next/image probe (fast). Videos: <video preload="metadata"> probe.
   // Results are non-blocking for video (uses 16:9 default until resolved).
@@ -1710,6 +1658,21 @@ function GalleryInner() {
               <div key={i} className="gallery-skeleton" style={{ aspectRatio: i % 3 === 1 ? "4 / 5" : i % 5 === 0 ? "16 / 9" : "1 / 1" }} />
             ))}
           </div>
+        ) : needsProbing ? (
+          /* Probing skeletons — real item count and aspect ratios while upload dims are being measured */
+          <div style={{ padding: "1px" }}>
+            {justifiedRows.map((row, rowIdx) => (
+              <div key={rowIdx} style={{ display: "flex", height: row.height, gap: `${GALLERY_GAP}px`, marginBottom: rowIdx < justifiedRows.length - 1 ? `${GALLERY_GAP}px` : 0 }}>
+                {row.items.map((layoutItem) => (
+                  <div
+                    key={layoutItem.kind === "gallery" ? layoutItem.item.id : layoutItem.pg.id}
+                    className="gallery-skeleton"
+                    style={{ width: layoutItem.width, flex: "0 0 auto", height: "100%", borderRadius: "6px" }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
         ) : filteredItems.length === 0 && (sourceFilter !== "generated" || pendingGens.filter(pg => pg.tab == null || pg.tab === tab).length === 0) ? (
           <EmptyState tab={tab} />
         ) : (
@@ -1838,12 +1801,7 @@ function GalleryInner() {
             ))}
           </div>
         )}
-        {loadingMore && (
-          <div style={{ padding: "20px", display: "flex", justifyContent: "center" }}>
-            <span style={{ width: "20px", height: "20px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "rgba(255,255,255,0.4)", animation: "spin 0.8s linear infinite" }} />
-          </div>
-        )}
-        <div ref={sentinelRef} style={{ height: "1px", width: "100%" }} />
+        <div ref={sentinelRef} style={{ height: "1px" }} />
       </div>
 
       {/* ── Hidden file input ── */}
@@ -1866,10 +1824,10 @@ function GalleryInner() {
       <div style={{
         position: "fixed",
         bottom: "20px",
-        left: isMobile ? "50%" : state === "collapsed" ? "calc(var(--sidebar-width-icon) / 2 + 50%)" : "calc(var(--sidebar-width) / 2 + 50%)",
+        left: "50%",
         transform: `translateX(-50%) translateY(${anySelected ? "0" : "80px"})`,
         opacity: anySelected ? 1 : 0,
-        transition: "transform 300ms cubic-bezier(0.16,1,0.3,1), opacity 240ms ease, left 200ms ease-linear",
+        transition: "transform 300ms cubic-bezier(0.16,1,0.3,1), opacity 240ms ease",
         pointerEvents: anySelected ? "auto" : "none",
         zIndex: 300,
         display: "flex",
@@ -1945,12 +1903,12 @@ function GalleryInner() {
       <div
         ref={promptBarRef}
         style={{
-          position: "fixed",
-          bottom: "32px",
-          left: isMobile ? "50%" : state === "collapsed" ? "calc(var(--sidebar-width-icon) / 2 + 50%)" : "calc(var(--sidebar-width) / 2 + 50%)",
-          transform: `translateX(-50%) translateY(${anySelected ? "200px" : "0"})`,
+          position: "absolute",
+          bottom: "20px",
+          left: "50%",
+          transform: `translateX(-50%) translateY(${anySelected ? "160px" : "0"})`,
           opacity: anySelected ? 0 : 1,
-          transition: "transform 350ms cubic-bezier(0.4,0,0.2,1), opacity 240ms ease, left 200ms ease-linear",
+          transition: "transform 300ms cubic-bezier(0.4,0,0.2,1), opacity 240ms ease",
           pointerEvents: anySelected ? "none" : "auto",
           width: "min(860px, calc(100vw - 32px))",
           zIndex: 200,
@@ -2649,11 +2607,7 @@ function GalleryInner() {
       )}
 
       {lightboxItem && (
-        <Lightbox
-          item={lightboxItem}
-          onClose={() => setLightboxItem(null)}
-          onCopyPrompt={handleCopyPrompt}
-        />
+        <Lightbox item={lightboxItem} onClose={() => setLightboxItem(null)} />
       )}
 
       {/* Ref media preview modal */}
@@ -3538,7 +3492,7 @@ function GalleryCard({
           }
         }
       },
-      { rootMargin: "1000px", threshold: 0.01 },
+      { rootMargin: "80px", threshold: 0.1 },
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -3620,12 +3574,8 @@ function GalleryCard({
             loop
             playsInline
             preload="metadata"
-            onLoadedData={() => {
-              setImgLoaded(true);
-              loadedImageUrls.add(item.url);
-            }}
             onError={() => setFailed(true)}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: imgLoaded ? 1 : 0, transition: "opacity 400ms ease" }}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
           {!playing && (
             <div className="gallery-play-icon">
@@ -3656,7 +3606,7 @@ function GalleryCard({
               loadedImageUrls.add(item.url);
             }}
             onError={() => setFailed(true)}
-            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", opacity: imgLoaded ? 1 : 0, transition: "opacity 400ms ease" }}
+            style={{ display: "block", width: "100%", height: "100%", objectFit: "cover", opacity: imgLoaded ? 1 : 0, transition: "opacity 280ms ease" }}
           />
           {/* Inner carousel nav — only when multiple images */}
           {allUrls.length > 1 && (
@@ -3947,7 +3897,7 @@ function renderLightboxPrompt(
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
-function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose: () => void; onCopyPrompt?: (prompt: string, refUrls?: string[]) => void }) {
+function Lightbox({ item, onClose }: { item: GalleryItem; onClose: () => void }) {
   const [visible, setVisible] = useState(false);
   const [fullLoaded, setFullLoaded] = useState(false);
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -3974,7 +3924,6 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
   const copyPrompt = () => {
     if (!item.prompt) return;
     navigator.clipboard.writeText(item.prompt).catch(() => { });
-    onCopyPrompt?.(item.prompt, item.referenceImageUrls);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
@@ -4074,14 +4023,11 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
               loop
               playsInline
               controls
-              onLoadedData={() => setFullLoaded(true)}
               style={{
                 display: "block",
                 maxHeight: "calc(100vh - 48px)",
                 maxWidth: "100%",
                 borderRadius: "12px",
-                opacity: fullLoaded ? 1 : 0,
-                transition: "opacity 400ms ease",
               }}
             />
           ) : (
@@ -4093,12 +4039,12 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
                 width: "100%", height: "auto", objectFit: "contain",
                 filter: fullLoaded ? "none" : "blur(12px)",
                 transform: fullLoaded ? "scale(1)" : "scale(1.04)",
-                transition: "filter 400ms ease, transform 400ms ease",
+                transition: "filter 320ms ease, transform 320ms ease",
               }} />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img key={`full-${lightboxUrl}`} src={lightboxUrl} alt={item.prompt ?? ""} onLoad={() => setFullLoaded(true)} style={{
                 position: "absolute", inset: 0, display: "block", width: "100%", height: "100%", objectFit: "contain",
-                opacity: fullLoaded ? 1 : 0, transition: "opacity 400ms ease",
+                opacity: fullLoaded ? 1 : 0, transition: "opacity 320ms ease",
               }} />
               {/* Dot indicators */}
               {allUrls.length > 1 && (
@@ -4430,10 +4376,6 @@ const GALLERY_CSS = `
     cursor: pointer;
     border: none;
   }
-  @keyframes galleryItemIn {
-    from { opacity: 0; transform: translateY(12px) scale(0.98); }
-    to   { opacity: 1; transform: translateY(0)    scale(1);    }
-  }
   .gallery-item {
     position: relative;
     overflow: hidden;
@@ -4441,7 +4383,6 @@ const GALLERY_CSS = `
     background: #222226;
     width: 100%;
     height: 100%;
-    animation: galleryItemIn 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .gallery-actions-top {
     position: absolute;

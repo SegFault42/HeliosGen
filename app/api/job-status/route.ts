@@ -28,17 +28,29 @@ async function syncFromKie(
   type?: "image" | "video",
 ): Promise<"pending" | "done" | "error" | "unknown"> {
   try {
-    const r = await fetch(`${RECORD_INFO}?taskId=${taskId}`, {
+    // Check if this might be a Veo task (usually shorter UUID or different format, 
+    // but the API endpoint itself is different for recordInfo)
+    const isVeoTask = taskId.length < 30 || !taskId.includes("-"); // Rough heuristic, or we could check model if we had it
+    
+    // Actually, Kie Veo uses a different dedicated endpoint for recordInfo too
+    const url = taskId.startsWith("veo-") || isVeoTask 
+      ? `https://api.kie.ai/api/v1/veo/recordInfo?id=${taskId}`
+      : `${RECORD_INFO}?taskId=${taskId}`;
+
+    const r = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) return "unknown";
     const d = await r.json();
     if (d.code !== 200) return "unknown";
 
-    const state = String(d.data?.state ?? "").toLowerCase();
+    const state = String(d.data?.state ?? d.data?.status ?? "").toLowerCase();
 
     if (state === "success") {
-      const kieUrls = extractUrls(d.data?.resultJson);
+      let kieUrls = extractUrls(d.data?.resultJson);
+      if (kieUrls.length === 0 && d.data?.videoUrl) {
+        kieUrls = [d.data.videoUrl];
+      }
       if (kieUrls.length > 0) {
         const isVideo =
           type === "video" ||

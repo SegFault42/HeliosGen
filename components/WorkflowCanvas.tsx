@@ -1379,7 +1379,14 @@ export default function WorkflowCanvas() {
       <div
         ref={wrapperRef}
         className={`relative flex-1 flex flex-col min-h-0 min-w-0${activeTool === "hand" ? " canvas-hand-mode" : ""}`}
-        onMouseMove={(e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; }}
+        onMouseMoveCapture={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          e.currentTarget.style.setProperty("--mouse-x", `${x}px`);
+          e.currentTarget.style.setProperty("--mouse-y", `${y}px`);
+          mousePosRef.current = { x: e.clientX, y: e.clientY };
+        }}
       >
         <ReactFlow
           nodes={(() => {
@@ -1466,6 +1473,23 @@ export default function WorkflowCanvas() {
           }}
         >
           <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#333333" />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 1,
+              maskImage: "radial-gradient(circle 300px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 80%)",
+              WebkitMaskImage: "radial-gradient(circle 300px at var(--mouse-x, -1000px) var(--mouse-y, -1000px), black 0%, transparent 80%)",
+            }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={28}
+              size={2}
+              color="#FFFFFF"
+            />
+          </div>
           <ViewportSyncer />
           <GroupPreviewOverlay groupIds={potentialGroupIds} />
           <SelectionToolbar />

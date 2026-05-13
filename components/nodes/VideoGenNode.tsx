@@ -1,6 +1,8 @@
 "use client";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { useRef } from "react";
+import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 
 type VideoGenNodeType = Node<NodeData, "videoGenNode">;
 
@@ -13,7 +15,7 @@ const VIDEO_MODELS = [
 const STATUS_RING: Record<string, string> = {
   idle: "border-gray-700",
   pending: "border-gray-500",
-  running: "border-yellow-500 animate-pulse",
+  running: "border-yellow-500",
   done: "border-emerald-500",
   error: "border-red-500",
 };
@@ -21,9 +23,16 @@ const STATUS_RING: Record<string, string> = {
 export default function VideoGenNode({ id, data }: NodeProps<VideoGenNodeType>) {
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const status = data.status ?? "idle";
+  const cardRef = useRef<HTMLDivElement>(null);
+  const busy = status === "running";
+
+  useGeneratingBorderAnimation(cardRef, busy);
 
   return (
-    <div className={`bg-gray-900 border-2 rounded-xl w-72 shadow-lg overflow-hidden ${STATUS_RING[status]}`}>
+    <div
+      ref={cardRef}
+      className={`node-card bg-gray-900 border-2 rounded-xl w-72 shadow-lg overflow-hidden ${STATUS_RING[status]} ${busy ? "node-generating" : ""}`}
+    >
       {/* Input handles */}
       <Handle
         type="target"
