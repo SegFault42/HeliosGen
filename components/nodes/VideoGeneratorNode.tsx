@@ -374,6 +374,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const seed = (data.seed as number | undefined) ?? 0;
   const status = (data.status as string) ?? "idle";
   const prompt = (data.prompt as string) ?? "";
+  const isVeo = videoModelId === "veo3" || videoModelId === "veo3_fast" || videoModelId === "veo3_lite";
+  const veoMode = (data.veoMode as "frames" | "references" | undefined) ?? "frames";
   const isPending = status === "pending";
   const animBusy = loading || status === "running";
   const busy = animBusy || isPending;
@@ -508,8 +510,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   }, [data.taskId, status, id, updateNodeData]);
 
   const activeHandles = new Set<string>(cfg.handles);
-  const isVeo = videoModelId === "veo3" || videoModelId === "veo3_fast" || videoModelId === "veo3_lite";
-  const veoMode = (data.veoMode as "frames" | "references" | undefined) ?? "frames";
 
   if (isVeo) {
     if (veoMode === "frames") {
@@ -856,9 +856,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       }
     }
 
-    const isVeo = videoModelId === "veo3" || videoModelId === "veo3_fast" || videoModelId === "veo3_lite";
-    const veoMode = (data.veoMode as "frames" | "references" | undefined) ?? "frames";
-
     const veoImageUrls: string[] = [];
     let generationType: string | undefined = undefined;
 
@@ -958,7 +955,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         setLoading(false);
       }
     }, 3000);
-  }, [id, nodes, edges, prompt, sound, seed, duration, aspectRatio, videoModelId,
+  }, [id, nodes, edges, prompt, sound, seed, duration, aspectRatio, videoModelId, veoMode, isVeo,
     mode, resolution, cfg, debugMode, textEdge, updateNodeData, setAuthModalOpen, flashEdgeError, kieKeySet, addToast]);
 
   // Pipeline runner trigger — called by Run Pipeline button
