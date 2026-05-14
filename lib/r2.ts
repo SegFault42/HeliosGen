@@ -2,7 +2,43 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 import https from "node:https";
 import http  from "node:http";
+import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import sharp from "sharp";
 import { hashBuffer, lookupAssetHash, storeAssetHash } from "./assetCache";
+
+const execFileAsync = promisify(execFile);
+
+async function stripMetadata(buffer: Buffer, contentType: string): Promise<Buffer> {
+  if (contentType.startsWith("image/")) {
+    return sharp(buffer).toBuffer();
+  }
+  if (contentType.startsWith("video/")) {
+    const extension = contentType.includes("webm") ? "webm" : "mp4";
+    const tmpDir = await mkdtemp(join(tmpdir(), "strip-meta-"));
+    const inputPath  = join(tmpDir, `input.${extension}`);
+    const outputPath = join(tmpDir, `output.${extension}`);
+    try {
+      await writeFile(inputPath, buffer);
+      await execFileAsync("ffmpeg", [
+        "-i", inputPath,
+        "-map_metadata", "-1",
+        "-c", "copy",
+        "-y", outputPath,
+      ]);
+      return await readFile(outputPath);
+    } finally {
+      await Promise.all([
+        unlink(inputPath).catch(() => {}),
+        unlink(outputPath).catch(() => {}),
+      ]);
+    }
+  }
+  return buffer;
+}
 
 let _s3: S3Client | null = null;
 
@@ -39,6 +75,7 @@ export async function uploadBuffer(
   contentType: string,
   folder: string
 ): Promise<string> {
+  buffer = await stripMetadata(buffer, contentType);
   const hash = hashBuffer(buffer);
   const cached = await lookupAssetHash(hash);
   if (cached) return cached;
