@@ -355,13 +355,16 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
         e.preventDefault();
       }
     };
-    // Block wheel only when the node is selected (otherwise canvas zooms normally).
-    // No passive:true so stopPropagation is fully honoured; stopImmediatePropagation
-    // also blocks any other listeners registered on this same element.
     const onWheel = (e: WheelEvent) => {
       if (selectedRef.current) {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
+        if (e.ctrlKey) {
+          // Zoom gesture: prevent browser zoom, let ReactFlow handle canvas zoom
+          e.preventDefault();
+        } else {
+          // Scroll gesture: keep canvas still while textarea scrolls
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
       }
     };
     const onMouseMove = (e: MouseEvent) => {

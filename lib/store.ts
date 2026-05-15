@@ -67,6 +67,16 @@ export interface NodeData extends Record<string, unknown> {
   taskId?: string;
 }
 
+/** Pick only the listed keys from an object; returns null if none are present. */
+function filterKeys<T extends object>(obj: T, keys: (keyof T)[]): Partial<T> | null {
+  const result: Partial<T> = {};
+  let found = false;
+  for (const k of keys) {
+    if (k in obj) { result[k] = obj[k]; found = true; }
+  }
+  return found ? result : null;
+}
+
 /** Human-readable label for each node type, including the counter */
 export function getNodeLabel(type: string, n: number): string {
   if (type === "assistantNode") return "ASSISTANT";
@@ -200,6 +210,12 @@ interface WorkflowStore {
   setSidebarCollapsed:       (v: boolean) => void;
   saveViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   loadSpacesFromDB: (spaces: Space[]) => void;
+
+  // ── Per-type node defaults (last-used params)
+  nodeDefaults: {
+    generateNode:        Partial<NodeData>;
+    videoGeneratorNode:  Partial<NodeData>;
+  };
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -218,6 +234,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
         isRunning:    false,
         debugMode:    false,
         nodeCounters: {},
+
+        nodeDefaults: { generateNode: {}, videoGeneratorNode: {} },
 
         undoStack: [],
         redoStack: [],
@@ -385,9 +403,12 @@ export const useWorkflowStore = create<WorkflowStore>()(
             const type         = node.type ?? "unknown";
             const count        = (s.nodeCounters[type] ?? 0) + 1;
             const label        = getNodeLabel(type, count);
+            const savedDefaults =
+              type === "generateNode"       ? s.nodeDefaults.generateNode :
+              type === "videoGeneratorNode" ? s.nodeDefaults.videoGeneratorNode : {};
             const nodes        = [
               ...s.nodes.map((n) => n.selected ? { ...n, selected: false } : n),
-              { ...node, selected: true, data: { ...node.data, label } },
+              { ...node, selected: true, data: { ...savedDefaults, ...node.data, label } },
             ];
             const nodeCounters = { ...s.nodeCounters, [type]: count };
             return {
@@ -472,8 +493,21 @@ export const useWorkflowStore = create<WorkflowStore>()(
             const nodes = s.nodes.map((n) =>
               n.id === id ? { ...n, data: { ...n.data, ...data } } : n
             );
+
+            // Capture param changes into per-type defaults so new nodes inherit them
+            const nodeType = s.nodes.find((n) => n.id === id)?.type;
+            let nodeDefaults = s.nodeDefaults;
+            if (nodeType === "generateNode") {
+              const pick = filterKeys(data, ["model", "aspectRatio", "quality"]);
+              if (pick) nodeDefaults = { ...nodeDefaults, generateNode: { ...nodeDefaults.generateNode, ...pick } };
+            } else if (nodeType === "videoGeneratorNode") {
+              const pick = filterKeys(data, ["videoModel", "klingMode", "duration", "aspectRatio", "sound", "grokResolution"]);
+              if (pick) nodeDefaults = { ...nodeDefaults, videoGeneratorNode: { ...nodeDefaults.videoGeneratorNode, ...pick } };
+            }
+
             return {
               nodes,
+              nodeDefaults,
               spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, s.edges, s.nodeCounters),
             };
           }),
@@ -557,13 +591,15 @@ export const useWorkflowStore = create<WorkflowStore>()(
               return localTs >= dbTs ? local : dbSp;
             });
 
-            // Add local-only spaces that have actual content (created offline).
-            // Skip empty placeholder spaces — those are just initialization artifacts
-            // created before the DB load completed.
+            // Add local-only spaces (not yet in DB).
+            // Always keep the active space (it may have just been created and is empty).
+            // Skip other empty spaces — those are initialization placeholders.
             const dbIds = new Set(dbSpaces.map((sp) => sp.id));
             for (const sp of s.spaces) {
-              if (!dbIds.has(sp.id) && (sp.nodes.length > 0 || sp.edges.length > 0)) {
-                merged.push(sp);
+              if (!dbIds.has(sp.id)) {
+                if (sp.id === s.activeSpaceId || sp.nodes.length > 0 || sp.edges.length > 0) {
+                  merged.push(sp);
+                }
               }
             }
 
@@ -629,11 +665,16 @@ export const useWorkflowStore = create<WorkflowStore>()(
         nodeCounters: s.nodeCounters,
         debugMode:    s.debugMode,
         sidebarCollapsed: s.sidebarCollapsed,
+        nodeDefaults: s.nodeDefaults,
       }),
 
       // Migration: v0 had flat nodes/edges/nodeCounters; wrap them in a space
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        // Ensure nodeDefaults exists for old stored data
+        if (!state.nodeDefaults) {
+          state.nodeDefaults = { generateNode: {}, videoGeneratorNode: {} };
+        }
         // If there are no spaces (old format), migrate
         if (!state.spaces || state.spaces.length === 0) {
           const sp = makeSpace("Space 1", {

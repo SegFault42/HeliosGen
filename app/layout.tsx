@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Doto } from "next/font/google";
 import "./globals.css";
 import { AppSidebar } from "@/components/AppSidebar";
 import GlobalModals from "@/components/GlobalModals";
@@ -15,6 +15,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const doto = Doto({
+  variable: "--font-doto",
+  subsets: ["latin"],
+  weight: ["900"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +39,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} ${doto.variable} antialiased dark`}
       style={{ height: "100%" }}
     >
       <body className="bg-black text-white h-full overflow-hidden">

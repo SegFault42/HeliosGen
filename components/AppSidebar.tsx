@@ -133,7 +133,6 @@ export function AppSidebar() {
 
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
   const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
-  const setShowDashboard = useWorkflowStore((s) => s.setShowDashboard);
   const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
   const supabase = createClient();
 
@@ -202,7 +201,7 @@ export function AppSidebar() {
   const avatarSeed = user?.id || "guest";
 
   const navItems = [
-    { label: "Workflow", href: "/", icon: Workflow, active: pathname === "/", onClick: () => setShowDashboard(true) },
+    { label: "Workflow", href: "/", icon: Workflow, active: pathname === "/" || pathname.startsWith("/workflow") },
     { label: "Image", href: "/gallery?tab=images", icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: "/gallery?tab=videos", icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },

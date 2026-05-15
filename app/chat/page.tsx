@@ -7,8 +7,9 @@ import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
 import { getToken } from "@/lib/galleryUtils";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Bot, Send, ChevronUp, Copy, Check } from "lucide-react";
-import { BlurInText } from "@/components/ui/blur-in-text";
 import { motion } from "motion/react";
+import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
+import TypewriterHeading from "@/components/ui/TypewriterHeading";
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,62 @@ function ModelPicker({
   );
 }
 
+// ── Cycling placeholder ───────────────────────────────────────────────────────
+
+const PLACEHOLDER_SENTENCES = [
+  "Convert this prompt into a JSON prompt",
+  "Improve this prompt by giving more camera details",
+  "Generate a prompt to create an image of a girl holding a flower",
+  "Make this prompt more cinematic and add lighting details",
+  "Rewrite this prompt for a photorealistic style",
+];
+
+function useCyclingPlaceholder(paused: boolean) {
+  const [text, setText] = useState("");
+  const idx = useRef(0);
+  const phase = useRef<"typing" | "waiting" | "deleting">("typing");
+  const char = useRef(0);
+
+  useEffect(() => {
+    if (paused) return;
+
+    let timeout: ReturnType<typeof setTimeout>;
+
+    function tick() {
+      const sentence = PLACEHOLDER_SENTENCES[idx.current];
+
+      if (phase.current === "typing") {
+        char.current++;
+        setText(sentence.slice(0, char.current));
+        if (char.current >= sentence.length) {
+          phase.current = "waiting";
+          timeout = setTimeout(tick, 2000);
+        } else {
+          timeout = setTimeout(tick, 42);
+        }
+      } else if (phase.current === "waiting") {
+        phase.current = "deleting";
+        timeout = setTimeout(tick, 40);
+      } else {
+        char.current--;
+        setText(sentence.slice(0, char.current));
+        if (char.current <= 0) {
+          idx.current = (idx.current + 1) % PLACEHOLDER_SENTENCES.length;
+          phase.current = "typing";
+          timeout = setTimeout(tick, 300);
+        } else {
+          timeout = setTimeout(tick, 28);
+        }
+      }
+    }
+
+    timeout = setTimeout(tick, 400);
+    return () => clearTimeout(timeout);
+  }, [paused]);
+
+  return text;
+}
+
 // ── Landing view (no active session) ─────────────────────────────────────────
 
 
@@ -124,7 +181,9 @@ function LandingView({
   onModelChange: (id: ModelId) => void;
 }) {
   const [input, setInput] = useState("");
+  const [headingDone, setHeadingDone] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const animatedPlaceholder = useCyclingPlaceholder(!headingDone || input.length > 0);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -141,16 +200,15 @@ function LandingView({
     <div style={{
       flex: 1, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      padding: "0 24px 80px",
+      padding: "0 24px 80px", position: "relative", overflow: "hidden",
     }}>
+      <DotCanvasBackground />
       {/* Logo */}
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
       <LogoIcon size={48} />
 
       {/* Title */}
-      <BlurInText
-        text="I'm here to help you make better prompts."
-        className="text-white mt-5 mb-3 text-5xl font-semibold leading-tight whitespace-nowrap"
-      />
+      <TypewriterHeading text="I'm here to help you make better prompts." onDone={() => setHeadingDone(true)} />
       <motion.p
         initial={{ filter: "blur(10px)", opacity: 0 }}
         animate={{ filter: "blur(0px)", opacity: 1 }}
@@ -177,7 +235,7 @@ function LandingView({
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Describe your image or video idea…"
+            placeholder={input.length > 0 ? "" : animatedPlaceholder}
             rows={1}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
@@ -210,6 +268,7 @@ function LandingView({
           </div>
         </div>
 
+      </div>
       </div>
     </div>
   );
@@ -356,10 +415,7 @@ function ChatWindow({
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 24px 80px", minWidth: 0 }}>
         <LogoIcon size={48} />
-        <BlurInText
-          text="I'm here to help you make better prompts."
-          className="text-white mt-5 mb-10 text-[clamp(22px,3vw,36px)] font-semibold leading-tight"
-        />
+        <TypewriterHeading text="I'm here to help you make better prompts." />
         <div style={{ width: "100%", maxWidth: "680px" }}>
           <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "18px", padding: "10px 10px 10px 20px", transition: "border-color 150ms" }}>
             <textarea
@@ -380,7 +436,7 @@ function ChatWindow({
             </div>
           </div>
         </div>
-        <style>{`@keyframes chatDot { 0%,80%,100%{opacity:.3;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }`}</style>
+        <style>{`@keyframes chatDot { 0%,80%,100%{opacity:.3;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} } @keyframes cursorBlink { 0%,100%{opacity:.6} 50%{opacity:0} }`}</style>
       </div>
     );
   }

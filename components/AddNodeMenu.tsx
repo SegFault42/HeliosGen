@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META } from "@/lib/nodeTypes";
@@ -346,7 +347,7 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
     );
   }
 
-  return (
+  const menu = (
     <>
       {/* Hidden file input for Upload */}
       <input
@@ -362,19 +363,19 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
         ref={menuRef}
         onMouseDown={(e) => e.stopPropagation()}
         style={{
-          position: "fixed", left, top, width: MENU_W, maxHeight: MENU_MAX_H, zIndex: 10000,
+          position: "fixed", left, top, width: MENU_W, maxHeight: MENU_MAX_H, zIndex: 99999,
           display: "flex", flexDirection: "column",
-          background: "rgba(12, 13, 15, 0.97)",
-          backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.5)",
+          background: "rgba(10,11,13,0.98)",
+          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+          border: "1px solid rgba(255,255,255,0.09)", borderRadius: "16px",
+          boxShadow: "0 0 0 1px rgba(255,255,255,0.04) inset, 0 28px 70px rgba(0,0,0,0.8), 0 4px 20px rgba(0,0,0,0.5)",
           overflow: "hidden",
-          animation: "addMenuIn 140ms cubic-bezier(0.22,1,0.36,1) both",
+          animation: "addMenuIn 160ms cubic-bezier(0.22,1,0.36,1) both",
         }}
       >
         <style>{`
           @keyframes addMenuIn {
-            from { opacity: 0; transform: translateX(-8px) scale(0.97); }
+            from { opacity: 0; transform: translateX(-10px) scale(0.96); }
             to   { opacity: 1; transform: translateX(0) scale(1); }
           }
         `}</style>
@@ -462,4 +463,6 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
       />
     </>
   );
+
+  return createPortal(menu, document.body);
 }

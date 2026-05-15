@@ -82,31 +82,36 @@ export function useSpaceSync() {
 
     setStatus("syncing");
     try {
-      const rows = spacesRef.current.map((sp) => ({
-        id:      sp.id,
-        user_id: session.user.id,
-        name:    sp.name,
-        data:    {
-          nodes: sp.nodes.map((n) => ({
-            ...n,
-            data: { ...n.data, inputImage: undefined },
-          })),
-          edges:        sp.edges,
-          nodeCounters: sp.nodeCounters,
-          viewport:     sp.viewport,
-          createdAt:    sp.createdAt,
-          updatedAt:    sp.updatedAt ?? sp.createdAt,
-        },
-      }));
+      // Only persist spaces that have at least one node
+      const spacesToSave = spacesRef.current.filter((sp) => sp.nodes.length > 0);
 
-      const { error } = await supabase
-        .from("spaces")
-        .upsert(rows, { onConflict: "id" });
+      if (spacesToSave.length > 0) {
+        const rows = spacesToSave.map((sp) => ({
+          id:      sp.id,
+          user_id: session.user.id,
+          name:    sp.name,
+          data:    {
+            nodes: sp.nodes.map((n) => ({
+              ...n,
+              data: { ...n.data, inputImage: undefined },
+            })),
+            edges:        sp.edges,
+            nodeCounters: sp.nodeCounters,
+            viewport:     sp.viewport,
+            createdAt:    sp.createdAt,
+            updatedAt:    sp.updatedAt ?? sp.createdAt,
+          },
+        }));
 
-      if (error) throw error;
+        const { error } = await supabase
+          .from("spaces")
+          .upsert(rows, { onConflict: "id" });
 
-      // Remove any DB rows that no longer exist locally
-      const currentIds = spacesRef.current.map((sp) => sp.id);
+        if (error) throw error;
+      }
+
+      // Only count non-empty spaces as "existing" — empty ones are local-only
+      const currentIds = spacesToSave.map((sp) => sp.id);
       await supabase
         .from("spaces")
         .delete()

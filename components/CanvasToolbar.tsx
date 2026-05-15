@@ -1,80 +1,13 @@
 "use client";
 import React, { useState } from "react";
-
-/* ─── Icon components ──────────────────────────────────────────────────────── */
-
-const IconAdd = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-const IconSelect = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
-  </svg>
-);
-
-const IconHand = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 11V7a2 2 0 0 0-4 0" />
-    <path d="M14 10V4.5a2 2 0 0 0-4 0V10" />
-    <path d="M10 10V6a2 2 0 0 0-4 0v8" />
-    <path d="M6 14v-2a2 2 0 0 0-2-2H4" />
-    <path d="M18 11a2 2 0 0 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L8 15" />
-  </svg>
-);
-
-const IconScissors = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="6" cy="6" r="3" />
-    <circle cx="6" cy="18" r="3" />
-    <path d="m20 4-8.12 8.12" />
-    <path d="M8.93 14.93 20 20" />
-    <path d="m14.5 9.5 1 1" />
-  </svg>
-);
-
-const IconFrame = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" strokeWidth="1.4" opacity="0.5" />
-  </svg>
-);
-
-const IconComment = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-  </svg>
-);
-
-const IconUndo = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 7v6h6" />
-    <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-  </svg>
-);
-
-const IconRedo = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 7v6h-6" />
-    <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
-  </svg>
-);
-
-const IconSettings = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
-
-/* ─── Types ─────────────────────────────────────────────────────────────────── */
+import {
+  Plus, MousePointer2, Hand, Scissors, LayoutTemplate,
+  MessageSquare, Undo2, Redo2,
+} from "lucide-react";
 
 type ToolId = "select" | "hand" | "cut" | "frame" | "comment";
 
 interface CanvasToolbarProps {
-  /** Controlled from outside (optional) — defaults to "select" */
   activeTool?: ToolId;
   onToolChange?: (tool: ToolId) => void;
   onAddNode?: (anchorRect: DOMRect) => void;
@@ -85,37 +18,24 @@ interface CanvasToolbarProps {
   onOpenSettings?: () => void;
 }
 
-/* ─── Sub-components ────────────────────────────────────────────────────────── */
-
 function Divider() {
   return (
-    <span
-      style={{
-        display: "block",
-        width: "28px",
-        height: "1px",
-        background: "rgba(255,255,255,0.06)",
-        margin: "2px auto",
-        flexShrink: 0,
-      }}
-    />
+    <span style={{
+      display: "block", width: "20px", height: "1px",
+      background: "rgba(255,255,255,0.07)", margin: "2px auto", flexShrink: 0,
+    }} />
   );
 }
 
-interface BtnProps {
-  id: string;
-  title: string;
-  active?: boolean;
-  activeStyle?: "circle" | "highlight";
-  dimmed?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}
-
-function Btn({ id, title, active, activeStyle = "highlight", dimmed, onClick, children }: BtnProps) {
+function Btn({
+  id, title, active, activeStyle = "highlight", dimmed, onClick, children,
+}: {
+  id: string; title: string; active?: boolean;
+  activeStyle?: "circle" | "highlight"; dimmed?: boolean;
+  onClick: () => void; children: React.ReactNode;
+}) {
   const [hovered, setHovered] = useState(false);
-
-  const isCircleActive = active && activeStyle === "circle";
+  const isCircle = active && activeStyle === "circle";
 
   return (
     <button
@@ -125,35 +45,23 @@ function Btn({ id, title, active, activeStyle = "highlight", dimmed, onClick, ch
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "36px",
-        height: "36px",
-        borderRadius: "50%",
-        border: "none",
-        cursor: "pointer",
-        flexShrink: 0,
-        transition: "background 150ms ease, color 150ms ease, opacity 150ms ease",
-        background: isCircleActive
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: "34px", height: "34px", borderRadius: "10px",
+        border: "none", cursor: "pointer", flexShrink: 0,
+        transition: "background 150ms, color 150ms, opacity 150ms",
+        background: isCircle
           ? "rgba(255,255,255,0.92)"
-          : hovered
-          ? "rgba(255,255,255,0.07)"
-          : "transparent",
+          : hovered ? "rgba(255,255,255,0.08)" : "transparent",
         color: dimmed
           ? "rgba(255,255,255,0.2)"
-          : isCircleActive
-          ? "#111"
-          : "rgba(255,255,255,0.9)",
-        opacity: dimmed ? 0.45 : 1,
+          : isCircle ? "#111" : hovered ? "#fff" : "rgba(255,255,255,0.6)",
+        opacity: dimmed ? 0.4 : 1,
       }}
     >
       {children}
     </button>
   );
 }
-
-/* ─── Main component ────────────────────────────────────────────────────────── */
 
 export default function CanvasToolbar({
   activeTool: externalTool,
@@ -163,9 +71,9 @@ export default function CanvasToolbar({
   onRedo,
   canUndo = true,
   canRedo = false,
-  onOpenSettings,
 }: CanvasToolbarProps) {
   const [internalTool, setInternalTool] = useState<ToolId>("select");
+  const [addHovered, setAddHovered] = useState(false);
   const activeTool = externalTool ?? internalTool;
 
   function selectTool(tool: ToolId) {
@@ -177,100 +85,57 @@ export default function CanvasToolbar({
     <div
       id="canvas-toolbar"
       style={{
-        position: "absolute",
-        left: "16px",
-        top: "50%",
-        transform: "translateY(-50%)",
-        zIndex: 100,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "2px",
-        padding: "10px 4px",
-        borderRadius: "999px",
-        background: "rgba(14, 14, 14, 0.92)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.55), 0 1px 6px rgba(0,0,0,0.35)",
+        position: "absolute", left: "16px", top: "50%",
+        transform: "translateY(-50%)", zIndex: 100,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
+        padding: "8px 5px",
+        borderRadius: "16px",
+        background: "rgba(13,13,15,0.94)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset",
         userSelect: "none",
       }}
     >
-      {/* Add node */}
+      {/* Add — teal accent */}
       <button
         id="toolbar-add"
         title="Add node (A)"
+        onMouseEnter={() => setAddHovered(true)}
+        onMouseLeave={() => setAddHovered(false)}
         onClick={(e) => onAddNode?.((e.currentTarget as HTMLElement).getBoundingClientRect())}
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "36px",
-          height: "36px",
-          borderRadius: "50%",
-          border: "none",
-          cursor: "pointer",
-          flexShrink: 0,
-          background: "transparent",
-          color: "rgba(255,255,255,0.9)",
-          transition: "background 150ms ease, color 150ms ease",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = "transparent";
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: "34px", height: "34px", borderRadius: "10px",
+          border: "none", cursor: "pointer", flexShrink: 0,
+          transition: "background 150ms, box-shadow 150ms, color 150ms",
+          background: addHovered ? "rgba(45,212,191,0.18)" : "rgba(45,212,191,0.10)",
+          color: addHovered ? "#2DD4BF" : "rgba(45,212,191,0.7)",
+          boxShadow: addHovered ? "0 0 14px rgba(45,212,191,0.25)" : "none",
         }}
       >
-        <IconAdd />
+        <Plus size={16} strokeWidth={2.5} />
       </button>
 
       <Divider />
 
-      {/* Select */}
-      <Btn
-        id="toolbar-select"
-        title="Select (V)"
-        active={activeTool === "select"}
-        activeStyle="circle"
-        onClick={() => selectTool("select")}
-      >
-        <IconSelect />
+      <Btn id="toolbar-select" title="Select (V)" active={activeTool === "select"} activeStyle="circle" onClick={() => selectTool("select")}>
+        <MousePointer2 size={15} strokeWidth={1.8} />
       </Btn>
 
-      {/* Hand / Pan */}
-      <Btn
-        id="toolbar-hand"
-        title="Hand tool (H)"
-        active={activeTool === "hand"}
-        activeStyle="circle"
-        onClick={() => selectTool("hand")}
-      >
-        <IconHand />
+      <Btn id="toolbar-hand" title="Hand (H)" active={activeTool === "hand"} activeStyle="circle" onClick={() => selectTool("hand")}>
+        <Hand size={15} strokeWidth={1.8} />
       </Btn>
 
       <Divider />
 
-      {/* Undo */}
-      <Btn
-        id="toolbar-undo"
-        title="Undo (⌘Z)"
-        dimmed={!canUndo}
-        onClick={() => onUndo?.()}
-      >
-        <IconUndo />
+      <Btn id="toolbar-undo" title="Undo (⌘Z)" dimmed={!canUndo} onClick={() => onUndo?.()}>
+        <Undo2 size={15} strokeWidth={1.8} />
       </Btn>
 
-      {/* Redo */}
-      <Btn
-        id="toolbar-redo"
-        title="Redo (⌘⇧Z)"
-        dimmed={!canRedo}
-        onClick={() => onRedo?.()}
-      >
-        <IconRedo />
+      <Btn id="toolbar-redo" title="Redo (⌘⇧Z)" dimmed={!canRedo} onClick={() => onRedo?.()}>
+        <Redo2 size={15} strokeWidth={1.8} />
       </Btn>
-
     </div>
   );
 }

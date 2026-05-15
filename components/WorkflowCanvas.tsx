@@ -25,6 +25,8 @@ import { edgeStyle } from "@/lib/edgeStyles";
 import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
 
+import { motion } from "motion/react";
+import TypewriterHeading from "@/components/ui/TypewriterHeading";
 import PromptNode from "./nodes/PromptNode";
 import ImageInputNode from "./nodes/ImageInputNode";
 import VideoInputNode from "./nodes/VideoInputNode";
@@ -36,6 +38,7 @@ import NodePickerMenu, { DropState } from "./NodePickerMenu";
 import SelectionToolbar from "./SelectionToolbar";
 import CanvasToolbar from "./CanvasToolbar";
 import AddNodeMenu from "./AddNodeMenu";
+import { MessageSquare, Sparkles, Clapperboard } from "lucide-react";
 
 async function getAccessToken(): Promise<string | undefined> {
   try {
@@ -1553,130 +1556,149 @@ export default function WorkflowCanvas() {
           </svg>
         )}
 
-        {/* ── Empty state picker ──────────────────────────────────────────────── */}
+        {/* ── Welcome screen (empty state) ─────────────────────────────────────── */}
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-            {/* Ambient radial glow */}
+            {/* Ambient glow */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
-                background: "radial-gradient(ellipse 80% 55% at 50% 54%, rgba(255,160,80,0.045) 0%, transparent 65%)",
+                background: "radial-gradient(ellipse 70% 50% at 50% 52%, rgba(45,212,191,0.06) 0%, transparent 70%)",
               }}
             />
 
-            <div className="flex flex-col items-center gap-10">
-              <div className="flex flex-col items-center gap-2.5 pointer-events-none">
-                <h2
-                  className="text-[26px] font-semibold tracking-tight leading-none"
-                  style={{
-                    background: "linear-gradient(160deg, #e8e8e8 30%, #666 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                  }}
+            <div className="flex flex-col items-center gap-12">
+              {/* Logo + title */}
+              <div className="flex flex-col items-center gap-4 pointer-events-none">
+                {/* Helios star icon */}
+                <svg width="44" height="44" viewBox="0 0 20 20" fill="#2DD4BF" stroke="none">
+                  <path d="M11.8525 4.21651L11.7221 3.2387C11.6906 3.00226 11.4889 2.82568 11.2504 2.82568C11.0118 2.82568 10.8102 3.00226 10.7786 3.23869L10.6483 4.21651C10.2658 7.0847 8.00939 9.34115 5.14119 9.72358L4.16338 9.85396C3.92694 9.88549 3.75037 10.0872 3.75037 10.3257C3.75037 10.5642 3.92694 10.7659 4.16338 10.7974L5.14119 10.9278C8.00938 11.3102 10.2658 13.5667 10.6483 16.4349L10.7786 17.4127C10.8102 17.6491 11.0118 17.8257 11.2504 17.8257C11.4889 17.8257 11.6906 17.6491 11.7221 17.4127L11.8525 16.4349C12.2349 13.5667 14.4913 11.3102 17.3595 10.9278L18.3374 10.7974C18.5738 10.7659 18.7504 10.5642 18.7504 10.3257C18.7504 10.0872 18.5738 9.88549 18.3374 9.85396L17.3595 9.72358C14.4913 9.34115 12.2349 7.0847 11.8525 4.21651Z" />
+                </svg>
+
+                <TypewriterHeading text="Build awesome workflows" />
+                <motion.p
+                  initial={{ filter: "blur(8px)", opacity: 0 }}
+                  animate={{ filter: "blur(0px)", opacity: 1 }}
+                  transition={{ duration: 0.9, delay: 0.15 }}
+                  style={{ color: "rgba(255,255,255,0.35)", fontSize: "14px", margin: 0 }}
                 >
-                  Your space is ready
-                </h2>
-                <p className="text-[#3E3E3E] text-sm">Pick a node to start building</p>
+                  Pick a node below to start building
+                </motion.p>
               </div>
 
-              <div className="flex items-stretch gap-3 pointer-events-auto">
+              {/* Node cards */}
+              <motion.div
+                className="flex items-stretch gap-[22px] pointer-events-auto"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.25 }}
+              >
                 {[
                   {
-                    type: "imageInputNode",
-                    label: "Image",
-                    desc: "Import a photo",
-                    icon: (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="3" />
-                        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none" />
-                        <path d="m3 15 5-5 4 4 3-3 6 5" />
-                      </svg>
-                    ),
-                    accent: "#fb923c",
-                  },
-                  {
-                    type: "videoInputNode",
-                    label: "Video",
-                    desc: "Import a clip",
-                    icon: (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="5" width="15" height="14" rx="2" />
-                        <path d="m17 8 5-3v14l-5-3V8Z" />
-                      </svg>
-                    ),
-                    accent: "#60a5fa",
+                    type: "promptNode",
+                    label: "Text",
+                    desc: "Write & refine prompts",
+                    accent: "#4ee5b7",
+                    icon: <MessageSquare size={84} strokeWidth={1.4} />,
                   },
                   {
                     type: "generateNode",
                     label: "Image Gen",
-                    desc: "AI image generation",
-                    icon: (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5L2.5 7.6c-.3.3-.5.7-.5 1.1V19a2 2 0 0 0 2 2h11.5a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
-                        <path d="M3 8h4a1 1 0 0 0 1-1V3" />
-                        <path d="M11 12h4M13 10v4" />
-                      </svg>
-                    ),
-                    accent: "#2DD4BF",
+                    desc: "AI image creation",
+                    accent: "#ff955a",
+                    icon: <Sparkles size={84} strokeWidth={1.4} />,
                   },
                   {
                     type: "videoGeneratorNode",
                     label: "Video Gen",
-                    desc: "AI video generation",
-                    icon: (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="5" width="15" height="14" rx="2" />
-                        <path d="m17 8 5-3v14l-5-3V8Z" />
-                        <path d="M7 12h4M9 10v4" />
-                      </svg>
-                    ),
-                    accent: "#5EEAD4",
+                    desc: "AI video creation",
+                    accent: "#a78bfa",
+                    icon: <Clapperboard size={84} strokeWidth={1.4} />,
                   },
                 ].map(({ type, label, desc, icon, accent }) => (
                   <button
                     key={type}
                     onClick={() => addNodeAtCenter(type)}
-                    className="group relative flex flex-col items-center justify-center gap-4 w-36 py-8 rounded-2xl border border-[#1A1A1A] bg-[#0B0E14]"
-                    style={{ transition: "box-shadow 200ms ease, border-color 200ms ease, background 200ms ease" }}
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "20px",
+                      width: "260px",
+                      height: "260px",
+                      padding: "32px 24px",
+                      borderRadius: "20px",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: `radial-gradient(80% 60% at 50% 30%, ${accent}2E, transparent 70%), rgb(12,17,16)`,
+                      cursor: "pointer",
+                      outline: "none",
+                      transition: "transform 200ms ease, box-shadow 220ms ease, border-color 220ms ease",
+                    }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget;
-                      el.style.boxShadow = `0 0 32px ${accent}20, 0 0 0 1px ${accent}30`;
-                      el.style.borderColor = `${accent}35`;
-                      el.style.background = "#131720";
+                      el.style.transform = "translateY(-5px)";
+                      el.style.boxShadow = `0 0 0 1px ${accent}40, 0 12px 48px ${accent}22`;
+                      el.style.borderColor = `${accent}45`;
                     }}
                     onMouseLeave={(e) => {
                       const el = e.currentTarget;
+                      el.style.transform = "translateY(0)";
                       el.style.boxShadow = "";
-                      el.style.borderColor = "#1A1A1A";
-                      el.style.background = "#0B0E14";
+                      el.style.borderColor = "rgba(255,255,255,0.1)";
                     }}
                   >
-                    <span
-                      className="flex items-center justify-center w-11 h-11 rounded-xl"
-                      style={{
-                        background: `${accent}14`,
-                        color: accent,
-                        border: `1px solid ${accent}28`,
-                        transition: "background 200ms ease",
-                      }}
-                    >
+                    {/* Icon — large, bare, glowing */}
+                    <span style={{
+                      display: "flex",
+                      color: `${accent}B3`,
+                      filter: `drop-shadow(${accent}59 0px 0px 18px)`,
+                      flexShrink: 0,
+                    }}>
                       {icon}
                     </span>
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-[#c0c0c0] group-hover:text-white text-[13px] font-medium transition-colors duration-150">
+
+                    {/* Label + desc */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                      <span style={{
+                        fontSize: "16.5px", fontWeight: 600,
+                        color: "rgba(255,255,255,0.94)",
+                        letterSpacing: "-0.165px",
+                      }}>
                         {label}
                       </span>
-                      <span className="text-[#333] text-[11px] transition-colors duration-150 group-hover:text-[#555]">
+                      <span style={{ fontSize: "11.5px", color: "rgba(255,255,255,0.62)", fontWeight: 400 }}>
                         {desc}
                       </span>
                     </div>
+
+                    {/* "+ Add" pill */}
+                    <div style={{
+                      padding: "5px 16px",
+                      borderRadius: "20px",
+                      border: `1px solid ${accent}50`,
+                      background: `${accent}15`,
+                      color: accent,
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      letterSpacing: "0.01em",
+                    }}>
+                      + Add
+                    </div>
                   </button>
                 ))}
-              </div>
+              </motion.div>
 
-              <p className="text-[#252525] text-[11px] tracking-wide pointer-events-none select-none">
+              <motion.p
+                className="text-[11px] tracking-wide pointer-events-none select-none"
+                style={{ color: "rgba(255,255,255,0.15)" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+              >
                 or drag &amp; drop images and videos onto the canvas
-              </p>
+              </motion.p>
             </div>
           </div>
         )}

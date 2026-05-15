@@ -1,5 +1,6 @@
 // Shared node type definitions — imported by both Sidebar and NodePickerMenu
 import React from "react";
+import { MessageSquare, Image, Film, Sparkles, Bot, Clapperboard } from "lucide-react";
 
 export type NodeCategory = "generators" | "resources";
 
@@ -7,68 +8,12 @@ export const NODE_META: Record<
   string,
   { accent: string; bg: string; bigIcon: React.ReactNode }
 > = {
-  promptNode: {
-    accent: "#4ade80",
-    bg: "#052e16",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    ),
-  },
-  imageInputNode: {
-    accent: "#fb923c",
-    bg: "#431407",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-        <circle cx="9" cy="9" r="2" />
-        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-      </svg>
-    ),
-  },
-  videoInputNode: {
-    accent: "#60a5fa",
-    bg: "#0c1a3b",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="14" x="3" y="5" rx="2" />
-        <path d="m16 10-4-2.5v5L16 10z" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-  },
-  generateNode: {
-    accent: "#2DD4BF",
-    bg: "#001f1f",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="m3 9 4-4 4 4 4-4 4 4" />
-        <path d="M3 15h18" />
-      </svg>
-    ),
-  },
-  assistantNode: {
-    accent: "#FBBF24",
-    bg: "#1c1000",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-      </svg>
-    ),
-  },
-  videoGeneratorNode: {
-    accent: "#5EEAD4",
-    bg: "#042f2e",
-    bigIcon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="18" height="14" x="3" y="5" rx="2" />
-        <path d="m16 10-4-2.5v5L16 10z" fill="currentColor" stroke="none" />
-        <path d="M7 12h4M9 10v4" />
-      </svg>
-    ),
-  },
+  promptNode:         { accent: "#4ade80", bg: "#052e16",  bigIcon: <MessageSquare size={18} strokeWidth={1.7} /> },
+  imageInputNode:     { accent: "#fb923c", bg: "#431407",  bigIcon: <Image         size={18} strokeWidth={1.7} /> },
+  videoInputNode:     { accent: "#60a5fa", bg: "#0c1a3b",  bigIcon: <Film          size={18} strokeWidth={1.7} /> },
+  generateNode:       { accent: "#2DD4BF", bg: "#001f1f",  bigIcon: <Sparkles      size={18} strokeWidth={1.7} /> },
+  assistantNode:      { accent: "#FBBF24", bg: "#1c1000",  bigIcon: <Bot           size={18} strokeWidth={1.7} /> },
+  videoGeneratorNode: { accent: "#5EEAD4", bg: "#042f2e",  bigIcon: <Clapperboard  size={18} strokeWidth={1.7} /> },
 };
 
 export const NODES: Array<{
