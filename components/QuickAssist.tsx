@@ -25,6 +25,7 @@ export function QuickAssist() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { createSession, upsertSession } = useChatSessionStore();
 
@@ -45,6 +46,7 @@ export function QuickAssist() {
     function onPointer(e: PointerEvent) {
       const t = e.target as HTMLElement;
       if (!t.closest("[data-model-picker]")) setModelOpen(false);
+      if (open && containerRef.current && !containerRef.current.contains(t)) setOpen(false);
     }
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onPointer);
@@ -161,7 +163,7 @@ export function QuickAssist() {
   const isEmpty = messages.length === 0;
 
   return (
-    <>
+    <div ref={containerRef}>
       {/* Trigger pill */}
       <button
         onClick={() => setOpen(o => !o)}
@@ -180,7 +182,7 @@ export function QuickAssist() {
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(22,24,27,0.95)"; }}
       >
         <SpinnerIcon />
-        <span>Prompt Crafter</span>
+        <span>Assistant</span>
         <span style={{ marginLeft: "2px", padding: "2px 6px", borderRadius: "6px", background: "rgba(255,255,255,0.08)", fontSize: "11px", color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>⌘K</span>
       </button>
 
@@ -198,8 +200,8 @@ export function QuickAssist() {
         }}>
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", padding: "14px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-            <SpinnerIcon color="rgba(255,80,140,0.85)" />
-            <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Prompt Crafter</span>
+            <SpinnerIcon color="rgba(45,212,191,0.85)" />
+            <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Assistant</span>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
               {!isEmpty && (
                 <button
@@ -227,16 +229,16 @@ export function QuickAssist() {
           <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: isEmpty ? "32px 24px 16px" : "16px", display: "flex", flexDirection: "column", gap: isEmpty ? "0" : "12px", minHeight: 0 }}>
             {isEmpty ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-                <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: "rgba(255,80,140,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
-                  <SpinnerIcon size={22} color="rgba(255,80,140,0.85)" />
+                <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: "rgba(45,212,191,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <SpinnerIcon size={22} color="rgba(45,212,191,0.85)" />
                 </div>
-                <p style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 700, color: "#fff", letterSpacing: "-0.02em" }}>Craft your prompt</p>
-                <p style={{ margin: "0", fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: 1.5, letterSpacing: "-0.01em" }}>Describe your idea — get a cinematic, detailed prompt ready to generate.</p>
+                <p style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 700, color: "#fff", letterSpacing: "-0.02em" }}>How can I help you?</p>
+                <p style={{ margin: "0", fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: 1.5, letterSpacing: "-0.01em" }}>Give me a prompt, I will make it better.</p>
               </div>
             ) : (
               messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ maxWidth: "85%", padding: "9px 13px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: m.role === "user" ? "rgba(255,80,140,0.15)" : "rgba(255,255,255,0.06)", border: m.role === "user" ? "1px solid rgba(255,80,140,0.2)" : "1px solid rgba(255,255,255,0.07)", fontSize: "13px", color: m.role === "user" ? "rgba(255,200,220,0.95)" : "rgba(255,255,255,0.85)", lineHeight: 1.55, letterSpacing: "-0.01em", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  <div style={{ maxWidth: "85%", padding: "9px 13px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: m.role === "user" ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)", border: m.role === "user" ? "1px solid rgba(45,212,191,0.25)" : "1px solid rgba(255,255,255,0.07)", fontSize: "13px", color: m.role === "user" ? "#FFFFFF" : "rgba(255,255,255,0.85)", lineHeight: 1.55, letterSpacing: "-0.01em", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                     {m.content}
                     {m.streaming && !m.content && (
                       <span style={{ display: "inline-flex", gap: "3px", alignItems: "center" }}>
@@ -254,7 +256,7 @@ export function QuickAssist() {
             <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "12px", padding: "8px 8px 8px 12px" }}>
               <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} placeholder="Describe your idea…" rows={1} disabled={streaming} style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "rgba(255,255,255,0.88)", fontSize: "13.5px", fontFamily: "inherit", letterSpacing: "-0.01em", lineHeight: "22px", maxHeight: "96px", overflowY: "auto", padding: 0, cursor: streaming ? "not-allowed" : "text" }}
                 onInput={e => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 96) + "px"; }} />
-              <button onClick={() => send(input)} disabled={!input.trim() || streaming} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", background: input.trim() && !streaming ? "rgba(255,80,140,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && !streaming ? "rgba(255,120,160,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && !streaming ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0, transition: "background 150ms, color 150ms" }}>
+              <button onClick={() => send(input)} disabled={!input.trim() || streaming} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", background: input.trim() && !streaming ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && !streaming ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && !streaming ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0, transition: "background 150ms, color 150ms" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
               </button>
             </div>
@@ -275,7 +277,7 @@ export function QuickAssist() {
                           {gi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />}
                           <div style={{ padding: "4px 8px 2px", fontSize: "10px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>{group.label}</div>
                           {group.models.map(m => (
-                            <button key={m.id} onClick={() => { setModel(m.id); setPreferredModel(m.id); setModelOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none", background: model === m.id ? "rgba(255,80,140,0.12)" : "transparent", color: model === m.id ? "rgba(255,180,210,0.95)" : "rgba(255,255,255,0.7)", fontSize: "13px", fontFamily: "inherit", cursor: "pointer", textAlign: "left", transition: "background 100ms" }}
+                            <button key={m.id} onClick={() => { setModel(m.id); setPreferredModel(m.id); setModelOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none", background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent", color: model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)", fontSize: "13px", fontFamily: "inherit", cursor: "pointer", textAlign: "left", transition: "background 100ms" }}
                               onMouseEnter={e => { if (model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
                               onMouseLeave={e => { if (model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
                               <span>{m.label}</span>
@@ -319,7 +321,7 @@ export function QuickAssist() {
           40% { opacity: 1; transform: scale(1); }
         }
       `}</style>
-    </>
+    </div>
   );
 }
 

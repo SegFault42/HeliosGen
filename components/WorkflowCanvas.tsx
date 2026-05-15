@@ -1511,7 +1511,7 @@ export default function WorkflowCanvas() {
 
           <Controls
             showInteractive={false}
-            className="[&>button]:!bg-black [&>button]:!border-[#1A100C] [&>button]:!text-[#8D8E89] [&>button:hover]:!text-white"
+            className="[&>button]:!bg-[#0B0E14] [&>button]:!border-[#1A2030] [&>button]:!text-[#A0A0A0] [&>button:hover]:!text-white"
           />
 
         </ReactFlow>
@@ -1617,7 +1617,7 @@ export default function WorkflowCanvas() {
                         <path d="M11 12h4M13 10v4" />
                       </svg>
                     ),
-                    accent: "#ff3df5",
+                    accent: "#2DD4BF",
                   },
                   {
                     type: "videoGeneratorNode",
@@ -1630,25 +1630,25 @@ export default function WorkflowCanvas() {
                         <path d="M7 12h4M9 10v4" />
                       </svg>
                     ),
-                    accent: "#a78bfa",
+                    accent: "#5EEAD4",
                   },
                 ].map(({ type, label, desc, icon, accent }) => (
                   <button
                     key={type}
                     onClick={() => addNodeAtCenter(type)}
-                    className="group relative flex flex-col items-center justify-center gap-4 w-36 py-8 rounded-2xl border border-[#1A1A1A] bg-black"
+                    className="group relative flex flex-col items-center justify-center gap-4 w-36 py-8 rounded-2xl border border-[#1A1A1A] bg-[#0B0E14]"
                     style={{ transition: "box-shadow 200ms ease, border-color 200ms ease, background 200ms ease" }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget;
                       el.style.boxShadow = `0 0 32px ${accent}20, 0 0 0 1px ${accent}30`;
                       el.style.borderColor = `${accent}35`;
-                      el.style.background = "#111111";
+                      el.style.background = "#131720";
                     }}
                     onMouseLeave={(e) => {
                       const el = e.currentTarget;
                       el.style.boxShadow = "";
                       el.style.borderColor = "#1A1A1A";
-                      el.style.background = "#000000";
+                      el.style.background = "#0B0E14";
                     }}
                   >
                     <span
@@ -1682,9 +1682,9 @@ export default function WorkflowCanvas() {
         )}
 
         {log.length > 0 && (
-          <div className="h-24 bg-black border-t border-[#1A100C] overflow-y-auto px-4 py-2 shrink-0">
+          <div className="h-24 bg-[#0B0E14] border-t border-[#1A2030] overflow-y-auto px-4 py-2 shrink-0">
             {log.map((l, i) => (
-              <p key={i} className={`text-[11px] font-mono leading-5 ${l.ok ? "text-[#8D8E89]" : "text-red-500"}`}>
+              <p key={i} className={`text-[11px] font-mono leading-5 ${l.ok ? "text-[#A0A0A0]" : "text-red-500"}`}>
                 {l.text}
               </p>
             ))}

@@ -126,7 +126,7 @@ function renderGalleryMentions(
       <span
         key={key++}
         style={{
-          color: "#ff3df5",
+          color: "#2DD4BF",
           fontWeight: 500,
           cursor: "text",
           pointerEvents: "auto",
@@ -208,7 +208,7 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
           display: "flex", alignItems: "center", gap: "6px",
           height: "26px", padding: "0 10px", borderRadius: "999px",
           background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)",
-          border: pg.prePending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(168,85,247,0.25)",
+          border: pg.prePending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(45,212,191,0.25)",
           pointerEvents: "none", flexShrink: 0,
         }}>
           {pg.prePending ? (
@@ -218,11 +218,11 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
             </svg>
           ) : (
             <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-              <circle cx="5" cy="5" r="4" stroke="rgba(168,85,247,0.25)" strokeWidth="1.5" />
-              <path d="M5 1 A4 4 0 0 1 9 5" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round" />
+              <circle cx="5" cy="5" r="4" stroke="rgba(45,212,191,0.25)" strokeWidth="1.5" />
+              <path d="M5 1 A4 4 0 0 1 9 5" stroke="#2DD4BF" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           )}
-          <span style={{ fontSize: "11px", color: pg.prePending ? "#888" : "#a855f7", fontWeight: 500 }}>
+          <span style={{ fontSize: "11px", color: pg.prePending ? "#888" : "#2DD4BF", fontWeight: 500 }}>
             {pg.prePending ? "Pending" : (phaseLabel || "Generating…")}
           </span>
         </div>
@@ -1631,18 +1631,18 @@ function GalleryInner() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  if (!authLoaded) return <div style={{ flex: 1, background: "#000000" }} />;
+  if (!authLoaded) return <div style={{ flex: 1, background: "#0B0E14" }} />;
 
   if (!user) {
     return (
-      <div style={{ flex: 1, background: "#000000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+      <div style={{ flex: 1, background: "#0B0E14", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
         <p style={{ color: "#4A4A45", fontSize: "14px" }}>Sign in to view your gallery</p>
       </div>
     );
   }
 
   return (
-    <div style={{ flex: 1, background: "#000000", display: "flex", flexDirection: "column", overflow: "hidden", color: "#fff", position: "relative" }}>
+    <div style={{ flex: 1, background: "#0B0E14", display: "flex", flexDirection: "column", overflow: "hidden", color: "#fff", position: "relative" }}>
 
       {/* ── Sub-navbar ── */}
       <div style={{
@@ -1741,7 +1741,7 @@ function GalleryInner() {
                     height: "100%",
                     position: "relative",
                     overflow: "hidden",
-                    background: pg.error ? "rgba(20,8,8,0.95)" : "#000000",
+                    background: pg.error ? "rgba(8,12,20,0.95)" : "#0B0E14",
                   }}>
                         {pg.error ? (
                           <>
@@ -2006,16 +2006,16 @@ function GalleryInner() {
                   const isRemoving = removingIds.has(img.id);
                   const isHovered = hoveredRefId === img.id;
                   return (
-                    <div key={img.id} onMouseEnter={() => setHoveredRefId(img.id)} onMouseLeave={() => setHoveredRefId(null)} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", background: "#1A1C1F", flexShrink: 0, border: img.error ? "1px solid rgba(248,113,113,0.4)" : "1px solid rgba(255,255,255,0.08)", animation: isRemoving ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1)", ...(isRemoving ? { transition: "opacity 170ms, transform 170ms", opacity: 0, transform: "translateY(-10px) scale(0.92)" } : {}) }}>
+                    <div key={img.id} onMouseEnter={() => setHoveredRefId(img.id)} onMouseLeave={() => setHoveredRefId(null)} onClick={() => { if (!img.uploading && !img.error) setRefPreview({ url: img.objectUrl, mediaKind: "image" }); }} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", background: "#1A1C1F", flexShrink: 0, border: img.error ? "1px solid rgba(248,113,113,0.4)" : "1px solid rgba(255,255,255,0.08)", cursor: (!img.uploading && !img.error) ? "zoom-in" : "default", animation: isRemoving ? "none" : "refImgIn 260ms cubic-bezier(0.16,1,0.3,1)", ...(isRemoving ? { transition: "opacity 170ms, transform 170ms", opacity: 0, transform: "translateY(-10px) scale(0.92)" } : {}) }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={thumbSrc(img.objectUrl)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                       {isHovered && !img.uploading && !img.error && (
                         <div onClick={() => setRefPreview({ url: img.objectUrl, mediaKind: "image" })} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
                       )}
                       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "8px 4px 3px", background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)", textAlign: "center" }}><span style={{ fontSize: "8px", fontWeight: 700, letterSpacing: "0.04em", color: "rgba(255,255,255,0.85)", textTransform: "uppercase" }}>Image</span></div>
-                      {img.uploading && (<div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#ff3df5", display: "inline-block", animation: "spin 0.75s linear infinite" }} /></div>)}
+                      {img.uploading && (<div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ width: "14px", height: "14px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#2DD4BF", display: "inline-block", animation: "spin 0.75s linear infinite" }} /></div>)}
                       {img.error && (<div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg></div>)}
-                      <button onClick={() => removeImage(img.id)} style={{ position: "absolute", top: "3px", right: "3px", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: "10px", zIndex: 2 }}>
+                      <button onClick={e => { e.stopPropagation(); removeImage(img.id); }} style={{ position: "absolute", top: "3px", right: "3px", width: "16px", height: "16px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: "10px", zIndex: 2 }}>
 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>
                     </div>
                   );
@@ -2190,7 +2190,7 @@ function GalleryInner() {
                   border: "none",
                   outline: "none",
                   color: "transparent",
-                  caretColor: "#ff3df5",
+                  caretColor: "#2DD4BF",
                   fontSize: "14.5px",
                   fontFamily: "inherit",
                   lineHeight: "22px",
@@ -2369,8 +2369,8 @@ function GalleryInner() {
                       height: "36px", padding: "0 12px",
                       borderRadius: "8px",
                       border: "1px solid rgba(255,255,255,0.1)",
-                      background: sound ? "rgba(167,139,250,0.12)" : "rgba(255,255,255,0.05)",
-                      color: sound ? "#a78bfa" : "rgba(255,255,255,0.55)",
+                      background: sound ? "rgba(94,234,212,0.12)" : "rgba(255,255,255,0.05)",
+                      color: sound ? "#5EEAD4" : "rgba(255,255,255,0.55)",
                       fontSize: "13px", fontFamily: "inherit",
                       cursor: submitting ? "not-allowed" : "pointer",
                       transition: "background 150ms, color 150ms, border-color 150ms",
@@ -2379,7 +2379,7 @@ function GalleryInner() {
                     {/* Toggle pill */}
                     <span style={{
                       width: "28px", height: "16px", borderRadius: "8px",
-                      background: sound ? "#a78bfa" : "rgba(255,255,255,0.18)",
+                      background: sound ? "#5EEAD4" : "rgba(255,255,255,0.18)",
                       position: "relative", flexShrink: 0,
                       transition: "background 150ms",
                     }}>
@@ -2535,16 +2535,16 @@ function GalleryInner() {
                     height: "44px",
                     borderRadius: "50%",
                     border: "none",
-                    background: "#ff3df5",
-                    color: "#060A06",
+                    background: "#2DD4BF",
+                    color: "#0B0E14",
                     cursor: !canGenerate ? "not-allowed" : "pointer",
                     opacity: !canGenerate ? 0.4 : 1,
                     transition: "all 200ms cubic-bezier(0.16,1,0.3,1)",
                     transform: !canGenerate ? "scale(0.92)" : "scale(1)",
-                    boxShadow: canGenerate ? "0 4px 12px rgba(255,61,245,0.25)" : "none",
+                    boxShadow: canGenerate ? "0 4px 12px rgba(45,212,191,0.25)" : "none",
                   }}
-                  onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.background = "#cc00c4"; e.currentTarget.style.transform = "scale(1.08)"; } }}
-                  onMouseLeave={e => { if (canGenerate) { e.currentTarget.style.background = "#ff3df5"; e.currentTarget.style.transform = "scale(1)"; } }}
+                  onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.background = "#2DD4BF"; e.currentTarget.style.transform = "scale(1.08)"; } }}
+                  onMouseLeave={e => { if (canGenerate) { e.currentTarget.style.background = "#2DD4BF"; e.currentTarget.style.transform = "scale(1)"; } }}
                 >
                   {submitting ? (
                     <span style={{
@@ -2606,7 +2606,7 @@ function GalleryInner() {
                   borderRadius: "9px",
                   border: "none",
                   background: idx === mentionSelIdx ? "rgba(119,229,68,0.07)" : "transparent",
-                  color: idx === mentionSelIdx ? "#ff3df5" : "rgba(255,255,255,0.65)",
+                  color: idx === mentionSelIdx ? "#2DD4BF" : "rgba(255,255,255,0.65)",
                   fontSize: "13px",
                   fontFamily: "inherit",
                   cursor: "pointer",
@@ -2751,7 +2751,7 @@ function GalleryInner() {
             transformOrigin: "bottom left",
           }}>
           <p style={{ margin: "0 0 10px", fontSize: "12px", fontWeight: 600, color: "#fff" }}>Duration</p>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "8px", background: "#161A1E" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "8px", background: "#141C28" }}>
             <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.6)", fontVariantNumeric: "tabular-nums", minWidth: "24px" }}>{duration}s</span>
             <div style={{ width: "1px", height: "14px", background: "#2A2A2A", flexShrink: 0 }} />
             <input
@@ -2826,7 +2826,7 @@ function GalleryInner() {
 
 export default function GalleryPage() {
   return (
-    <Suspense fallback={<div style={{ flex: 1, background: "#000000" }} />}>
+    <Suspense fallback={<div style={{ flex: 1, background: "#0B0E14" }} />}>
       <GalleryInner />
     </Suspense>
   );
@@ -3245,7 +3245,7 @@ function CustomDropdown({
         }}
       >
         {triggerIcon && (
-          <span style={{ display: "flex", alignItems: "center", color: selectedOpt?.providerIcon ? "#a855f7" : "white", flexShrink: 0 }}>
+          <span style={{ display: "flex", alignItems: "center", color: selectedOpt?.providerIcon ? "#2DD4BF" : "white", flexShrink: 0 }}>
             {triggerIcon}
           </span>
         )}
@@ -3361,7 +3361,7 @@ function DropItem({ label, active, onClick, preview, providerIcon }: { label: st
       }}
     >
       {providerIcon && (
-        <span style={{ display: "flex", alignItems: "center", color: "#a855f7", flexShrink: 0, opacity: active ? 1 : 0.7 }}>
+        <span style={{ display: "flex", alignItems: "center", color: "#2DD4BF", flexShrink: 0, opacity: active ? 1 : 0.7 }}>
           {providerIcon}
         </span>
       )}
@@ -3641,7 +3641,7 @@ function GalleryCard({
       {/* ── Checkbox (top-left) ── */}
       <div className="gallery-checkbox" onClick={e => { e.stopPropagation(); onSelect?.(); }}>
         {selected && (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0B0E14" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6 9 17l-5-5" />
           </svg>
         )}
@@ -3774,7 +3774,7 @@ function GalleryCard({
         {item.prompt && onCopyPrompt && (
           <button className="gallery-action-btn" title={copied ? "Copied!" : "Copy prompt"} onClick={handleCopy}>
             {copied ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3df5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             ) : (
@@ -3870,7 +3870,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
             <circle cx="14" cy="14" r="12" stroke="rgba(119,229,68,0.2)" strokeWidth="2" />
             <circle
               cx="14" cy="14" r="12"
-              stroke="#ff3df5" strokeWidth="2"
+              stroke="#2DD4BF" strokeWidth="2"
               strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 12}`}
               strokeDashoffset={allDone ? 0 : `${2 * Math.PI * 12 * 0.25}`}
@@ -3879,7 +3879,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
             />
           </svg>
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff3df5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </div>
@@ -3923,7 +3923,7 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
                   <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
                 </svg>
               ) : (
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#ff3df5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "#2DD4BF", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#060A06" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6 9 17l-5-5" />
                   </svg>
@@ -4047,7 +4047,7 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
   ].filter(Boolean) as { label: string; value: string }[];
 
   const panelStyle: React.CSSProperties = {
-    background: "#000000",
+    background: "#0B0E14",
     border: "1px solid rgba(255,255,255,0.07)",
     borderRadius: "16px",
     overflow: "hidden",
@@ -4227,7 +4227,7 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
                   padding: "4px 12px", borderRadius: "8px",
                   border: "1px solid rgba(255,255,255,0.1)",
                   background: "rgba(255,255,255,0.05)",
-                  color: copied ? "#ff3df5" : "rgba(255,255,255,0.65)",
+                  color: copied ? "#2DD4BF" : "rgba(255,255,255,0.65)",
                   fontSize: "12px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
                   transition: "background 140ms, color 140ms",
                   borderColor: copied ? "rgba(119,229,68,0.3)" : "rgba(255,255,255,0.1)",
@@ -4300,13 +4300,13 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
             display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
             width: "100%", padding: "13px 16px",
             borderRadius: "14px", border: "1px solid rgba(255,255,255,0.07)",
-            background: "#000000",
+            background: "#0B0E14",
             color: downloading ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.75)",
             fontSize: "13px", fontWeight: 600, cursor: downloading ? "default" : "pointer",
             fontFamily: "inherit", transition: "background 140ms, color 140ms",
           }}
           onMouseEnter={e => { if (!downloading) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; } }}
-          onMouseLeave={e => { if (!downloading) { e.currentTarget.style.background = "#000000"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; } }}
+          onMouseLeave={e => { if (!downloading) { e.currentTarget.style.background = "#0B0E14"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; } }}
         >
           {downloading ? (
             <span style={{ width: 13, height: 13, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.15)", borderTopColor: "rgba(255,255,255,0.5)", display: "inline-block", animation: "spin 0.75s linear infinite" }} />

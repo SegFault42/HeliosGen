@@ -49,13 +49,13 @@ export default function ResetPasswordModal() {
       onClick={(e) => { if (e.target === backdropRef.current) setOpen(false); }}
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      <div className="w-80 rounded-xl border border-[#1A100C] bg-black shadow-2xl p-6 flex flex-col gap-4">
+      <div className="w-80 rounded-xl border border-[#1A2030] bg-[#0B0E14] shadow-2xl p-6 flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white tracking-tight">Reset password</h2>
           <button
             onClick={() => setOpen(false)}
-            className="text-[#8D8E89] hover:text-white transition-colors"
+            className="text-[#A0A0A0] hover:text-white transition-colors"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M1 1l10 10M11 1L1 11" />
@@ -64,7 +64,7 @@ export default function ResetPasswordModal() {
         </div>
 
         {success ? (
-          <p className="text-[12px] text-[#ff3df5] text-center py-2">
+          <p className="text-[12px] text-[#2DD4BF] text-center py-2">
             Password updated successfully.
           </p>
         ) : (

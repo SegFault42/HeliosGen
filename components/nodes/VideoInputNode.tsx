@@ -14,9 +14,9 @@ const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
 
 const VIDEO_SRC_COLORS: Record<string, string> = {
-  image: "#818cf8",
+  image: "#2DD4BF",
   video: "#22d3ee",
-  audio: "#a78bfa",
+  audio: "#5EEAD4",
 };
 
 const VIDEO_SOURCE_HANDLES = [
@@ -1170,9 +1170,9 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
               <div className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
                 <svg width="11" height="11" viewBox="0 0 22 22" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
                   <circle cx="11" cy="11" r="8" stroke="#333" strokeWidth="2.5" />
-                  <path d="M11 3A8 8 0 0 1 19 11" stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" />
+                  <path d="M11 3A8 8 0 0 1 19 11" stroke="#2DD4BF" strokeWidth="2.5" strokeLinecap="round" />
                 </svg>
-                <span className="text-[10px] text-[#818cf8]">Extracting…</span>
+                <span className="text-[10px] text-[#2DD4BF]">Extracting…</span>
               </div>
             </div>
           )}
@@ -1241,7 +1241,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
             <rect width="18" height="14" x="3" y="5" rx="2" />
             <path d="m16 10-4-2.5v5L16 10z" fill="#22d3ee" stroke="none" />
           </svg>
-          <p className="text-[11px] text-[#8D8E89]">Drop video or{" "}<span className="underline underline-offset-2 text-white">browse</span></p>
+          <p className="text-[11px] text-[#A0A0A0]">Drop video or{" "}<span className="underline underline-offset-2 text-white">browse</span></p>
           <p className="text-[10px] text-[#4A4A45] mt-1">Max 100 MB</p>
         </div>
         {uploadErr && <p className="text-[10px] text-red-400 mt-1.5 text-center">{uploadErr}</p>}

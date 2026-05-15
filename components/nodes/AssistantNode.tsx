@@ -331,7 +331,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
               {!localPrompt && (
                 <div
                   aria-hidden
-                  className="absolute inset-0 px-3 pt-10 pb-10 text-[13px] text-[#444444] leading-[1.6] pointer-events-none select-none"
+                  className="absolute inset-0 px-3 pt-10 pb-10 text-[13px] text-[#3A4055] leading-[1.6] pointer-events-none select-none"
                 >
                   Describe what you want to generate…
                 </div>
@@ -369,20 +369,20 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
                 onClick={(e) => { e.stopPropagation(); if (!busy) setModelOpen((o) => !o); }}
                 className="flex items-center gap-1"
               >
-                <span className="text-[11px] text-[#8D8E89] hover:text-white transition-colors">
+                <span className="text-[11px] text-[#A0A0A0] hover:text-white transition-colors">
                   {MODELS.find((m) => m.id === model)?.label ?? model}
                 </span>
                 <ChevronIcon open={modelOpen} />
               </button>
 
               {modelPopup.visible && (
-                <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#0F1214] border border-[#2A1A14] rounded-md overflow-hidden z-[1002] shadow-2xl ${modelPopup.className}`}>
+                <div className={`absolute bottom-full left-0 mb-2 w-44 bg-[#111622] border border-[#1E2840] rounded-md overflow-hidden z-[1002] shadow-2xl ${modelPopup.className}`}>
                   {MODELS.map((m) => (
                     <button
                       key={m.id}
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => { e.stopPropagation(); updateNodeData(id, { model: m.id }); setModelOpen(false); }}
-                      className={`w-full text-left px-3 py-[7px] text-[11px] hover:bg-[#161214] transition-colors ${model === m.id ? "text-white" : "text-[#8D8E89]"}`}
+                      className={`w-full text-left px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${model === m.id ? "text-white" : "text-[#A0A0A0]"}`}
                     >
                       {m.label}
                     </button>

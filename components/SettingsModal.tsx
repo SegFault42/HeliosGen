@@ -596,7 +596,7 @@ function ApiKeysPanel({
       {/* Video models */}
       <ModelGroup
         title="Video Models"
-        accent="#a78bfa"
+        accent="#5EEAD4"
         models={videoModels}
         providers={providers}
         onProviderChange={onProviderChange}

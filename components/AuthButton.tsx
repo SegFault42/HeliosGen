@@ -54,7 +54,7 @@ export default function AuthButton() {
   if (user) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-[#8D8E89] max-w-[120px] truncate hidden sm:block">
+        <span className="text-[11px] text-[#A0A0A0] max-w-[120px] truncate hidden sm:block">
           {user.email}
         </span>
         <button onClick={signOut} className="toolbar-btn text-[11px]">

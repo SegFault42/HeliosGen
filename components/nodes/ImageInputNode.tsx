@@ -469,9 +469,9 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => fileRef.current?.click()}
-          className="border border-dashed border-[#2A1A14] hover:border-[#3A2820] rounded-md cursor-pointer transition-colors py-8 text-center"
+          className="border border-dashed border-[#1E2840] hover:border-[#243050] rounded-md cursor-pointer transition-colors py-8 text-center"
         >
-          <p className="text-[11px] text-[#8D8E89]">
+          <p className="text-[11px] text-[#A0A0A0]">
             Drop image or{" "}
             <span className="underline underline-offset-2 text-white">browse</span>
           </p>

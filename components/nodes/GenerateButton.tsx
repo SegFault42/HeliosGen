@@ -15,10 +15,10 @@ export default function GenerateButton({ onClick, busy, disabled }: Props) {
       disabled={disabled || busy}
       className="shrink-0 h-7 px-3 rounded-lg flex items-center gap-1.5 transition-all disabled:opacity-30 hover:brightness-110"
       style={{
-        background: "rgba(109,40,217,0.18)",
+        background: "rgba(45,212,191,0.18)",
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",
-        border: "1px solid rgba(109,40,217,0.55)",
+        border: "1px solid rgba(45,212,191,0.55)",
       }}
     >
       {busy ? (

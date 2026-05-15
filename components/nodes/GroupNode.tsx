@@ -10,7 +10,7 @@ export type GroupNodeType = Node<NodeData, "groupNode">;
 
 const GROUP_COLORS = [
   "#3b82f6", // Blue (default)
-  "#8b5cf6", // Purple
+  "#0D9488", // Blue-600
   "#ec4899", // Pink
   "#ef4444", // Red
   "#f97316", // Orange

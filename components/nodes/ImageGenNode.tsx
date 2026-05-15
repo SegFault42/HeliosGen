@@ -42,9 +42,9 @@ export default function ImageGenNode({ id, data }: NodeProps<ImageGenNodeType>) 
       />
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-purple-900/60 border-b border-purple-700/50">
-        <span className="text-purple-300 text-sm">🎨</span>
-        <span className="text-purple-200 font-semibold text-sm">Image Generation</span>
+      <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/60 border-b border-blue-700/50">
+        <span className="text-blue-300 text-sm">🎨</span>
+        <span className="text-blue-200 font-semibold text-sm">Image Generation</span>
         {status === "running" && (
           <span className="ml-auto text-yellow-400 text-xs animate-pulse">Generating…</span>
         )}
@@ -61,7 +61,7 @@ export default function ImageGenNode({ id, data }: NodeProps<ImageGenNodeType>) 
         <div>
           <label className="text-gray-400 text-xs mb-1 block">Model</label>
           <select
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg text-gray-100 text-xs px-2 py-1.5 focus:outline-none focus:border-purple-500"
+            className="w-full bg-gray-800 border border-gray-600 rounded-lg text-gray-100 text-xs px-2 py-1.5 focus:outline-none focus:border-blue-500"
             value={data.model ?? "flux-schnell"}
             onChange={(e) => updateNodeData(id, { model: e.target.value })}
           >
@@ -94,7 +94,7 @@ export default function ImageGenNode({ id, data }: NodeProps<ImageGenNodeType>) 
             href={data.imageUrl}
             target="_blank"
             rel="noreferrer"
-            className="block text-center text-xs text-purple-400 hover:text-purple-300"
+            className="block text-center text-xs text-blue-400 hover:text-blue-300"
           >
             Open full size ↗
           </a>
@@ -105,7 +105,7 @@ export default function ImageGenNode({ id, data }: NodeProps<ImageGenNodeType>) 
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-purple-400 !border-2 !border-purple-600"
+        className="!w-3 !h-3 !bg-blue-400 !border-2 !border-blue-600"
       />
     </div>
   );

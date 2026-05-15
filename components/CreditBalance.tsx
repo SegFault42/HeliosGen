@@ -42,7 +42,7 @@ export default function CreditBalance() {
   if (balance === null) return null;
 
   return (
-    <span className="text-[11px] text-[#8D8E89] tabular-nums">
+    <span className="text-[11px] text-[#A0A0A0] tabular-nums">
       {balance.toLocaleString()} credits
     </span>
   );

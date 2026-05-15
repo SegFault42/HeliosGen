@@ -38,8 +38,8 @@ export const NODE_META: Record<
     ),
   },
   generateNode: {
-    accent: "#ff3df5",
-    bg: "#0d1f06",
+    accent: "#2DD4BF",
+    bg: "#001f1f",
     bigIcon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect width="18" height="18" x="3" y="3" rx="2" />
@@ -59,8 +59,8 @@ export const NODE_META: Record<
     ),
   },
   videoGeneratorNode: {
-    accent: "#a78bfa",
-    bg: "#1c0d3a",
+    accent: "#5EEAD4",
+    bg: "#042f2e",
     bigIcon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <rect width="18" height="14" x="3" y="5" rx="2" />

@@ -8,7 +8,7 @@ body,
 }
 
 body {
-  background: #000000;
+  background: #0B0E14;
   color: #FFFFFF;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -16,7 +16,7 @@ body {
 
 /* ── Node design system ──────────────────────────────── */
 .node-card {
-  background: #191919;
+  background: #141820;
   border: 1px solid transparent;
   border-radius: 8px;
   overflow: visible;
@@ -30,7 +30,7 @@ body {
 }
 
 .node-card:hover .node-above-label {
-  color: #9A9A95;
+  color: #A0A0A0;
 }
 
 .node-header {
@@ -38,13 +38,13 @@ body {
   align-items: center;
   gap: 6px;
   padding: 7px 10px;
-  border-bottom: 1px solid #1E1410;
+  border-bottom: 1px solid #1C2436;
 }
 
 .node-label {
   font-size: 12px;
   font-weight: 500;
-  color: #8D8E89;
+  color: #A0A0A0;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -52,15 +52,15 @@ body {
 .node-field-label {
   display: block;
   font-size: 11px;
-  color: #8D8E89;
+  color: #A0A0A0;
   margin-bottom: 4px;
   letter-spacing: 0.02em;
 }
 
 .node-textarea {
   width: 100%;
-  background: #090B0D;
-  border: 1px solid #1A100C;
+  background: #0D1119;
+  border: 1px solid #1A2030;
   border-radius: 5px;
   color: #FFFFFF;
   font-size: 13px;
@@ -73,17 +73,17 @@ body {
 }
 
 .node-textarea::placeholder {
-  color: #444444;
+  color: #3A4055;
 }
 
 .node-textarea:focus {
-  border-color: #444444;
+  border-color: #3A4055;
 }
 
 .node-input {
   width: 100%;
-  background: #090B0D;
-  border: 1px solid #1A100C;
+  background: #0D1119;
+  border: 1px solid #1A2030;
   border-radius: 5px;
   color: #FFFFFF;
   font-size: 12px;
@@ -94,19 +94,19 @@ body {
 }
 
 .node-input::placeholder {
-  color: #444444;
+  color: #3A4055;
 }
 
 .node-input:focus {
-  border-color: #444444;
+  border-color: #3A4055;
 }
 
 .node-select {
   width: 100%;
-  background: #090B0D;
-  border: 1px solid #1A100C;
+  background: #0D1119;
+  border: 1px solid #1A2030;
   border-radius: 5px;
-  color: #8D8E89;
+  color: #A0A0A0;
   font-size: 12px;
   padding: 5px 8px;
   outline: none;
@@ -117,7 +117,7 @@ body {
 }
 
 .node-select:focus {
-  border-color: #2A1A14;
+  border-color: #1E2840;
 }
 
 /* ── Floating node label (above frame) ───────────────── */
@@ -126,7 +126,7 @@ body {
   top: -20px;
   left: 2px;
   font-size: 11px;
-  color: #707070;
+  color: #6A7080;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-weight: 500;
@@ -142,8 +142,8 @@ body {
   width: 14px !important;
   height: 14px !important;
   border-radius: 50% !important;
-  border: 2px solid #0D1012 !important;
-  background: #1E2226 !important;
+  border: 2px solid #0B0E14 !important;
+  background: #1A2235 !important;
   /* neutral — role color when connected or selected */
   z-index: 10;
   opacity: 0;
@@ -202,7 +202,7 @@ body {
 
 .node-handle-prompt.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-prompt.react-flow__handle {
-  background: #ff3df5 !important;
+  background: #2DD4BF !important;
 }
 
 .node-handle-source.react-flow__handle.node-handle-connected,
@@ -220,8 +220,8 @@ body {
   width: 28px !important;
   height: 28px !important;
   border-radius: 50% !important;
-  background: #0A0C0E !important;
-  border: 1.5px solid #252830 !important;
+  background: #0D1119 !important;
+  border: 1.5px solid #1E2540 !important;
   /* neutral — role color only when connected */
   display: flex !important;
   align-items: center !important;
@@ -286,14 +286,14 @@ body {
 /* Connected or selected: full role color — input handles */
 .node-handle-icon-prompt.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-prompt.react-flow__handle {
-  border-color: #ff3df5 !important;
-  --handle-color: #ff3df5;
+  border-color: #2DD4BF !important;
+  --handle-color: #2DD4BF;
 }
 
 .node-handle-icon-image.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-image.react-flow__handle {
-  border-color: #818cf8 !important;
-  --handle-color: #818cf8;
+  border-color: #2DD4BF !important;
+  --handle-color: #2DD4BF;
 }
 
 .node-handle-icon-resource.react-flow__handle.node-handle-connected,
@@ -316,8 +316,8 @@ body {
 
 .node-handle-icon-audioref.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-audioref.react-flow__handle {
-  border-color: #a78bfa !important;
-  --handle-color: #a78bfa;
+  border-color: #5EEAD4 !important;
+  --handle-color: #5EEAD4;
 }
 
 .node-handle-icon-character.react-flow__handle.node-handle-connected,
@@ -330,13 +330,13 @@ body {
 .react-flow__node:hover .node-handle-icon-out-text.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-text.react-flow__handle,
 .node-handle-icon-out-text.react-flow__handle.node-handle-connected {
-  border-color: #ff3df5 !important;
+  border-color: #2DD4BF !important;
 }
 
 .react-flow__node:hover .node-handle-icon-out-image.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-image.react-flow__handle,
 .node-handle-icon-out-image.react-flow__handle.node-handle-connected {
-  border-color: #818cf8 !important;
+  border-color: #2DD4BF !important;
 }
 
 .react-flow__node:hover .node-handle-icon-out-video.react-flow__handle,
@@ -348,10 +348,10 @@ body {
 .react-flow__node:hover .node-handle-icon-out-audio.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-audio.react-flow__handle,
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connected {
-  border-color: #a78bfa !important;
+  border-color: #5EEAD4 !important;
 }
 
-/* Assistant output — yellow, overrides the inherited out-text green */
+/* Assistant output — yellow, overrides the inherited out-text blue */
 .react-flow__node:hover .node-handle-icon-out-assistant.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-assistant.react-flow__handle,
 .node-handle-icon-out-assistant.react-flow__handle.node-handle-connected {
@@ -390,11 +390,11 @@ body {
 
 /* Connecting handle: show its type color */
 .node-handle-icon-prompt.react-flow__handle.node-handle-connecting {
-  border-color: #ff3df5 !important;
+  border-color: #2DD4BF !important;
 }
 
 .node-handle-icon-image.react-flow__handle.node-handle-connecting {
-  border-color: #818cf8 !important;
+  border-color: #2DD4BF !important;
 }
 
 .node-handle-icon-resource.react-flow__handle.node-handle-connecting {
@@ -410,7 +410,7 @@ body {
 }
 
 .node-handle-icon-audioref.react-flow__handle.node-handle-connecting {
-  border-color: #a78bfa !important;
+  border-color: #5EEAD4 !important;
 }
 
 .node-handle-icon-character.react-flow__handle.node-handle-connecting {
@@ -418,7 +418,7 @@ body {
 }
 
 .node-handle-icon-out-text.react-flow__handle.node-handle-connecting {
-  border-color: #ff3df5 !important;
+  border-color: #2DD4BF !important;
 }
 
 .node-handle-icon-out-assistant.react-flow__handle.node-handle-connecting {
@@ -426,7 +426,7 @@ body {
 }
 
 .node-handle-icon-out-image.react-flow__handle.node-handle-connecting {
-  border-color: #818cf8 !important;
+  border-color: #2DD4BF !important;
 }
 
 .node-handle-icon-out-video.react-flow__handle.node-handle-connecting {
@@ -434,7 +434,7 @@ body {
 }
 
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connecting {
-  border-color: #a78bfa !important;
+  border-color: #5EEAD4 !important;
 }
 
 /* ── Show only compatible input handles while connecting ─────────────────── */
@@ -482,7 +482,7 @@ body {
   flex: 1;
   height: 3px;
   border-radius: 99px;
-  background: #333;
+  background: #1C2436;
   outline: none;
   cursor: pointer;
 }
@@ -515,8 +515,8 @@ body {
 
 /* ── Selection rectangle (drag) + post-release overlay ── */
 .react-flow__selection {
-  background: rgba(90, 90, 90, 0.06) !important;
-  border: 1px solid rgba(90, 90, 90, 0.4) !important;
+  background: rgba(45, 212, 191, 0.04) !important;
+  border: 1px solid rgba(45, 212, 191, 0.3) !important;
   border-radius: 3px;
   z-index: 0 !important;
   pointer-events: none;
@@ -529,20 +529,20 @@ body {
 }
 
 .react-flow__nodesselection-rect {
-  background: rgba(90, 90, 90, 0.04) !important;
-  border: 1px solid rgba(90, 90, 90, 0.3) !important;
+  background: rgba(45, 212, 191, 0.03) !important;
+  border: 1px solid rgba(45, 212, 191, 0.2) !important;
   border-radius: 3px;
 }
 
 /* ── React Flow overrides ────────────────────────────── */
 .react-flow {
-  --xy-background-color-default: #000000;
-  background: #000000;
+  --xy-background-color-default: #0B0E14;
+  background: #0B0E14;
 }
 
 .react-flow__node.selected .node-card {
-  border-color: #ff3df5 !important;
-  box-shadow: 0 0 0 1px rgba(255, 61, 245, 0.2), 0 2px 16px rgba(30, 10, 30, 0.5);
+  border-color: #2DD4BF !important;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25), 0 2px 16px rgba(0, 15, 30, 0.5);
 }
 
 .react-flow__node.selected .node-card.node-generating {
@@ -563,13 +563,13 @@ body {
 
 /* ── Ancestor highlight (upstream nodes of selected node) ── */
 .react-flow__node.node-ancestor .node-card {
-  border-color: #ff3df5 !important;
-  box-shadow: 0 0 0 1px rgba(255, 61, 245, 0.12), 0 2px 16px rgba(0, 0, 0, 0.5);
+  border-color: #2DD4BF !important;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15), 0 2px 16px rgba(0, 0, 0, 0.5);
   transition: border-color 150ms, box-shadow 150ms;
 }
 
 .react-flow__node.node-ancestor .node-above-label {
-  color: rgba(119, 229, 68, 0.6);
+  color: rgba(0, 242, 255, 0.7);
   transition: color 150ms;
 }
 
@@ -596,20 +596,20 @@ body {
 
 .react-flow__controls {
   box-shadow: none !important;
-  border: 1px solid #1A100C !important;
+  border: 1px solid #1A2030 !important;
   border-radius: 6px !important;
   overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: #000000 !important;
+  background: #0B0E14 !important;
   border: none !important;
-  border-bottom: 1px solid #1A100C !important;
-  color: #8D8E89 !important;
+  border-bottom: 1px solid #1A2030 !important;
+  color: #A0A0A0 !important;
 }
 
 .react-flow__controls-button:hover {
-  background: #111111 !important;
+  background: #131720 !important;
   color: #FFFFFF !important;
 }
 
@@ -619,7 +619,7 @@ body {
 
 /* ── Node error blink ────────────────────────────────── */
 /* box-shadow handles the glow; the ::before pseudo-element overlays the border
-   so the red blink covers the purple selected border instead of appearing outside it. */
+   so the red blink covers the blue selected border instead of appearing outside it. */
 @keyframes node-error-blink {
 
   0%,
@@ -638,7 +638,7 @@ body {
   }
 }
 
-/* Pseudo-element overlays the node border — covers the purple selected border with red */
+/* Pseudo-element overlays the node border — covers the blue selected border with red */
 @keyframes node-error-blink-border {
 
   0%,
@@ -661,7 +661,7 @@ body {
 
   0%,
   100% {
-    color: #707070;
+    color: #6A7080;
   }
 
   20%,
@@ -671,7 +671,7 @@ body {
 
   37%,
   72% {
-    color: #707070;
+    color: #6A7080;
   }
 }
 
@@ -679,7 +679,7 @@ body {
   animation: node-error-blink 1.4s ease 1 forwards;
 }
 
-/* Positioned over the node border, so the red ring covers the purple selected border */
+/* Positioned over the node border, so the red ring covers the blue selected border */
 .node-card.node-error-blink::before {
   content: '';
   position: absolute;
@@ -731,9 +731,9 @@ body {
 .toolbar-btn {
   font-size: 13px;
   font-weight: 500;
-  color: #8D8E89;
-  background: #000000;
-  border: 1px solid #2A1A14;
+  color: #A0A0A0;
+  background: #0B0E14;
+  border: 1px solid #1E2840;
   border-radius: 6px;
   padding: 5px 12px;
   cursor: pointer;
@@ -743,7 +743,7 @@ body {
 
 .toolbar-btn:hover:not(:disabled) {
   color: #FFFFFF;
-  border-color: #3A2820;
+  border-color: #243050;
 }
 
 .toolbar-btn:disabled {
@@ -754,19 +754,20 @@ body {
 .toolbar-btn-primary {
   font-size: 13px;
   font-weight: 500;
-  color: #0A0C0E;
-  background: #ff3df5;
-  border: 1px solid #ff3df5;
+  color: #FFFFFF;
+  background: #2DD4BF;
+  border: 1px solid #2DD4BF;
   border-radius: 6px;
   padding: 5px 14px;
   cursor: pointer;
-  transition: background 100ms, border-color 100ms;
+  transition: background 100ms, border-color 100ms, box-shadow 100ms;
   font-family: inherit;
 }
 
 .toolbar-btn-primary:hover:not(:disabled) {
-  background: #8FEE60;
-  border-color: #8FEE60;
+  background: #2DD4BF;
+  border-color: #2DD4BF;
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.35);
 }
 
 .toolbar-btn-primary:disabled {
@@ -774,25 +775,25 @@ body {
   cursor: not-allowed;
 }
 
-/* ── Video Generator node — gray border (same as all other nodes) ────────── */
+/* ── Video Generator node — subtle border ────────────── */
 .video-node-card.node-card {
-  border-color: #333333;
+  border-color: #1C2436;
   box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
 }
 
 .video-node-card.node-card:hover {
-  border-color: #555555;
-  box-shadow: 0 0 0 1px rgba(120, 120, 120, 0.3), 0 2px 20px rgba(0, 0, 0, 0.6);
+  border-color: #2A3550;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.12), 0 2px 20px rgba(0, 0, 0, 0.6);
 }
 
 .react-flow__node.selected .video-node-card.node-card {
-  border-color: #ff3df5 !important;
-  box-shadow: 0 0 0 1px rgba(255, 61, 245, 0.2), 0 2px 16px rgba(30, 10, 30, 0.5);
+  border-color: #2DD4BF !important;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25), 0 2px 16px rgba(0, 15, 30, 0.5);
 }
 
 .react-flow__node.node-ancestor .video-node-card.node-card {
-  border-color: #ff3df5 !important;
-  box-shadow: 0 0 0 1px rgba(255, 61, 245, 0.12), 0 0 18px rgba(0, 0, 0, 0.5);
+  border-color: #2DD4BF !important;
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15), 0 0 18px rgba(0, 0, 0, 0.5);
 }
 
 /* ── Carousel slide ─────────────────────────────────────────────────────── */
@@ -1048,16 +1049,16 @@ body {
 .node-card.node-generating {
   border: 2px solid transparent;
   background:
-    linear-gradient(#191919, #191919) padding-box,
+    linear-gradient(#141820, #141820) padding-box,
     conic-gradient(
       from var(--border-angle, 0deg),
-      rgba(255, 255, 255, 0.05) 0deg,
-      rgba(255, 255, 255, 0.05) 150deg,
-      #4B0082 200deg,
-      #9400D3 250deg,
-      #DA70D6 305deg,
-      #ffffff 345deg,
-      rgba(255, 255, 255, 0.05) 360deg
+      rgba(45, 212, 191, 0.05) 0deg,
+      rgba(45, 212, 191, 0.05) 150deg,
+      #00266A 200deg,
+      #005FCC 250deg,
+      #00AEFF 305deg,
+      #00F2FF 340deg,
+      rgba(0, 242, 255, 0.05) 360deg
     ) border-box;
   transition: none;
   box-shadow: none;

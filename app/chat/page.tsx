@@ -14,7 +14,7 @@ import { motion } from "motion/react";
 
 function LogoIcon({ size = 40 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="#ff3df5" stroke="none">
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="#2DD4BF" stroke="none">
       <path d="M11.8525 4.21651L11.7221 3.2387C11.6906 3.00226 11.4889 2.82568 11.2504 2.82568C11.0118 2.82568 10.8102 3.00226 10.7786 3.23869L10.6483 4.21651C10.2658 7.0847 8.00939 9.34115 5.14119 9.72358L4.16338 9.85396C3.92694 9.88549 3.75037 10.0872 3.75037 10.3257C3.75037 10.5642 3.92694 10.7659 4.16338 10.7974L5.14119 10.9278C8.00938 11.3102 10.2658 13.5667 10.6483 16.4349L10.7786 17.4127C10.8102 17.6491 11.0118 17.8257 11.2504 17.8257C11.4889 17.8257 11.6906 17.6491 11.7221 17.4127L11.8525 16.4349C12.2349 13.5667 14.4913 11.3102 17.3595 10.9278L18.3374 10.7974C18.5738 10.7659 18.7504 10.5642 18.7504 10.3257C18.7504 10.0872 18.5738 9.88549 18.3374 9.85396L17.3595 9.72358C14.4913 9.34115 12.2349 7.0847 11.8525 4.21651Z" />
     </svg>
   );
@@ -92,8 +92,8 @@ function ModelPicker({
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none",
-                      background: model === m.id ? "rgba(255,80,140,0.12)" : "transparent",
-                      color: model === m.id ? "rgba(255,180,210,0.95)" : "rgba(255,255,255,0.7)",
+                      background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent",
+                      color: model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)",
                       fontSize: "13px", fontFamily: "inherit", cursor: "pointer", textAlign: "left",
                       transition: "background 100ms",
                     }}
@@ -198,8 +198,8 @@ function LandingView({
               disabled={!input.trim()}
               style={{
                 width: "36px", height: "36px", borderRadius: "50%", border: "none",
-                background: input.trim() ? "rgba(255,80,140,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() ? "rgba(255,120,160,0.9)" : "rgba(255,255,255,0.25)",
+                background: input.trim() ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
                 cursor: input.trim() ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",
@@ -373,7 +373,7 @@ function ChatWindow({
             />
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px", flexShrink: 0 }}>
               <ModelPicker model={model} onChange={handleModelChange} direction="down" />
-              <button onClick={() => send(input)} disabled={!input.trim()} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() ? "rgba(255,80,140,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() ? "rgba(255,120,160,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
+              <button onClick={() => send(input)} disabled={!input.trim()} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
                 <Send size={15} />
               </button>
             </div>
@@ -402,10 +402,10 @@ function ChatWindow({
               maxWidth: "72%",
               padding: "10px 14px",
               borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              background: m.role === "user" ? "rgba(255,80,140,0.15)" : "rgba(255,255,255,0.06)",
-              border: m.role === "user" ? "1px solid rgba(255,80,140,0.2)" : "1px solid rgba(255,255,255,0.07)",
+              background: m.role === "user" ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)",
+              border: m.role === "user" ? "1px solid rgba(45,212,191,0.25)" : "1px solid rgba(255,255,255,0.07)",
               fontSize: "14px", lineHeight: 1.6,
-              color: m.role === "user" ? "rgba(255,200,220,0.95)" : "rgba(255,255,255,0.88)",
+              color: m.role === "user" ? "#FFFFFF" : "rgba(255,255,255,0.88)",
               whiteSpace: "pre-wrap", wordBreak: "break-word",
             }}>
               {m.content}
@@ -458,8 +458,8 @@ function ChatWindow({
               disabled={!input.trim() || streaming}
               style={{
                 width: "32px", height: "32px", borderRadius: "8px", border: "none",
-                background: input.trim() && !streaming ? "rgba(255,80,140,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && !streaming ? "rgba(255,120,160,0.9)" : "rgba(255,255,255,0.25)",
+                background: input.trim() && !streaming ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() && !streaming ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
                 cursor: input.trim() && !streaming ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",

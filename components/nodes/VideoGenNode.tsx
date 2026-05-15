@@ -46,7 +46,7 @@ export default function VideoGenNode({ id, data }: NodeProps<VideoGenNodeType>) 
         position={Position.Left}
         id="image"
         style={{ top: "65%" }}
-        className="!w-3 !h-3 !bg-purple-400 !border-2 !border-purple-600"
+        className="!w-3 !h-3 !bg-blue-400 !border-2 !border-blue-600"
       />
 
       {/* Header */}
@@ -102,7 +102,7 @@ export default function VideoGenNode({ id, data }: NodeProps<VideoGenNodeType>) 
             Prompt in
           </span>
           <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+            <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
             Image in (optional)
           </span>
         </div>

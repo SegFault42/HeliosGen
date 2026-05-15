@@ -69,7 +69,7 @@ export default function AuthModal() {
       onClick={(e) => { if (e.target === backdropRef.current) setOpen(false); }}
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      <div className="w-80 rounded-xl border border-[#1A100C] bg-black shadow-2xl p-6 flex flex-col gap-4">
+      <div className="w-80 rounded-xl border border-[#1A2030] bg-[#0B0E14] shadow-2xl p-6 flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white tracking-tight">
@@ -77,7 +77,7 @@ export default function AuthModal() {
           </h2>
           <button
             onClick={() => setOpen(false)}
-            className="text-[#8D8E89] hover:text-white transition-colors"
+            className="text-[#A0A0A0] hover:text-white transition-colors"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
               <path d="M1 1l10 10M11 1L1 11" />
@@ -87,12 +87,12 @@ export default function AuthModal() {
 
         {mode === "forgot" ? (
           forgotSent ? (
-            <p className="text-[12px] text-[#ff3df5] text-center py-2">
+            <p className="text-[12px] text-[#2DD4BF] text-center py-2">
               Check your email for a reset link.
             </p>
           ) : (
             <form onSubmit={submit} className="flex flex-col gap-2.5">
-              <p className="text-[11px] text-[#8D8E89] leading-tight">
+              <p className="text-[11px] text-[#A0A0A0] leading-tight">
                 Enter your email and we'll send you a reset link.
               </p>
               <input
@@ -111,7 +111,7 @@ export default function AuthModal() {
               <button
                 type="button"
                 onClick={() => { setMode("signin"); setError(""); }}
-                className="text-[11px] text-[#8D8E89] hover:text-white transition-colors text-center"
+                className="text-[11px] text-[#A0A0A0] hover:text-white transition-colors text-center"
               >
                 Back to sign in
               </button>
@@ -120,12 +120,12 @@ export default function AuthModal() {
         ) : (
           <>
             {/* Mode toggle */}
-            <div className="flex rounded overflow-hidden border border-[#1A100C]">
+            <div className="flex rounded overflow-hidden border border-[#1A2030]">
               {(["signin", "signup"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => { setMode(m); setError(""); }}
-                  className={`flex-1 text-[11px] py-1.5 transition-colors ${mode === m ? "bg-[#1A100C] text-white" : "text-[#8D8E89] hover:text-white"
+                  className={`flex-1 text-[11px] py-1.5 transition-colors ${mode === m ? "bg-[#1A2030] text-white" : "text-[#A0A0A0] hover:text-white"
                     }`}
                 >
                   {m === "signin" ? "Sign in" : "Sign up"}
@@ -154,7 +154,7 @@ export default function AuthModal() {
               />
 
               {error && (
-                <p className={`text-[11px] leading-tight ${error.startsWith("Check") ? "text-[#8D8E89]" : "text-red-400"
+                <p className={`text-[11px] leading-tight ${error.startsWith("Check") ? "text-[#A0A0A0]" : "text-red-400"
                   }`}>
                   {error}
                 </p>
@@ -172,7 +172,7 @@ export default function AuthModal() {
                 <button
                   type="button"
                   onClick={() => { setMode("forgot"); setError(""); }}
-                  className="text-[11px] text-[#8D8E89] hover:text-white transition-colors text-center"
+                  className="text-[11px] text-[#A0A0A0] hover:text-white transition-colors text-center"
                 >
                   Forgot password?
                 </button>

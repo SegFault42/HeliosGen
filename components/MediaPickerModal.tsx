@@ -219,7 +219,7 @@ export function MediaPickerModal({
                 padding: "6px 16px", borderRadius: "100px", border: "none", cursor: "pointer",
                 fontSize: "13px", fontWeight: active ? 600 : 400,
                 background: active ? "#ffffff" : "transparent",
-                color: active ? "#000000" : "rgba(255,255,255,0.5)",
+                color: active ? "#0B0E14" : "rgba(255,255,255,0.5)",
                 transition: "background 150ms, color 150ms",
               }}>
                 {t.label}
@@ -247,7 +247,7 @@ export function MediaPickerModal({
         <div className="picker-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "14px 18px 18px" }}>
           {fetching && displayItems.length === 0 ? (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "200px" }}>
-              <span style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#ff3df5", display: "inline-block", animation: "spin 0.75s linear infinite" }} />
+              <span style={{ width: "24px", height: "24px", borderRadius: "50%", border: "2px solid rgba(255,255,255,0.1)", borderTopColor: "#2DD4BF", display: "inline-block", animation: "spin 0.75s linear infinite" }} />
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "4px" }}>
