@@ -81,8 +81,8 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
     label: string; preview: MentionPreview;
   } | null>(null);
   const [popoverIn, setPopoverIn] = useState(false);
-  const popoverHideTimer = useRef<ReturnType<typeof setTimeout>>();
-  const popoverRaf = useRef<number>();
+  const popoverHideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const popoverRaf = useRef<number | undefined>(undefined);
   const chipElementRef = useRef<HTMLElement | null>(null);  // the live chip DOM node
   const popoverPosRef = useRef<HTMLDivElement | null>(null); // outer positioning div
   const scaleWrapperRef = useRef<HTMLDivElement | null>(null);

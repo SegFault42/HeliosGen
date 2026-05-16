@@ -409,10 +409,11 @@ function GalleryInner() {
   const [submitting, setSubmitting] = useState(false);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
   const [genError, setGenError] = useState<string>("");
-  const debugMode   = useWorkflowStore((s) => s.debugMode);
-  const addToast    = useWorkflowStore((s) => s.addToast);
-  const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
-  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
+  const debugMode        = useWorkflowStore((s) => s.debugMode);
+  const addToast         = useWorkflowStore((s) => s.addToast);
+  const kieKeySet        = useWorkflowStore((s) => s.kieKeySet);
+  const setKieKeySet     = useWorkflowStore((s) => s.setKieKeySet);
+  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
   const [sourceFilter, setSourceFilter] = useState<"generated" | "uploaded">(initialSource);
 
   useEffect(() => {
@@ -1153,6 +1154,10 @@ function GalleryInner() {
     if (refImages.some(r => r.uploading)) { setGenError("Images still uploading…"); setTimeout(() => setGenError(""), 3_000); return; }
     if (isVideo && [vidStartFrame, vidEndFrame, vidVideoRef, ...vidResources, ...vidRefVideos, ...vidRefAudios].some(r => r?.uploading)) {
       setGenError("References still uploading…"); setTimeout(() => setGenError(""), 3_000); return;
+    }
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
     }
     setGenError("");
 

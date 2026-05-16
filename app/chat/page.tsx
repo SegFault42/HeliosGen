@@ -11,6 +11,9 @@ import { motion } from "motion/react";
 import Image from "next/image";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
+import { createClient } from "@/lib/supabase/client";
+import { useWorkflowStore } from "@/lib/store";
+import type { User } from "@supabase/supabase-js";
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
 
@@ -280,7 +283,7 @@ interface LiveMessage {
 }
 
 function ChatWindow({
-  session, onUpdate, initialMessage, onInitialSent, defaultModel, onModelChange,
+  session, onUpdate, initialMessage, onInitialSent, defaultModel, onModelChange, onAuthRequired,
 }: {
   session: ChatSession;
   onUpdate: (msgs: StoredMessage[], model: string) => void;
@@ -288,6 +291,7 @@ function ChatWindow({
   onInitialSent?: () => void;
   defaultModel?: string;
   onModelChange?: (id: ModelId) => void;
+  onAuthRequired?: () => void;
 }) {
   // Pre-populate immediately when coming from LandingView so chat mode shows on first render
   const [messages, setMessages] = useState<LiveMessage[]>(() =>
@@ -375,6 +379,7 @@ function ChatWindow({
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || streaming) return;
+    if (onAuthRequired) { onAuthRequired(); return; }
     const newMessages: LiveMessage[] = [...messages, { role: "user", content: trimmed }];
     setMessages([...newMessages, { role: "assistant", content: "", streaming: true }]);
     setInput("");
@@ -386,7 +391,7 @@ function ChatWindow({
       ...newMessages.map(m => ({ role: m.role, content: m.content })),
     ];
     await runStream(apiMessages, newMessages.length, abort.signal, model);
-  }, [messages, streaming, model, runStream]);
+  }, [messages, streaming, model, runStream, onAuthRequired]);
 
   // Fire API call for the pre-populated initial message
   const initialFired = useRef(false);
@@ -570,6 +575,17 @@ function ChatInner() {
   const [hydrated, setHydrated] = useState(false);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [landingModel, setLandingModel] = useState<ModelId>("claude-sonnet-4-6");
+  const [user, setUser] = useState<User | null>(null);
+  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Sync landingModel from store once hydrated
   useEffect(() => { if (hydrated) setLandingModel(preferredModel as ModelId); }, [hydrated]);
@@ -583,6 +599,7 @@ function ChatInner() {
   const activeSession = idParam ? (sessions.find(s => s.id === idParam) ?? null) : null;
 
   function handleLandingSubmit(text: string) {
+    if (!user) { setAuthModalOpen(true); return; }
     const id = createSession(landingModel, text.slice(0, 50));
     setPendingMessage(text);
     router.push(`/chat?id=${id}`);
@@ -607,6 +624,7 @@ function ChatInner() {
           onInitialSent={() => setPendingMessage(null)}
           defaultModel={preferredModel}
           onModelChange={setPreferredModel}
+          onAuthRequired={!user ? () => setAuthModalOpen(true) : undefined}
         />
       ) : (
         <LandingView

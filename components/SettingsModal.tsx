@@ -618,9 +618,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  async function authHeader(): Promise<HeadersInit> {
+  async function authHeader(): Promise<Record<string, string>> {
     const { data: { session } } = await createClient().auth.getSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    const h: Record<string, string> = {};
+    if (session?.access_token) h["Authorization"] = `Bearer ${session.access_token}`;
+    return h;
   }
 
   /* Load persisted data on mount */

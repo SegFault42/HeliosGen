@@ -44,6 +44,7 @@ export interface NodeData extends Record<string, unknown> {
   imageNaturalRatio?: string;
   // generation settings
   quality?: string;
+  azureQuality?: string;
   // video output
   videoUrl?: string;
   // video model
@@ -63,6 +64,7 @@ export interface NodeData extends Record<string, unknown> {
   errorMsg?: string;
   // validation
   hasError?: boolean;
+  locked?: boolean;
   // pending job
   taskId?: string;
 }

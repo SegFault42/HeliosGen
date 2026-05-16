@@ -131,7 +131,7 @@ export async function mirrorToR2(sourceUrl: string, folder: string): Promise<str
 
 /** Upload a base64 data URL to R2, return CDN URL. */
 export async function uploadDataUrl(dataUrl: string, folder: string): Promise<string> {
-  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+  const m = dataUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
   if (!m) throw new Error("uploadDataUrl: not a valid data URL");
   const contentType = m[1];
   const buf = Buffer.from(m[2], "base64");

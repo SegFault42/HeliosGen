@@ -115,7 +115,8 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
       const { data: { session } } = await createClient().auth.getSession();
       const authToken = session?.access_token;
-      const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const authHeaders: Record<string, string> = {};
+      if (authToken) authHeaders["Authorization"] = `Bearer ${authToken}`;
 
       // ── Cache lookup: skip upload if already in R2 ───────────────────────
       try {

@@ -203,7 +203,7 @@ export function AppSidebar() {
     { label: "Video", href: "/gallery?tab=videos", icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
-    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); setSettingsOpen(true); } },
+    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user) setSettingsOpen(true); else setAuthModalOpen(true); } },
   ];
 
   const itemCls = (active: boolean, disabled?: boolean) => cn(
@@ -386,7 +386,7 @@ export function AppSidebar() {
             {/* Settings */}
             <DropdownMenuItem
               className="rounded-none px-4 py-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => user ? setSettingsOpen(true) : setAuthModalOpen(true)}
             >
               Settings
             </DropdownMenuItem>

@@ -91,12 +91,11 @@ export function QuickAssist() {
 
     try {
       const token = await getToken();
+      const reqHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) reqHeaders["Authorization"] = `Bearer ${token}`;
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: reqHeaders,
         body: JSON.stringify({
           model,
           messages: [

@@ -184,11 +184,12 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
 
       const bytes = await file.arrayBuffer();
       const token = await getToken();
-      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers: Record<string, string> = { "Content-Type": file.type || (isVideo ? "video/mp4" : "image/jpeg") };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       try {
         const res = await fetch("/api/upload-asset", {
           method: "POST",
-          headers: { "Content-Type": file.type || (isVideo ? "video/mp4" : "image/jpeg"), ...authHeaders },
+          headers,
           body: bytes,
         });
         const { cdnUrl } = await res.json() as { cdnUrl?: string };

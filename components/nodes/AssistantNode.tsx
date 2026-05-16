@@ -137,12 +137,11 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
 
     try {
       const { data: { session } } = await createClient().auth.getSession();
+      const assistantHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) assistantHeaders["Authorization"] = `Bearer ${session.access_token}`;
       const res = await fetch("/api/assistant", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
+        headers: assistantHeaders,
         body: JSON.stringify({
           prompt: localPrompt,
           model,
