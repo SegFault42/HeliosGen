@@ -591,8 +591,8 @@ function ChatInner() {
   useEffect(() => { if (hydrated) setLandingModel(preferredModel as ModelId); }, [hydrated]);
 
   useEffect(() => {
-    const unsub = useChatSessionStore.persist.onFinishHydration(() => setHydrated(true));
-    if (useChatSessionStore.persist.hasHydrated()) setHydrated(true);
+    const unsub = useChatSessionStore.persist?.onFinishHydration(() => setHydrated(true));
+    if (useChatSessionStore.persist?.hasHydrated()) setHydrated(true);
     return unsub;
   }, []);
 

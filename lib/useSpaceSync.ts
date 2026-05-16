@@ -17,7 +17,7 @@ export function useSpaceSync() {
   // In Zustand v5, persist rehydration is async — if we save before it
   // completes, we'd write the default empty state and delete all real spaces.
   const [hydrated, setHydrated] = useState(
-    () => useWorkflowStore.persist.hasHydrated()
+    () => typeof window !== "undefined" && (useWorkflowStore.persist?.hasHydrated() ?? false)
   );
 
   const timerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -29,11 +29,11 @@ export function useSpaceSync() {
     if (hydrated) return;
     // If hydration already finished before this effect ran (common in Next.js
     // where SSR renders hasHydrated()=false but client is already hydrated)
-    if (useWorkflowStore.persist.hasHydrated()) {
+    if (useWorkflowStore.persist?.hasHydrated()) {
       setHydrated(true);
       return;
     }
-    const unsub = useWorkflowStore.persist.onFinishHydration(() => setHydrated(true));
+    const unsub = useWorkflowStore.persist?.onFinishHydration(() => setHydrated(true));
     return unsub;
   }, [hydrated]);
 
