@@ -1488,7 +1488,7 @@ export default function WorkflowCanvas() {
             strokeLinecap: "round",
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#ffffff" />
+          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#888888" />
           <ViewportSyncer />
           <GroupPreviewOverlay groupIds={potentialGroupIds} />
           <SelectionToolbar />

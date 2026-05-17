@@ -198,9 +198,9 @@ export function AppSidebar() {
   const avatarSeed = user?.id || "guest";
 
   const navItems = [
-    { label: "Workflow", href: "/", icon: Workflow, active: pathname === "/" || pathname.startsWith("/workflow") },
     { label: "Image", href: "/gallery?tab=images", icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: "/gallery?tab=videos", icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
+    { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
     { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user) setSettingsOpen(true); else setAuthModalOpen(true); } },

@@ -1,8 +1,5 @@
-"use client";
-import WorkflowDashboard from "@/components/WorkflowDashboard";
-import { useSpaceSync } from "@/lib/useSpaceSync";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  useSpaceSync();
-  return <WorkflowDashboard />;
+  redirect("/gallery?tab=images");
 }

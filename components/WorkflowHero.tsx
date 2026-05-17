@@ -1,6 +1,6 @@
 export function WorkflowHero() {
   return (
-    <section className="relative w-full py-8 md:py-10" style={{ overflowX: "clip" }}>
+    <section className="relative w-full py-8 md:py-10" style={{ overflowX: "clip", overflowY: "visible" }}>
       <style>{`
         @keyframes hero-fade-up {
           from { opacity: 0; transform: translateY(12px); }

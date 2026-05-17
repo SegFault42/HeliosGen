@@ -551,6 +551,7 @@ export default function WorkflowDashboard() {
     <div
       style={{
         flex: 1,
+        minHeight: 0,
         overflowY: "auto",
         position: "relative",
         background: "#0B0E14",
