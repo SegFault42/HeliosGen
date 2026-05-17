@@ -884,6 +884,9 @@ export default function WorkflowCanvas() {
       const source = nodes.find((n) => n.id === connection.source);
       const target = nodes.find((n) => n.id === connection.target);
 
+      // Ref nodes are pure sources — nothing can connect into them
+      if (target?.type === "imageInputNode" || target?.type === "videoInputNode") return false;
+
       // Prompt handles only accept text-producing nodes
       if (
         connection.targetHandle === "prompt" &&

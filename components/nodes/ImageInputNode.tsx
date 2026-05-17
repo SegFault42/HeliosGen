@@ -354,16 +354,6 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
         {/* Handle rendered last so it sits above the image div in stacking order */}
               <Handle
-                type="target"
-                position={Position.Left}
-                style={{ top: 20 }}
-                className="node-handle-icon node-handle-icon-image"
-                title="Image input"
-              >
-                <ImageInIcon />
-              </Handle>
-
-              <Handle
                 type="source"
                 position={Position.Right}
                 style={{ top: 20 }}
@@ -446,16 +436,6 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       <span className="node-above-label">{data.label as string}</span>
 
       <Handle
-        type="target"
-        position={Position.Left}
-        style={{ top: 20 }}
-        className="node-handle-icon node-handle-icon-image"
-        title="Image input"
-      >
-        <ImageInIcon />
-      </Handle>
-
-      <Handle
         type="source"
         position={Position.Right}
         style={{ top: 20 }}
@@ -512,12 +492,4 @@ function ImageOutIcon() {
   );
 }
 
-function ImageInIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-      <path d="M12 8v8" />
-      <path d="M8 12h8" />
-    </svg>
-  );
-}
+

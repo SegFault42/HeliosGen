@@ -228,7 +228,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
       insertEdge(edge);
     } else {
       const targetHandle = targetHandleFor(dropState.sourceNodeType, type, dropState.sourceHandleId);
-      if (targetHandle || type === "imageInputNode") {
+      if (targetHandle) {
         const edge: Edge = {
           id:           `edge-${dropState.sourceNodeId}-${nodeId}`,
           source:       dropState.sourceNodeId,

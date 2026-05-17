@@ -82,7 +82,7 @@ export const NODES: Array<{
     {
       type: "imageInputNode",
       category: "resources",
-      canReceiveConnection: true,
+      canReceiveConnection: false,
       icon: (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />

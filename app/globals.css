@@ -449,8 +449,7 @@ body {
   transition-delay: 0ms !important;
 }
 
-/* Image output → image + resource + character inputs */
-.react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-image,
+/* Image output → resource + character inputs */
 .react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-resource,
 .react-flow[data-connecting-type="image"] .react-flow__handle-left.node-handle-icon-character {
   transform: translate(-100%, -50%) !important;
