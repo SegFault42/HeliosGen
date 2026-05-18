@@ -134,6 +134,13 @@ export function AppSidebar() {
   const supabase = createClient();
 
   React.useEffect(() => {
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      fetch("/api/settings/kie-key")
+        .then((r) => r.json())
+        .then((d) => setKieKeySet(!!d.hasToken))
+        .catch(() => setKieKeySet(null));
+      return;
+    }
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
       if (data.user) useChatSessionStore.getState().loadFromSupabase();
@@ -203,7 +210,7 @@ export function AppSidebar() {
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
-    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user) setSettingsOpen(true); else setAuthModalOpen(true); } },
+    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") setSettingsOpen(true); else setAuthModalOpen(true); } },
   ];
 
   const itemCls = (active: boolean, disabled?: boolean) => cn(

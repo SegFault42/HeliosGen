@@ -533,8 +533,14 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   )?.source;
 
   const generate = useCallback(async () => {
-    const { data: authData } = await createClient().auth.getSession();
-    if (!authData.session) { setAuthModalOpen(true); return; }
+    let accessToken: string;
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      accessToken = "guest";
+    } else {
+      const { data: authData } = await createClient().auth.getSession();
+      if (!authData.session) { setAuthModalOpen(true); return; }
+      accessToken = authData.session.access_token;
+    }
 
     // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
     // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
@@ -555,7 +561,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       try {
         const r = await fetch("/api/extract-frame", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${authData.session.access_token}` },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
           body: JSON.stringify(extractBody),
         });
         const j = await r.json();
@@ -643,7 +649,6 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     const loadingGens = [...prevGens, null] as GenEntry[];
     updateNodeData(id, { status: "pending", imageUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens, currentGenIdx: loadingGens.length - 1 });
 
-    const accessToken = authData.session!.access_token;
     pendingTimerRef.current = setTimeout(async () => {
       pendingTimerRef.current = null;
       setLoading(true);
