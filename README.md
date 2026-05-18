@@ -135,6 +135,10 @@ Just workflows.
 - Drag & connect workflow system
 - Reference image support
 - Multi-model pipelines
+- Wave-based pipeline runner (parallel + sequential execution)
+- Node groups with scoped pipeline execution and color coding
+- Missing-input warnings on nodes
+- In-app AI assistant (QuickAssist)
 - Persistent cloud storage
 - Per-user API keys
 - Real-time generation history
@@ -146,18 +150,18 @@ Just workflows.
 
 ## Images
 
-- GPT-4o
-- Seedream
+- GPT Image 2 (OpenAI)
+- Nano Banana / Nano Banana 2 / Nano Banana Pro (Google)
+- Seedream 5.0 Lite
 - Z-Image
 - Grok Imagine
-- Nano Banana
 - More via Kie.ai
 
 ## Videos
 
+- Veo 3.1 Lite / Fast / Quality (Google)
 - Kling 3.0
-- Kling 2.6 Motion Control
-- Seedance 2
+- Seedance 2.0 / 2.0 Fast
 - Grok Imagine Video
 
 ---
@@ -280,6 +284,7 @@ supabase-setup.sql
 | `generations` | Image/video generation history |
 | `user_uploads` | Uploaded assets |
 | `user_settings` | Secure user API keys |
+| `asset_cache` | Deduplication cache for uploaded assets |
 
 ---
 

@@ -1,5 +1,12 @@
 -- Run this in your Supabase SQL editor
 
+-- ── Shared helpers ────────────────────────────────────────────────────────────
+
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end;
+$$;
+
 -- ── User uploads ──────────────────────────────────────────────────────────────
 
 create table public.user_uploads (
@@ -68,12 +75,6 @@ create table public.generations (
   video_url            text,
   error_msg            text
 );
-
--- Auto-bump updated_at
-create or replace function public.touch_updated_at()
-returns trigger language plpgsql as $$
-begin new.updated_at = now(); return new; end;
-$$;
 
 create trigger generations_updated_at
   before update on public.generations
