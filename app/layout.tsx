@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Doto } from "next/font/google";
 import "./globals.css";
 import { AppSidebar } from "@/components/AppSidebar";
 import GlobalModals from "@/components/GlobalModals";
+import KieBanner from "@/components/KieBanner";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cookies } from "next/headers";
@@ -47,6 +48,7 @@ export default async function RootLayout({
           <SidebarProvider defaultOpen={sidebarOpen} className="h-full">
             <AppSidebar />
             <SidebarInset style={{ backgroundColor: "transparent" }} className="flex flex-col min-h-0 min-w-0 border-l border-r border-t border-white/[0.08] mx-2 mt-2 rounded-tl-xl rounded-tr-xl overflow-hidden">
+              <KieBanner />
               {children}
             </SidebarInset>
           </SidebarProvider>
