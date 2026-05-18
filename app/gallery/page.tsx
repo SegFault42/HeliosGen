@@ -553,6 +553,12 @@ function GalleryInner() {
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      setUser({ id: "guest" } as unknown as User);
+      setKieKeySet(true);
+      setAuthLoaded(true);
+      return;
+    }
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -631,8 +637,9 @@ function GalleryInner() {
   }, []);
 
   useEffect(() => {
-    if (!authLoaded || kieKeySet === null) return;
-    if (user) loadItems(tab, 0, true);
+    if (!authLoaded) return;
+    if (kieKeySet === null && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") return;
+    loadItems(tab, 0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoaded, kieKeySet]);
 
@@ -1156,7 +1163,7 @@ function GalleryInner() {
     if (isVideo && [vidStartFrame, vidEndFrame, vidVideoRef, ...vidResources, ...vidRefVideos, ...vidRefAudios].some(r => r?.uploading)) {
       setGenError("References still uploading…"); setTimeout(() => setGenError(""), 3_000); return;
     }
-    if (!user) {
+    if (!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") {
       setAuthModalOpen(true);
       return;
     }
@@ -1800,7 +1807,7 @@ function GalleryInner() {
       </div>}
 
       {/* ── Grid ── */}
-      {!user ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
+      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
         {loading || containerWidth === 0 ? (
           /* Skeleton — shown while loading or before container is measured */
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${zoom}, 1fr)`, gap: "1px", padding: "1px", alignItems: "start" }}>

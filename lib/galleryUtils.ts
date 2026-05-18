@@ -15,6 +15,7 @@ export interface GalleryItem {
 }
 
 export async function getToken(): Promise<string | undefined> {
+  if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
   const { data } = await createClient().auth.getSession();
   return data.session?.access_token;
 }
