@@ -524,6 +524,7 @@ export default function WorkflowDashboard() {
   const [user, setUser] = useState<boolean | null>(null);
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") { setUser(true); return; }
     const supabase = createClient();
     supabase.auth.getSession().then(({ data }) => setUser(!!data.session?.user));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
@@ -543,9 +544,11 @@ export default function WorkflowDashboard() {
     router.push(`/workflow/${newId}`);
   };
 
-  const sorted = [...spaces]
-    .filter((sp) => sp.nodes.length > 0)
-    .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+  const sorted = user
+    ? [...spaces]
+        .filter((sp) => sp.nodes.length > 0)
+        .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
+    : [];
 
   return (
     <div

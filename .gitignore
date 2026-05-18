@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.guest
 
 # vercel
 .vercel
@@ -41,3 +42,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .job-store.json
+
+# Guest mode — local DB and generated media
+/data/*.json
+/public/generated/**
+!/public/generated/.gitkeep

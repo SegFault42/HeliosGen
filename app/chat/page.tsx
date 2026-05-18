@@ -184,6 +184,7 @@ function LandingView({
   const [headingDone, setHeadingDone] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const animatedPlaceholder = useCyclingPlaceholder(!headingDone || input.length > 0);
+  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -253,12 +254,12 @@ function LandingView({
             <ModelPicker model={model} onChange={onModelChange} direction="down" />
             <button
               onClick={() => submit(input)}
-              disabled={!input.trim()}
+              disabled={!input.trim() || kieKeySet === false}
               style={{
                 width: "36px", height: "36px", borderRadius: "50%", border: "none",
-                background: input.trim() ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
-                cursor: input.trim() ? "pointer" : "not-allowed",
+                background: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                cursor: input.trim() && kieKeySet !== false ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",
               }}
@@ -303,6 +304,7 @@ function ChatWindow({
   const [streaming, setStreaming] = useState(!!initialMessage);
   const [model, setModel] = useState<ModelId>((session.model || defaultModel || "claude-sonnet-4-6") as ModelId);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
 
   function handleModelChange(id: ModelId) { setModel(id); onModelChange?.(id); }
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -432,7 +434,7 @@ function ChatWindow({
             />
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px", flexShrink: 0 }}>
               <ModelPicker model={model} onChange={handleModelChange} direction="down" />
-              <button onClick={() => send(input)} disabled={!input.trim()} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
+              <button onClick={() => send(input)} disabled={!input.trim() || kieKeySet === false} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && kieKeySet !== false ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
                 <Send size={15} />
               </button>
             </div>
@@ -538,12 +540,12 @@ function ChatWindow({
             <ModelPicker model={model} onChange={handleModelChange} />
             <button
               onClick={() => send(input)}
-              disabled={!input.trim() || streaming}
+              disabled={!input.trim() || streaming || kieKeySet === false}
               style={{
                 width: "32px", height: "32px", borderRadius: "8px", border: "none",
-                background: input.trim() && !streaming ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && !streaming ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
-                cursor: input.trim() && !streaming ? "pointer" : "not-allowed",
+                background: input.trim() && !streaming && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() && !streaming && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                cursor: input.trim() && !streaming && kieKeySet !== false ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",
               }}
@@ -598,8 +600,10 @@ function ChatInner() {
 
   const activeSession = idParam ? (sessions.find(s => s.id === idParam) ?? null) : null;
 
+  const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
+
   function handleLandingSubmit(text: string) {
-    if (!user) { setAuthModalOpen(true); return; }
+    if (!user && !isGuestMode) { setAuthModalOpen(true); return; }
     const id = createSession(landingModel, text.slice(0, 50));
     setPendingMessage(text);
     router.push(`/chat?id=${id}`);
@@ -624,7 +628,7 @@ function ChatInner() {
           onInitialSent={() => setPendingMessage(null)}
           defaultModel={preferredModel}
           onModelChange={setPreferredModel}
-          onAuthRequired={!user ? () => setAuthModalOpen(true) : undefined}
+          onAuthRequired={!user && !isGuestMode ? () => setAuthModalOpen(true) : undefined}
         />
       ) : (
         <LandingView

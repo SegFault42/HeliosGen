@@ -129,16 +129,25 @@ export function AppSidebar() {
   const [balance, setBalance] = React.useState<number | null>(null);
 
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
-  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
+  const setSettingsOpen  = useWorkflowStore((s) => s.setSettingsOpen);
+  const setKieKeySet     = useWorkflowStore((s) => s.setKieKeySet);
+  const clearLocalData   = useWorkflowStore((s) => s.clearLocalData);
+  const clearSessions    = useChatSessionStore((s) => s.clearSessions);
   const supabase = createClient();
 
   React.useEffect(() => {
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      fetch("/api/settings/kie-key")
+        .then((r) => r.json())
+        .then((d) => setKieKeySet(!!d.hasToken))
+        .catch(() => setKieKeySet(null));
+      return;
+    }
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
       if (data.user) useChatSessionStore.getState().loadFromSupabase();
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.access_token) {
         fetch("/api/settings/kie-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -148,6 +157,10 @@ export function AppSidebar() {
         useChatSessionStore.getState().loadFromSupabase();
       } else {
         setKieKeySet(null);
+        if (event === "SIGNED_OUT") {
+          clearLocalData();
+          clearSessions();
+        }
       }
     });
     return () => subscription.unsubscribe();
@@ -175,9 +188,15 @@ export function AppSidebar() {
     return () => { clearInterval(id); window.removeEventListener("credits-refresh", fetchBalance); };
   }, [supabase]);
 
-  const signOut = async () => { await supabase.auth.signOut(); setUser(null); };
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    clearLocalData();
+    clearSessions();
+  };
 
-  const { sessions, deleteSession } = useChatSessionStore();
+  const { sessions: allSessions, deleteSession } = useChatSessionStore();
+  const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
+  const sessions = (user || isGuestMode) ? allSessions : [];
 
   function startNewChat() {
     router.push("/chat");
@@ -203,7 +222,7 @@ export function AppSidebar() {
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
-    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user) setSettingsOpen(true); else setAuthModalOpen(true); } },
+    { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); if (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") setSettingsOpen(true); else setAuthModalOpen(true); } },
   ];
 
   const itemCls = (active: boolean, disabled?: boolean) => cn(
@@ -386,30 +405,33 @@ export function AppSidebar() {
             {/* Settings */}
             <DropdownMenuItem
               className="rounded-none px-4 py-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-              onClick={() => user ? setSettingsOpen(true) : setAuthModalOpen(true)}
+              onClick={() => (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") ? setSettingsOpen(true) : setAuthModalOpen(true)}
             >
               Settings
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
-
-            {/* Sign out / Sign in */}
-            {user ? (
-              <DropdownMenuItem
-                className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                onClick={signOut}
-              >
-                <LogOut size={14} className="mr-2 opacity-60" />
-                Sign out
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                onClick={() => setAuthModalOpen(true)}
-              >
-                <UserIcon size={14} className="mr-2 opacity-60" />
-                Sign in
-              </DropdownMenuItem>
+            {/* Sign out / Sign in — hidden in guest mode */}
+            {process.env.NEXT_PUBLIC_GUEST_MODE !== "true" && (
+              <>
+                <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
+                {user ? (
+                  <DropdownMenuItem
+                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+                    onClick={signOut}
+                  >
+                    <LogOut size={14} className="mr-2 opacity-60" />
+                    Sign out
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+                    onClick={() => setAuthModalOpen(true)}
+                  >
+                    <UserIcon size={14} className="mr-2 opacity-60" />
+                    Sign in
+                  </DropdownMenuItem>
+                )}
+              </>
             )}
           </DropdownMenuContent>
 

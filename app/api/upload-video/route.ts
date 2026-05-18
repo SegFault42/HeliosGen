@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import * as guestDb from "@/lib/guest/db";
 
-// Allow up to 110 MB multipart bodies (video files ≤ 100 MB + multipart envelope overhead)
 export const maxDuration = 60;
-
-async function getUserId(req: NextRequest): Promise<string | null> {
-  const auth  = req.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return null;
-  const { data } = await supabaseAdmin.auth.getUser(token);
-  return data.user?.id ?? null;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,17 +30,20 @@ export async function POST(req: NextRequest) {
 
     const cdnUrl = await uploadBuffer(buffer, mimeType, "references");
 
-    // Fire-and-forget DB record
-    const userId = await getUserId(req);
+    const userId = await resolveUserId(req);
     if (userId) {
-      supabaseAdmin.from("user_uploads").insert({
-        user_id:   userId,
-        r2_url:    cdnUrl,
-        mime_type: mimeType,
-        source:    "user_upload",
-      }).then(({ error }) => {
-        if (error) console.error("[upload-video] db insert error:", error.message);
-      });
+      if (GUEST_MODE) {
+        guestDb.insertUpload({ user_id: userId, r2_url: cdnUrl, mime_type: mimeType, source: "user_upload" });
+      } else {
+        supabaseAdmin.from("user_uploads").insert({
+          user_id:   userId,
+          r2_url:    cdnUrl,
+          mime_type: mimeType,
+          source:    "user_upload",
+        }).then(({ error }) => {
+          if (error) console.error("[upload-video] db insert error:", error.message);
+        });
+      }
     }
 
     return NextResponse.json({ cdnUrl });

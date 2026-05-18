@@ -13,6 +13,8 @@
  */
 import { createHash } from "crypto";
 import { supabaseAdmin } from "./supabase/admin";
+import { GUEST_MODE } from "./guestMode";
+import * as guestDb from "./guest/db";
 
 /** Compute SHA-256 hex from a Node.js Buffer (server-side). */
 export function hashBuffer(buf: Buffer): string {
@@ -24,6 +26,7 @@ export function hashBuffer(buf: Buffer): string {
  * Returns the CDN URL if found, null otherwise.
  */
 export async function lookupAssetHash(hash: string): Promise<string | null> {
+  if (GUEST_MODE) return guestDb.lookupAssetHash(hash);
   try {
     const { data, error } = await supabaseAdmin
       .from("asset_cache")
@@ -53,6 +56,7 @@ export async function storeAssetHash(
   mimeType: string,
   byteSize: number,
 ): Promise<void> {
+  if (GUEST_MODE) { guestDb.storeAssetHash(hash, cdnUrl, mimeType, byteSize); return; }
   console.log("[asset-cache] storing hash:", hash.slice(0, 8), "->", cdnUrl);
   const { error } = await supabaseAdmin
     .from("asset_cache")

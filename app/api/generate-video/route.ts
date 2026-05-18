@@ -4,6 +4,8 @@ import { ensureR2 } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
+import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import * as guestDb from "@/lib/guest/db";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -18,13 +20,6 @@ interface KlingElementInput {
   imageUrls: string[];
 }
 
-async function getUserId(req: NextRequest): Promise<string | null> {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return null;
-  const { data } = await supabaseAdmin.auth.getUser(token);
-  return data.user?.id ?? null;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +47,7 @@ export async function POST(req: NextRequest) {
     debugOnly       = false,
   } = body;
 
-  const userId = await getUserId(req);
+  const userId = await resolveUserId(req);
   const apiKey = (userId ? await getKieTokenForUser(userId) : null) ?? process.env.KIE_API_TOKEN ?? null;
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
@@ -309,6 +304,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (!createRes.ok) {
+    if (createRes.status === 401) {
+      return NextResponse.json({ error: "Invalid Kie.ai API key — please update it in Settings." }, { status: 401 });
+    }
     const errText = await createRes.text();
     console.error("[generate-video] kie.ai HTTP error:", createRes.status, errText);
     return NextResponse.json({ error: errText }, { status: 500 });
@@ -348,21 +346,31 @@ export async function POST(req: NextRequest) {
           ?.map((el) => el.element_input_urls[0]) ?? []),
       ];
 
-  supabaseAdmin.from("generations").insert({
-    task_id:              taskId,
-    user_id:              userId,
-    generation_type:      "video",
-    status:               "pending",
-    model:                videoModel,
-    prompt,
-    aspect_ratio:         aspectRatio,
-    duration:             clampedDuration,
-    kling_mode:           mode,
-    sound:                cfg.sound ? Boolean(sound) : false,
-    reference_image_urls: referenceUrls,
-  }).then(({ error }) => {
-    if (error) console.error("[generate-video] supabase insert error:", error.message);
-  });
+  if (GUEST_MODE) {
+    guestDb.insertGeneration({
+      task_id: taskId, user_id: userId, generation_type: "video",
+      status: "pending", model: videoModel, prompt, aspect_ratio: aspectRatio,
+      duration: clampedDuration, kling_mode: mode,
+      sound: cfg.sound ? Boolean(sound) : false,
+      reference_image_urls: referenceUrls,
+    });
+  } else {
+    supabaseAdmin.from("generations").insert({
+      task_id:              taskId,
+      user_id:              userId,
+      generation_type:      "video",
+      status:               "pending",
+      model:                videoModel,
+      prompt,
+      aspect_ratio:         aspectRatio,
+      duration:             clampedDuration,
+      kling_mode:           mode,
+      sound:                cfg.sound ? Boolean(sound) : false,
+      reference_image_urls: referenceUrls,
+    }).then(({ error }) => {
+      if (error) console.error("[generate-video] supabase insert error:", error.message);
+    });
+  }
 
   return NextResponse.json({ taskId });
   } catch (e: unknown) {

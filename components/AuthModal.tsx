@@ -56,6 +56,7 @@ const ANIM_MS = 220;
 export default function AuthModal() {
   const open = useWorkflowStore((s) => s.authModalOpen);
   const setOpen = useWorkflowStore((s) => s.setAuthModalOpen);
+  const authModalView = useWorkflowStore((s) => s.authModalView);
 
   const [mode, setMode] = useState<View>("signin");
   const [forgotSent, setForgotSent] = useState(false);
@@ -92,8 +93,9 @@ export default function AuthModal() {
   useEffect(() => {
     if (open) {
       setEmail(""); setPassword(""); setError("");
-      setMode("signin"); setForgotSent(false); setShowPassword(false);
+      setMode(authModalView); setForgotSent(false); setShowPassword(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const submit = async (e: React.FormEvent) => {
@@ -103,7 +105,7 @@ export default function AuthModal() {
 
     if (mode === "forgot") {
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/`,
       });
       setBusy(false);
       if (err) { setError(err.message); return; }

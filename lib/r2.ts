@@ -9,6 +9,8 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import sharp from "sharp";
 import { hashBuffer, lookupAssetHash, storeAssetHash } from "./assetCache";
+import { GUEST_MODE } from "./guestMode";
+import * as localStore from "./guest/localStorage";
 
 const execFileAsync = promisify(execFile);
 
@@ -69,12 +71,13 @@ function ext(contentType: string): string {
   return "jpg";
 }
 
-/** Upload a Buffer to R2 and return the public CDN URL. */
+/** Upload a Buffer to R2 (or local disk in guest mode) and return the public URL. */
 export async function uploadBuffer(
   buffer: Buffer,
   contentType: string,
   folder: string
 ): Promise<string> {
+  if (GUEST_MODE) return localStore.uploadBuffer(buffer, contentType, folder);
   buffer = await stripMetadata(buffer, contentType);
   const hash = hashBuffer(buffer);
   const cached = await lookupAssetHash(hash);
@@ -123,14 +126,16 @@ function fetchToBuffer(url: string, maxRedirects = 5): Promise<{ buf: Buffer; co
   });
 }
 
-/** Fetch a remote URL, upload to R2, return CDN URL. */
+/** Fetch a remote URL, upload to R2 (or local disk in guest mode), return URL. */
 export async function mirrorToR2(sourceUrl: string, folder: string): Promise<string> {
+  if (GUEST_MODE) return localStore.mirrorToStorage(sourceUrl, folder);
   const { buf, contentType } = await fetchToBuffer(sourceUrl);
   return uploadBuffer(buf, contentType, folder);
 }
 
-/** Upload a base64 data URL to R2, return CDN URL. */
+/** Upload a base64 data URL to R2 (or local disk in guest mode), return URL. */
 export async function uploadDataUrl(dataUrl: string, folder: string): Promise<string> {
+  if (GUEST_MODE) return localStore.uploadDataUrl(dataUrl, folder);
   const m = dataUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
   if (!m) throw new Error("uploadDataUrl: not a valid data URL");
   const contentType = m[1];
@@ -138,12 +143,9 @@ export async function uploadDataUrl(dataUrl: string, folder: string): Promise<st
   return uploadBuffer(buf, contentType, folder);
 }
 
-/** Resolve any URL to an R2 CDN URL:
- *  - data: → upload to R2
- *  - http (not already our CDN) → mirror to R2
- *  - already our CDN → return as-is
- */
+/** Resolve any URL to a stored URL (R2 or local disk in guest mode). */
 export async function ensureR2(url: string, folder: string): Promise<string> {
+  if (GUEST_MODE) return localStore.ensureStorage(url, folder);
   const cdnBase = process.env.R2_PUBLIC_URL ?? "";
   if (url.startsWith("data:"))        return uploadDataUrl(url, folder);
   if (cdnBase && url.startsWith(cdnBase)) return url;

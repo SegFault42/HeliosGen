@@ -10,6 +10,8 @@ import { ensureR2, uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
+import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
+import * as guestDb from "@/lib/guest/db";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -156,14 +158,6 @@ async function resolveImages(imageUrls: string[]): Promise<string[]> {
   return resolved.filter((u): u is string => u !== null);
 }
 
-// Extract user_id from the Authorization header (Bearer <access_token>)
-async function getUserId(req: NextRequest): Promise<string | null> {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return null;
-  const { data } = await supabaseAdmin.auth.getUser(token);
-  return data.user?.id ?? null;
-}
 
 export const maxDuration = 300;
 
@@ -200,8 +194,7 @@ export async function POST(req: NextRequest) {
     // image mirroring failures are non-fatal — proceed without reference images
   }
 
-  // Resolve user once — used by both Azure and Kie branches
-  const currentUserId = await getUserId(req).catch(() => null);
+  const currentUserId = await resolveUserId(req).catch(() => null);
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
@@ -300,20 +293,29 @@ export async function POST(req: NextRequest) {
         const imageUrl = await uploadBuffer(buf, "image/png", "generated");
         jobStore.set(azureTaskId, { status: "done", imageUrl });
 
-        supabaseAdmin.from("generations").insert({
-          task_id:              azureTaskId,
-          user_id:              azureUserId,
-          generation_type:      "image",
-          status:               "done",
-          image_url:            imageUrl,
-          prompt:               prompt.slice(0, 2000),
-          model,
-          aspect_ratio:         aspectRatio,
-          quality,
-          reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
-        }).then(({ error }) => {
-          if (error) console.error("[azure] supabase insert error:", error.message);
-        });
+        if (GUEST_MODE) {
+          guestDb.insertGeneration({
+            task_id: azureTaskId, user_id: azureUserId, generation_type: "image",
+            status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
+            model, aspect_ratio: aspectRatio, quality,
+            reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
+          });
+        } else {
+          supabaseAdmin.from("generations").insert({
+            task_id:              azureTaskId,
+            user_id:              azureUserId,
+            generation_type:      "image",
+            status:               "done",
+            image_url:            imageUrl,
+            prompt:               prompt.slice(0, 2000),
+            model,
+            aspect_ratio:         aspectRatio,
+            quality,
+            reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
+          }).then(({ error }) => {
+            if (error) console.error("[azure] supabase insert error:", error.message);
+          });
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[azure] background error:", msg, e);
@@ -362,7 +364,10 @@ export async function POST(req: NextRequest) {
       body:    JSON.stringify(requestBody),
     });
 
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("Invalid Kie.ai API key — please update it in Settings.");
+      throw new Error(await res.text());
+    }
     const d = await res.json();
     if (d.code !== undefined && d.code !== 200) throw new Error(d.msg ?? `API error ${d.code}`);
 
@@ -371,19 +376,27 @@ export async function POST(req: NextRequest) {
 
     jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
 
-    supabaseAdmin.from("generations").insert({
-      task_id:              taskId,
-      user_id:              currentUserId,
-      generation_type:      "image",
-      status:               "pending",
-      prompt,
-      model,
-      aspect_ratio:         aspectRatio,
-      quality,
-      reference_image_urls: r2ImageUrls,
-    }).then(({ error }) => {
-      if (error) console.error("[generate] supabase insert error:", error.message);
-    });
+    if (GUEST_MODE) {
+      guestDb.insertGeneration({
+        task_id: taskId, user_id: currentUserId, generation_type: "image",
+        status: "pending", prompt, model, aspect_ratio: aspectRatio, quality,
+        reference_image_urls: r2ImageUrls,
+      });
+    } else {
+      supabaseAdmin.from("generations").insert({
+        task_id:              taskId,
+        user_id:              currentUserId,
+        generation_type:      "image",
+        status:               "pending",
+        prompt,
+        model,
+        aspect_ratio:         aspectRatio,
+        quality,
+        reference_image_urls: r2ImageUrls,
+      }).then(({ error }) => {
+        if (error) console.error("[generate] supabase insert error:", error.message);
+      });
+    }
 
     return NextResponse.json({ taskId, referenceImageUrls: r2ImageUrls });
   } catch (e: unknown) {

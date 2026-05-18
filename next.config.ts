@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["192.168.64.2"],
   serverExternalPackages: ["undici"],
   images: {
     // Allow optimization for all HTTPS origins (R2, Replicate, etc.)

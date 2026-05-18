@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { GUEST_MODE } from "@/lib/guestMode";
+import * as guestDb from "@/lib/guest/db";
 
-// Recover job state from Supabase after a server restart (jobStore was lost).
-// Never calls kie.ai — all state arrives via callbacks.
-async function recoverFromSupabase(taskId: string): Promise<"done" | "error" | "pending" | "not_found"> {
+async function recoverJob(taskId: string): Promise<"done" | "error" | "pending" | "not_found"> {
+  if (GUEST_MODE) {
+    const gen = guestDb.recoverJob(taskId);
+    if (!gen) return "not_found";
+    if (gen.status === "done") {
+      const result = gen.video_url
+        ? { status: "done" as const, videoUrl: gen.video_url }
+        : { status: "done" as const, imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
+      jobStore.set(taskId, result);
+      return "done";
+    }
+    if (gen.status === "error") {
+      jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
+      return "error";
+    }
+    return "pending";
+  }
+
   const { data: gen } = await supabaseAdmin
     .from("generations")
     .select("status, video_url, image_url, image_urls, error_msg")
@@ -26,7 +43,6 @@ async function recoverFromSupabase(taskId: string): Promise<"done" | "error" | "
     return "error";
   }
 
-  // "pending" or any other in-progress state
   return "pending";
 }
 
@@ -49,8 +65,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: "not_found" });
   }
 
-  // For all kie.ai jobs, recover from Supabase (populated by callbacks).
-  const recovered = await recoverFromSupabase(taskId);
+  const recovered = await recoverJob(taskId);
 
   if (recovered === "done" || recovered === "error") {
     return NextResponse.json(jobStore.get(taskId)!);

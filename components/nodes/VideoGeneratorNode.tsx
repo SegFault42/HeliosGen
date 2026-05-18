@@ -668,8 +668,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
   // ── Generate ──────────────────────────────────────────────────────────────
   const generate = useCallback(async () => {
-    const { data: authData } = await createClient().auth.getSession();
-    if (!authData.session) { setAuthModalOpen(true); return; }
+    let accessToken: string;
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      accessToken = "guest";
+    } else {
+      const { data: authData } = await createClient().auth.getSession();
+      if (!authData.session) { setAuthModalOpen(true); return; }
+      accessToken = authData.session.access_token;
+    }
 
     const upstream = resolveInputs(id, nodes as Node<NodeData>[], edges);
     const maxRes = cfg.maxResources ?? 3;
@@ -797,10 +803,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         const tEnd = videoSrcNode?.data.trimEnd as number | undefined;
         if (tStart !== undefined && tEnd !== undefined) {
           try {
-            const { data: authData } = await createClient().auth.getSession();
-            const token = authData.session?.access_token;
-            const trimHeaders: Record<string, string> = { "Content-Type": "application/json" };
-            if (token) trimHeaders["Authorization"] = `Bearer ${token}`;
+            const trimHeaders: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` };
             const trimRes = await fetch("/api/trim-video", {
               method: "POST",
               headers: trimHeaders,
@@ -820,9 +823,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     // Extract first/last frames from VideoInputNode sources connected via startFrameOut/endFrameOut
     let finalStartFrameUrl = upstream.startFrameUrl;
     let finalEndFrameUrl = upstream.endFrameUrl;
-    const frameToken = authData.session?.access_token;
-    const frameHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (frameToken) frameHeaders["Authorization"] = `Bearer ${frameToken}`;
+    const frameHeaders: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` };
 
     const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame" && e.sourceHandle === "startFrameOut");
     if (sfEdge) {
@@ -913,7 +914,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     const loadingMeta2 = [...prevMeta2, thisMeta];
     updateNodeData(id, { status: "pending", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens2, generationsMeta: loadingMeta2, currentGenIdx: loadingGens2.length - 1 });
 
-    const accessToken = authData.session!.access_token;
     pendingTimerRef.current = setTimeout(async () => {
       pendingTimerRef.current = null;
       setLoading(true);

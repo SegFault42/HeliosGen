@@ -21,6 +21,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
   const edges = useWorkflowStore((s) => s.edges);
+  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -401,7 +402,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
                 Stop
               </button>
             ) : (
-              <GenerateButton onClick={handleGenerate} disabled={!hasPrompt} />
+              <GenerateButton onClick={handleGenerate} disabled={!hasPrompt || kieKeySet === false} />
             )}
           </div>
         </div>

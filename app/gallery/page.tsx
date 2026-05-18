@@ -13,6 +13,16 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { QuickAssist } from "@/components/QuickAssist";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 
+function randomUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 function thumbSrc(url: string, w = 128): string {
   if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
   return `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`;
@@ -553,6 +563,11 @@ function GalleryInner() {
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") {
+      setUser({ id: "guest" } as unknown as User);
+      setAuthLoaded(true);
+      return;
+    }
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -631,8 +646,9 @@ function GalleryInner() {
   }, []);
 
   useEffect(() => {
-    if (!authLoaded || kieKeySet === null) return;
-    if (user) loadItems(tab, 0, true);
+    if (!authLoaded) return;
+    if (kieKeySet === null && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") return;
+    loadItems(tab, 0, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoaded, kieKeySet]);
 
@@ -815,7 +831,7 @@ function GalleryInner() {
     if (toAdd.length === 0) return;
 
     const newEntries: RefImage[] = toAdd.map(f => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       objectUrl: URL.createObjectURL(f),
       cdnUrl: null,
       uploading: true,
@@ -888,7 +904,7 @@ function GalleryInner() {
     if (toAdd.length === 0) return;
 
     const newEntries: RefImage[] = toAdd.map(f => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       objectUrl: URL.createObjectURL(f),
       cdnUrl: null,
       uploading: true,
@@ -976,15 +992,15 @@ function GalleryInner() {
     if (pickerTarget === "resource") {
       if (isDup(vidResources)) { showDup(); return; }
       if (modelId === "happyhorse") setVidStartFrame(null);
-      setVidResources(prev => [...prev, { id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
+      setVidResources(prev => [...prev, { id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
       return;
     }
     if (pickerTarget === "referenceVideo") {
       if (isDup(vidRefVideos)) { showDup(); return; }
-      setVidRefVideos(prev => [...prev, { id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
+      setVidRefVideos(prev => [...prev, { id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
       return;
     }
-    const entry: RefImage = { id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false };
+    const entry: RefImage = { id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false };
     if (pickerTarget === "startFrame") {
       setVidStartFrame(entry);
       if (modelId === "happyhorse") setVidResources([]);
@@ -1151,12 +1167,13 @@ function GalleryInner() {
   };
 
   const generate = async () => {
+    if (kieKeySet === false) return;
     if (!prompt.trim() && !isVideo) return;
     if (refImages.some(r => r.uploading)) { setGenError("Images still uploading…"); setTimeout(() => setGenError(""), 3_000); return; }
     if (isVideo && [vidStartFrame, vidEndFrame, vidVideoRef, ...vidResources, ...vidRefVideos, ...vidRefAudios].some(r => r?.uploading)) {
       setGenError("References still uploading…"); setTimeout(() => setGenError(""), 3_000); return;
     }
-    if (!user) {
+    if (!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") {
       setAuthModalOpen(true);
       return;
     }
@@ -1165,7 +1182,7 @@ function GalleryInner() {
     const n = isVideo ? 1 : count;
     const snapshotRefUrls = [...new Set(refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!))];
     const newPendings: PendingGen[] = Array.from({ length: n }, () => ({
-      id: crypto.randomUUID(), aspectRatio, prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(), tab, prePending: true,
+      id: randomUUID(), aspectRatio, prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(), tab, prePending: true,
     }));
     setPendingGens(prev => [...prev, ...newPendings]);
 
@@ -1418,12 +1435,12 @@ function GalleryInner() {
       return;
     }
     if (refImages.length >= maxImgs) return;
-    setRefImages(prev => [...prev, { id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
+    setRefImages(prev => [...prev, { id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false }]);
   }, [refImages, maxImgs]);
 
   const handleCopyPrompt = useCallback((text: string, refUrls?: string[]) => {
     const newRefs = (refUrls ?? []).map(url => ({
-      id: crypto.randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false,
+      id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false,
     }));
 
     let processedText = text;
@@ -1524,7 +1541,7 @@ function GalleryInner() {
   const handleDownload = useCallback(async (url: string, itemIsVideo: boolean): Promise<void> => {
     const ext = itemIsVideo ? "mp4" : "jpg";
     const filename = `${Date.now()}.${ext}`;
-    const taskId = crypto.randomUUID();
+    const taskId = randomUUID();
     setDownloads(prev => [...prev, { id: taskId, filename, status: "preparing" }]);
     try {
       const res = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${filename}`);
@@ -1800,7 +1817,7 @@ function GalleryInner() {
       </div>}
 
       {/* ── Grid ── */}
-      {!user ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
+      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px", display: "flex", flexDirection: "column" }}>
         {loading || containerWidth === 0 ? (
           /* Skeleton — shown while loading or before container is measured */
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${zoom}, 1fr)`, gap: "1px", padding: "1px", alignItems: "start" }}>
@@ -1809,7 +1826,7 @@ function GalleryInner() {
             ))}
           </div>
         ) : filteredItems.length === 0 && (sourceFilter !== "generated" || pendingGens.filter(pg => pg.tab == null || pg.tab === tab).length === 0) ? (
-          <EmptyState tab={tab} />
+          <GalleryLoggedOut tab={tab} />
         ) : (
           <div ref={gridRef} style={{ padding: "1px" }}>
             {justifiedRows.map((row, rowIdx) => (
@@ -1851,7 +1868,7 @@ function GalleryInner() {
                                 </svg>
                               </button>
                               <button className="gallery-action-btn" title="Retry" onClick={async () => {
-                                const newId = crypto.randomUUID();
+                                const newId = randomUUID();
                                 const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: new Date().toISOString(), tab: pg.tab };
                                 setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
                                 const token = await getToken();
@@ -2971,7 +2988,7 @@ function ElementPickerModal({
     );
     if (!toAdd.length) return;
     const newEntries = toAdd.map(f => ({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       objectUrl: URL.createObjectURL(f),
       cdnUrl: null as string | null,
       uploading: true,
@@ -3006,7 +3023,7 @@ function ElementPickerModal({
     if (!canCreate) return;
     setCreating(true);
     const newEl: KlingElement = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name: createName.trim(),
       description: createDesc.trim(),
       imageUrls: readyImages.map(e => e.cdnUrl!),

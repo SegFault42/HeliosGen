@@ -5,7 +5,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 // Always overwrite — the old key is the source of truth if it still exists,
 // because the new key may only contain an empty placeholder written before
 // the DB load restored the real workflows.
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") {
   const old = localStorage.getItem("ai-workflow");
   if (old) {
     localStorage.setItem("heliosgen", old);
@@ -202,6 +202,8 @@ interface WorkflowStore {
   setSettingsOpen:           (v: boolean) => void;
   authModalOpen:             boolean;
   setAuthModalOpen:          (v: boolean) => void;
+  authModalView:             "signin" | "signup" | "forgot";
+  setAuthModalView:          (v: "signin" | "signup" | "forgot") => void;
   resetPasswordModalOpen:    boolean;
   setResetPasswordModalOpen: (v: boolean) => void;
   showDashboard:             boolean;
@@ -212,6 +214,7 @@ interface WorkflowStore {
   setSidebarCollapsed:       (v: boolean) => void;
   saveViewport: (viewport: { x: number; y: number; zoom: number }) => void;
   loadSpacesFromDB: (spaces: Space[]) => void;
+  clearLocalData: () => void;
 
   // ── Per-type node defaults (last-used params)
   nodeDefaults: {
@@ -618,6 +621,19 @@ export const useWorkflowStore = create<WorkflowStore>()(
             };
           }),
 
+        clearLocalData: () => {
+          const fresh = makeSpace("Space 1");
+          set({
+            spaces:        [fresh],
+            activeSpaceId: fresh.id,
+            nodes:         [],
+            edges:         [],
+            nodeCounters:  {},
+            undoStack:     [],
+            redoStack:     [],
+          });
+        },
+
         toasts: [],
         addToast: (message, type = "error") =>
           set((s) => {
@@ -634,6 +650,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
         setSettingsOpen:           (v) => set({ settingsOpen: v }),
         authModalOpen:             false,
         setAuthModalOpen:          (v) => set({ authModalOpen: v }),
+        authModalView:             "signin",
+        setAuthModalView:          (v) => set({ authModalView: v }),
         resetPasswordModalOpen:    false,
         setResetPasswordModalOpen: (v) => set({ resetPasswordModalOpen: v }),
         showDashboard:             true,
@@ -645,7 +663,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
       };
     },
     {
-      name: "heliosgen",
+      name: process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? "heliosgen-guest" : "heliosgen",
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         spaces: s.spaces.map((sp) => ({

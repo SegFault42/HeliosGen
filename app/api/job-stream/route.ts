@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { GUEST_MODE } from "@/lib/guestMode";
+import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -15,7 +17,20 @@ function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
 }
 
-async function recoverFromSupabase(taskId: string): Promise<JobResult | null> {
+async function recoverJob(taskId: string): Promise<JobResult | null> {
+  if (GUEST_MODE) {
+    const gen = guestDb.recoverJob(taskId);
+    if (gen?.status === "done") {
+      return gen.video_url
+        ? { status: "done", videoUrl: gen.video_url }
+        : { status: "done", imageUrl: gen.image_url ?? undefined, imageUrls: gen.image_urls ?? undefined };
+    }
+    if (gen?.status === "error") {
+      return { status: "error", error: gen.error_msg ?? "Generation failed" };
+    }
+    return null;
+  }
+
   const { data: gen } = await supabaseAdmin
     .from("generations")
     .select("status, video_url, image_url, image_urls, error_msg")
@@ -30,7 +45,7 @@ async function recoverFromSupabase(taskId: string): Promise<JobResult | null> {
   if (gen?.status === "error") {
     return { status: "error", error: gen.error_msg ?? "Generation failed" };
   }
-  return null; // pending or not found
+  return null;
 }
 
 export async function GET(req: NextRequest) {
@@ -43,9 +58,8 @@ export async function GET(req: NextRequest) {
     return immediate(existing);
   }
 
-  // Not in jobStore (server restarted) — try Supabase before opening a stream
   if (!existing) {
-    const recovered = await recoverFromSupabase(taskId);
+    const recovered = await recoverJob(taskId);
     if (recovered) {
       jobStore.set(taskId, recovered);
       return immediate(recovered);

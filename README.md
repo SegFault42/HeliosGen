@@ -172,8 +172,8 @@ Just workflows.
 |---|---|
 | Frontend | Next.js + React + TypeScript |
 | Backend | Next.js API Routes |
-| Database | Supabase |
-| Storage | Cloudflare R2 |
+| Database | Supabase (cloud) / JSON file (guest) |
+| Storage | Cloudflare R2 (cloud) / Local disk (guest) |
 | AI Backend | Kie.ai |
 | Deployment | Vercel / Railway / Render |
 
@@ -181,227 +181,160 @@ Just workflows.
 
 # 🚀 Getting Started
 
-## 1. Clone the repository
+HeliosGen supports two setup modes depending on your needs.
+
+| | Guest Mode | Cloud Mode |
+|---|---|---|
+| **Setup time** | ~2 minutes | ~20 minutes |
+| **Kie.ai API key** | ✅ Required | ✅ Required |
+| **ngrok** | ✅ Required | Not needed |
+| **Supabase** | ❌ Not needed | ✅ Required |
+| **Cloudflare R2** | ❌ Not needed | ✅ Required |
+| **Multi-user** | ❌ Single guest user | ✅ Full auth |
+| **Persistence** | Local disk + JSON | Cloud DB + CDN |
+| **Best for** | Local dev & testing | Production & sharing |
+
+---
+
+## Step 1 — Clone & install
 
 ```bash
 git clone https://github.com/SegFault42/HeliosGen
 cd HeliosGen
+npm install
 ```
 
 ---
 
-## 2. Install dependencies
+## Step 2 — Choose your setup
+
+---
+
+### 🏠 Guest Mode (local, no cloud accounts needed)
+
+**Requirements:** a [Kie.ai](https://kie.ai) API key and [ngrok](https://ngrok.com).
+
+Generated files are saved to `public/generated/` and served as static assets.
+History is stored in `data/guest-db.json` and survives server restarts.
+
+**1. Copy the guest environment template**
 
 ```bash
-pnpm install
+cp .env.guest .env.local
 ```
 
----
-
-## 3. Configure environment variables
-
-Create a `.env.local` file:
+**2. Fill in your values**
 
 ```env
-# ─────────────────────────────────────────────────────────────
-# Supabase
-# ─────────────────────────────────────────────────────────────
-
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-
-# ─────────────────────────────────────────────────────────────
-# Cloudflare R2
-# ─────────────────────────────────────────────────────────────
-
-R2_ACCOUNT_ID=your_cloudflare_account_id
-R2_ACCESS_KEY_ID=your_r2_access_key_id
-R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
-R2_BUCKET_NAME=your_bucket_name
-
-# Public CDN URL
-R2_PUBLIC_URL=https://pub-xxxxxxxxxxxx.r2.dev
-
-# ─────────────────────────────────────────────────────────────
-# Kie.ai
-# ─────────────────────────────────────────────────────────────
-
-# Public webhook URL
-CALLBACK_BASE_URL=https://your-public-url.com
-
-# Optional shared fallback key
-KIE_API_TOKEN=your_kie_api_token
-
-# ─────────────────────────────────────────────────────────────
-# Azure OpenAI (Optional)
-# ─────────────────────────────────────────────────────────────
-
-AZURE_API_KEY=your_azure_api_key
+GUEST_MODE=true
+KIE_API_KEY=your_kie_api_key_here
+CALLBACK_BASE_URL=https://xxxx.ngrok-free.app
 ```
 
----
-
-# 🗄️ Supabase Setup
-
-## Create a project
-
-Create a new Supabase project and copy:
-
-- Project URL
-- Anon Key
-- Service Role Key
-
-Into your `.env.local`.
-
----
-
-## Enable email authentication
-
-Go to:
-
-```txt
-Authentication → Providers → Email
-```
-
-And enable Email Auth.
-
----
-
-## Run the SQL schema
-
-Open the SQL editor and run:
-
-```txt
-supabase-setup.sql
-```
-
-### Tables created
-
-| Table | Description |
-|---|---|
-| `spaces` | Stores workflow canvases |
-| `generations` | Image/video generation history |
-| `user_uploads` | Uploaded assets |
-| `user_settings` | Secure user API keys |
-| `asset_cache` | Deduplication cache for uploaded assets |
-
----
-
-# ☁️ Cloudflare R2 Setup
-
-HeliosGen stores uploads, generations, references, and videos inside R2 using the S3-compatible API.
-
-## Setup steps
-
-1. Create a bucket
-2. Enable public access
-3. Create R2 API tokens
-4. Copy your Account ID
-5. Add credentials to `.env.local`
-
----
-
-## Storage structure
-
-| Path | Purpose |
-|---|---|
-| `uploads/` | User uploads |
-| `references/` | Reference images |
-| `generated/` | Generated images |
-| `videos/` | Generated videos |
-
----
-
-# 🤖 Kie.ai Setup
-
-Kie.ai powers all AI generations.
-
-Users can either:
-
-- Use their own API key (recommended)
-- Or fallback to your shared server key
-
----
-
-## Webhook Configuration
-
-Kie.ai sends completed generations to:
-
-```txt
-/api/callback
-```
-
-### Local development
+**3. Start ngrok** (in a separate terminal)
 
 ```bash
 ngrok http 3000
 ```
 
-Then set:
+Copy the `https://xxxx.ngrok-free.app` URL into `CALLBACK_BASE_URL`.
 
-```env
-CALLBACK_BASE_URL=https://your-ngrok-url.ngrok-free.app
+**4. Run the app**
+
+```bash
+npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000) — no login required, gallery persists automatically.
 
 ---
 
-## Production
+### ☁️ Cloud Mode (Supabase + R2, for production or multi-user)
+
+**Requirements:** [Kie.ai](https://kie.ai) API key, [Supabase](https://supabase.com) project, and [Cloudflare R2](https://developers.cloudflare.com/r2/) bucket.
+
+#### Supabase setup
+
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to **Settings → API** and copy your Project URL, Anon Key, and Service Role Key
+3. Go to **Authentication → Providers → Email** and enable Email Auth
+4. Open the **SQL Editor** and run the contents of `supabase-setup.sql`
+
+Tables created:
+
+| Table | Description |
+|---|---|
+| `spaces` | Workflow canvases |
+| `generations` | Image/video generation history |
+| `user_uploads` | Uploaded assets |
+| `user_settings` | Per-user API keys |
+| `asset_cache` | Deduplication cache |
+
+#### Cloudflare R2 setup
+
+1. Create a bucket in the Cloudflare dashboard
+2. Enable **Public Access** on the bucket
+3. Go to **R2 → Manage R2 API Tokens** and create a token with Object Read & Write
+4. Copy your Account ID, Access Key, Secret Key, Bucket Name, and Public CDN URL
+
+#### Environment variables
+
+Create a `.env.local` file:
 
 ```env
+# Kie.ai
 CALLBACK_BASE_URL=https://your-domain.com
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key_id
+R2_SECRET_ACCESS_KEY=your_r2_secret_access_key
+R2_BUCKET_NAME=your_bucket_name
+R2_PUBLIC_URL=https://pub-xxxxxxxxxxxx.r2.dev
+
+# Azure OpenAI (optional — for GPT Image 2 and similar models)
+AZURE_API_KEY=your_azure_api_key
 ```
+
+#### Local development with ngrok
+
+```bash
+ngrok http 3000
+```
+
+Set `CALLBACK_BASE_URL` to your ngrok URL during local dev.
+
+#### Run the app
+
+```bash
+npm run dev
+```
+
+Users sign in with email/password, enter their own Kie.ai API key in Settings, and generations are stored in Supabase + R2.
 
 ---
 
-# ▶️ Run the project
-
-## Development
-
-```bash
-pnpm run dev
-```
-
-## Production
-
-```bash
-pnpm run build
-pnpm start
-```
-
-App runs on:
-
-```txt
-http://localhost:3000
-```
-
----
-
-# 🌍 Deployment
+# 🌍 Deployment (Cloud Mode)
 
 HeliosGen can be deployed anywhere that supports Node.js.
 
 ## Recommended: Vercel
 
-1. Import the repository
-2. Add environment variables
-3. Deploy
-
-Set:
-
-```env
-CALLBACK_BASE_URL=https://your-vercel-domain.vercel.app
-```
-
----
+1. Import the repository into Vercel
+2. Add all environment variables from your `.env.local`
+3. Set `CALLBACK_BASE_URL=https://your-vercel-domain.vercel.app`
+4. Deploy
 
 ## Other platforms
 
 - Railway
 - Render
 - Fly.io
-
-Use:
 
 ```bash
 npm run build && npm start
