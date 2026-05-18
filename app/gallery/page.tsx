@@ -1807,7 +1807,7 @@ function GalleryInner() {
       </div>}
 
       {/* ── Grid ── */}
-      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px" }}>
+      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px", display: "flex", flexDirection: "column" }}>
         {loading || containerWidth === 0 ? (
           /* Skeleton — shown while loading or before container is measured */
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${zoom}, 1fr)`, gap: "1px", padding: "1px", alignItems: "start" }}>
@@ -1816,7 +1816,7 @@ function GalleryInner() {
             ))}
           </div>
         ) : filteredItems.length === 0 && (sourceFilter !== "generated" || pendingGens.filter(pg => pg.tab == null || pg.tab === tab).length === 0) ? (
-          <EmptyState tab={tab} />
+          <GalleryLoggedOut tab={tab} />
         ) : (
           <div ref={gridRef} style={{ padding: "1px" }}>
             {justifiedRows.map((row, rowIdx) => (

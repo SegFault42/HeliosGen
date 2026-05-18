@@ -393,30 +393,33 @@ export function AppSidebar() {
             {/* Settings */}
             <DropdownMenuItem
               className="rounded-none px-4 py-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-              onClick={() => user ? setSettingsOpen(true) : setAuthModalOpen(true)}
+              onClick={() => (user || process.env.NEXT_PUBLIC_GUEST_MODE === "true") ? setSettingsOpen(true) : setAuthModalOpen(true)}
             >
               Settings
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
-
-            {/* Sign out / Sign in */}
-            {user ? (
-              <DropdownMenuItem
-                className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                onClick={signOut}
-              >
-                <LogOut size={14} className="mr-2 opacity-60" />
-                Sign out
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
-                onClick={() => setAuthModalOpen(true)}
-              >
-                <UserIcon size={14} className="mr-2 opacity-60" />
-                Sign in
-              </DropdownMenuItem>
+            {/* Sign out / Sign in — hidden in guest mode */}
+            {process.env.NEXT_PUBLIC_GUEST_MODE !== "true" && (
+              <>
+                <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
+                {user ? (
+                  <DropdownMenuItem
+                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+                    onClick={signOut}
+                  >
+                    <LogOut size={14} className="mr-2 opacity-60" />
+                    Sign out
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+                    onClick={() => setAuthModalOpen(true)}
+                  >
+                    <UserIcon size={14} className="mr-2 opacity-60" />
+                    Sign in
+                  </DropdownMenuItem>
+                )}
+              </>
             )}
           </DropdownMenuContent>
 
