@@ -173,7 +173,7 @@ export function QuickAssist() {
 
   const isEmpty = messages.length === 0;
 
-  if (!user) return null;
+  if (!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true") return null;
 
   return (
     <div ref={containerRef}>

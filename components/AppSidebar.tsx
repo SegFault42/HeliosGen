@@ -129,8 +129,10 @@ export function AppSidebar() {
   const [balance, setBalance] = React.useState<number | null>(null);
 
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const setSettingsOpen = useWorkflowStore((s) => s.setSettingsOpen);
-  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
+  const setSettingsOpen  = useWorkflowStore((s) => s.setSettingsOpen);
+  const setKieKeySet     = useWorkflowStore((s) => s.setKieKeySet);
+  const clearLocalData   = useWorkflowStore((s) => s.clearLocalData);
+  const clearSessions    = useChatSessionStore((s) => s.clearSessions);
   const supabase = createClient();
 
   React.useEffect(() => {
@@ -145,7 +147,7 @@ export function AppSidebar() {
       setUser(data.user);
       if (data.user) useChatSessionStore.getState().loadFromSupabase();
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.access_token) {
         fetch("/api/settings/kie-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
@@ -155,6 +157,10 @@ export function AppSidebar() {
         useChatSessionStore.getState().loadFromSupabase();
       } else {
         setKieKeySet(null);
+        if (event === "SIGNED_OUT") {
+          clearLocalData();
+          clearSessions();
+        }
       }
     });
     return () => subscription.unsubscribe();
@@ -182,9 +188,15 @@ export function AppSidebar() {
     return () => { clearInterval(id); window.removeEventListener("credits-refresh", fetchBalance); };
   }, [supabase]);
 
-  const signOut = async () => { await supabase.auth.signOut(); setUser(null); };
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    clearLocalData();
+    clearSessions();
+  };
 
-  const { sessions, deleteSession } = useChatSessionStore();
+  const { sessions: allSessions, deleteSession } = useChatSessionStore();
+  const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
+  const sessions = (user || isGuestMode) ? allSessions : [];
 
   function startNewChat() {
     router.push("/chat");

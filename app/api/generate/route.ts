@@ -364,7 +364,10 @@ export async function POST(req: NextRequest) {
       body:    JSON.stringify(requestBody),
     });
 
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("Invalid Kie.ai API key — please update it in Settings.");
+      throw new Error(await res.text());
+    }
     const d = await res.json();
     if (d.code !== undefined && d.code !== 200) throw new Error(d.msg ?? `API error ${d.code}`);
 

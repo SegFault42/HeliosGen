@@ -2,32 +2,44 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
+import { useChatSessionStore } from "@/lib/chatSessionStore";
 import type { User } from "@supabase/supabase-js";
 
 export default function AuthButton() {
   const [user, setUser]       = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const setAuthModalOpen           = useWorkflowStore((s) => s.setAuthModalOpen);
+  const setAuthModalView           = useWorkflowStore((s) => s.setAuthModalView);
   const setResetPasswordModalOpen  = useWorkflowStore((s) => s.setResetPasswordModalOpen);
+  const addToast                   = useWorkflowStore((s) => s.addToast);
+  const clearLocalData             = useWorkflowStore((s) => s.clearLocalData);
+  const clearSessions              = useChatSessionStore((s) => s.clearSessions);
   const supabase                   = createClient();
 
   useEffect(() => {
-    // If the page loaded from a Supabase recovery link, establish the session
-    // from the hash tokens and open the reset modal.
-    // onAuthStateChange may fire before the listener is registered, so we also
-    // handle this synchronously on mount.
-    if (window.location.hash.includes("type=recovery")) {
-      const params        = new URLSearchParams(window.location.hash.slice(1));
+    // Handle Supabase auth hash params on page load.
+    const hash   = window.location.hash.slice(1);
+    const params = new URLSearchParams(hash);
+
+    if (params.get("type") === "recovery") {
+      // Valid recovery link — establish session then open the reset modal.
       const access_token  = params.get("access_token");
       const refresh_token = params.get("refresh_token");
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
       if (access_token && refresh_token) {
-        // Establish the session so updateUser works in the modal
         supabase.auth.setSession({ access_token, refresh_token }).then(() => {
           setResetPasswordModalOpen(true);
         });
       } else {
         setResetPasswordModalOpen(true);
       }
+    } else if (params.get("error")) {
+      // Supabase returned an auth error (e.g. expired OTP).
+      // Open the forgot-password flow so they can request a new link.
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      addToast("Reset link expired — please request a new one.", "info");
+      setAuthModalView("forgot");
+      setAuthModalOpen(true);
     }
 
     supabase.auth.getUser().then(({ data }) => {
@@ -46,6 +58,8 @@ export default function AuthButton() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    clearLocalData();
+    clearSessions();
     setUser(null);
   };
 

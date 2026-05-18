@@ -15,7 +15,7 @@ import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 
 function randomUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return randomUUID();
+    return crypto.randomUUID();
   }
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;

@@ -24,6 +24,7 @@ interface ChatSessionState {
   upsertSession: (id: string, messages: StoredMessage[], model: string) => void;
   deleteSession: (id: string) => void;
   loadFromSupabase: () => Promise<void>;
+  clearSessions: () => void;
 }
 
 async function getAuthenticatedUser() {
@@ -97,6 +98,8 @@ export const useChatSessionStore = create<ChatSessionState>()(
         });
       },
 
+      clearSessions: () => set({ sessions: [] }),
+
       loadFromSupabase: async () => {
         const { supabase, user } = await getAuthenticatedUser();
         if (!user) return;
@@ -149,7 +152,7 @@ export const useChatSessionStore = create<ChatSessionState>()(
       },
     }),
     {
-      name: "heliosgen-chats",
+      name: process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? "heliosgen-chats-guest" : "heliosgen-chats",
       storage: createJSONStorage(() => localStorage),
     }
   )

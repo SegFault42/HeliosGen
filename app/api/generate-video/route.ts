@@ -304,6 +304,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (!createRes.ok) {
+    if (createRes.status === 401) {
+      return NextResponse.json({ error: "Invalid Kie.ai API key — please update it in Settings." }, { status: 401 });
+    }
     const errText = await createRes.text();
     console.error("[generate-video] kie.ai HTTP error:", createRes.status, errText);
     return NextResponse.json({ error: errText }, { status: 500 });

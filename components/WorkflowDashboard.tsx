@@ -544,9 +544,11 @@ export default function WorkflowDashboard() {
     router.push(`/workflow/${newId}`);
   };
 
-  const sorted = [...spaces]
-    .filter((sp) => sp.nodes.length > 0)
-    .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+  const sorted = user
+    ? [...spaces]
+        .filter((sp) => sp.nodes.length > 0)
+        .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt))
+    : [];
 
   return (
     <div

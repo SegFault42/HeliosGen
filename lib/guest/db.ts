@@ -142,7 +142,12 @@ export function storeAssetHash(hash: string, cdnUrl: string, mimeType: string, b
 // ── Settings ───────────────────────────────────────────────────────────────
 
 export function getKieApiToken(): string | null {
-  return read().settings?.kie_api_token ?? process.env.KIE_API_KEY ?? null;
+  const dbToken = read().settings?.kie_api_token;
+  if (dbToken) return dbToken;
+  const envToken = process.env.KIE_API_KEY ?? "";
+  // Reject the template placeholder that ships in .env.guest
+  if (!envToken || envToken === "your_kie_api_key_here") return null;
+  return envToken;
 }
 
 export function setKieApiToken(token: string): void {
