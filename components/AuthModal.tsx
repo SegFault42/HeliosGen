@@ -3,6 +3,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type View = "signin" | "signup" | "forgot";
 
@@ -69,6 +70,7 @@ export default function AuthModal() {
   const [visible, setVisible] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
+  const isMobile = useIsMobile();
 
   // Mount → paint → fade in; fade out → unmount
   useEffect(() => {
@@ -143,23 +145,24 @@ export default function AuthModal() {
     >
       <div style={{
         display: "flex",
-        width: "780px",
+        width: isMobile ? "100%" : "780px",
         transform: visible ? "translateY(0) scale(1)" : "translateY(12px) scale(0.97)",
         opacity: visible ? 1 : 0,
         transition: `transform ${ANIM_MS}ms cubic-bezier(0.16,1,0.3,1), opacity ${ANIM_MS}ms ease`,
-        maxWidth: "calc(100vw - 32px)",
-        borderRadius: "18px",
+        maxWidth: isMobile ? "calc(100vw - 24px)" : "calc(100vw - 32px)",
+        borderRadius: "16px",
         overflow: "hidden",
         boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
         border: "1px solid rgba(255,255,255,0.07)",
       }}>
 
-        {/* ── Left brand panel ── */}
+        {/* ── Left brand panel (desktop only) ── */}
         <div style={{
           width: "320px",
           flexShrink: 0,
           position: "relative",
           overflow: "hidden",
+          display: isMobile ? "none" : undefined,
         }}>
           {/* Full-size static image */}
           <img
@@ -199,7 +202,7 @@ export default function AuthModal() {
         <div style={{
           flex: 1,
           background: "#161a1f",
-          padding: "28px 32px 28px",
+          padding: isMobile ? "20px 18px" : "28px 32px 28px",
           display: "flex",
           flexDirection: "column",
         }}>
@@ -213,7 +216,7 @@ export default function AuthModal() {
                 {mode === "forgot" ? "RESET PASSWORD" : mode === "signup" ? "CREATE ACCOUNT" : "WELCOME BACK"}
               </p>
               <h2 style={{
-                fontSize: "24px", fontWeight: 700, color: "#fff",
+                fontSize: isMobile ? "20px" : "24px", fontWeight: 700, color: "#fff",
                 letterSpacing: "-0.02em", lineHeight: 1.2,
               }}>
                 {mode === "forgot"
@@ -285,9 +288,10 @@ export default function AuthModal() {
                   value={email}
                   onChange={setEmail}
                   autoFocus
+                  compact={isMobile}
                 />
                 {error && <ErrorMsg text={error} />}
-                <PrimaryButton busy={busy} label="Send reset link" />
+                <PrimaryButton busy={busy} label="Send reset link" compact={isMobile} />
                 <div style={{ textAlign: "center" }}>
                   <button
                     type="button"
@@ -316,6 +320,7 @@ export default function AuthModal() {
                   value={email}
                   onChange={setEmail}
                   autoFocus
+                  compact={isMobile}
                 />
               </div>
 
@@ -327,6 +332,7 @@ export default function AuthModal() {
                   placeholder="••••••••••"
                   value={password}
                   onChange={setPassword}
+                  compact={isMobile}
                   suffix={
                     <button
                       type="button"
@@ -358,6 +364,7 @@ export default function AuthModal() {
                 busy={busy}
                 label={mode === "signin" ? "Sign in" : "Create account"}
                 arrow
+                compact={isMobile}
               />
 
               {/* Footer link */}
@@ -435,7 +442,7 @@ function FieldLabel({ label }: { label: string }) {
 }
 
 function InputWithIcon({
-  icon, type, placeholder, value, onChange, autoFocus, suffix,
+  icon, type, placeholder, value, onChange, autoFocus, suffix, compact,
 }: {
   icon: React.ReactNode;
   type: string;
@@ -444,6 +451,7 @@ function InputWithIcon({
   onChange: (v: string) => void;
   autoFocus?: boolean;
   suffix?: React.ReactNode;
+  compact?: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -452,7 +460,7 @@ function InputWithIcon({
       background: "#0e1116",
       border: `1px solid ${focused ? "rgba(45,212,191,0.5)" : "rgba(255,255,255,0.08)"}`,
       borderRadius: "10px", padding: "0 14px",
-      height: "46px",
+      height: compact ? "40px" : "46px",
       transition: "border-color 150ms",
     }}>
       <span style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0, display: "flex" }}>{icon}</span>
@@ -476,13 +484,13 @@ function InputWithIcon({
   );
 }
 
-function PrimaryButton({ busy, label, arrow }: { busy: boolean; label: string; arrow?: boolean }) {
+function PrimaryButton({ busy, label, arrow, compact }: { busy: boolean; label: string; arrow?: boolean; compact?: boolean }) {
   return (
     <button
       type="submit"
       disabled={busy}
       style={{
-        width: "100%", height: "48px", borderRadius: "12px", border: "none",
+        width: "100%", height: compact ? "42px" : "48px", borderRadius: "12px", border: "none",
         background: busy ? "rgba(45,212,191,0.5)" : "#2DD4BF",
         color: "#000", fontSize: "15px", fontWeight: 600,
         cursor: busy ? "not-allowed" : "pointer",

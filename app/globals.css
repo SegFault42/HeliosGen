@@ -15,6 +15,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Prevent iOS Safari zoom on input focus ─────────── */
+@media (max-width: 767px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* ── Node design system ──────────────────────────────── */
 .node-card {
   background: #141820;
