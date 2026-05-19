@@ -597,13 +597,16 @@ export const useWorkflowStore = create<WorkflowStore>()(
             // Build a lookup of local spaces by id
             const localById = new Map(s.spaces.map((sp) => [sp.id, sp]));
 
-            // For each DB space, prefer whichever version is newer (local wins on tie)
+            // For each DB space, prefer whichever version is newer (local wins on tie).
+            // Always take isPublic from DB — it's set server-side via the publish API
+            // and the DB is the authoritative source for it.
             const merged = dbSpaces.map((dbSp) => {
               const local = localById.get(dbSp.id);
               if (!local) return dbSp;
               const localTs = local.updatedAt ?? local.createdAt ?? 0;
               const dbTs    = dbSp.updatedAt  ?? dbSp.createdAt  ?? 0;
-              return localTs >= dbTs ? local : dbSp;
+              const base = localTs >= dbTs ? local : dbSp;
+              return { ...base, isPublic: dbSp.isPublic };
             });
 
             // Add local-only spaces (not yet in DB).

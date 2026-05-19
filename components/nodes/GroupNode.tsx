@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NodeProps, Node, useReactFlow, NodeResizeControl, NodeToolbar, Position } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { useReadOnly } from "@/lib/readOnlyContext";
 import { arrangeNodes } from "@/lib/arrangeNodes";
 import { usePipelineRunner } from "@/lib/usePipelineRunner";
 import { makeZip } from "@/lib/makeZip";
@@ -168,6 +169,7 @@ function InlineWarning({ messages }: { messages: string[] }) {
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
+  const readOnly = useReadOnly();
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize  = useWorkflowStore((s) => s.updateNodeSize);
   const onNodesChange   = useWorkflowStore((s) => s.onNodesChange);
@@ -335,7 +337,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [runDropdownOpen]);
-  const toolbarVisible = !!selected;
+  const toolbarVisible = !!selected && !readOnly;
 
   // ── Ungroup ──────────────────────────────────────────────────────────────
   const handleUngroup = useCallback(() => {
