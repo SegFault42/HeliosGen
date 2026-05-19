@@ -14,14 +14,35 @@
 ---
 
 # 📸 Screenshots
+## ✨ Simple Image & Video Generation
 
 <p align="center">
-  <img width="2912" height="2292" alt="Image" src="https://github.com/user-attachments/assets/f9bd5a48-3a3d-4b1a-a6d9-2e5f359c8b95" />
-
-  <img width="1459" height="1146" alt="Image" src="https://github.com/user-attachments/assets/1e6e6b2d-672d-4307-9db6-d8a3f29beee7" />
+  <img width="2912" height="2292" alt="Image generation example" src="https://github.com/user-attachments/assets/f9bd5a48-3a3d-4b1a-a6d9-2e5f359c8b95" />
 </p>
 
 ---
+
+## 🔄 Workflow Generation
+
+<p align="center">
+  <img width="1459" height="1146" alt="Workflow generation example" src="https://github.com/user-attachments/assets/1e6e6b2d-672d-4307-9db6-d8a3f29beee7" />
+</p>
+
+---
+
+## 🧠 Native JSON Prompt Preview
+
+<p align="center">
+  <img width="886" height="463" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/9d5649a4-989c-450b-959b-1a8f26f678b5" />
+</p>
+
+---
+
+## 💬 AI Prompt Improvement Assistant
+
+<p align="center">
+  <img width="872" height="502" alt="Prompt assistant interface" src="https://github.com/user-attachments/assets/17ba972c-bd8a-49a7-b367-4ef906fe3e17" />
+</p>
 
 # ✨ HeliosGen
 
@@ -215,3 +236,4 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
+
