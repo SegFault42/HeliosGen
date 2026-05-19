@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   // Treat a non-200 top-level code as a hard error (e.g. Veo 500 responses that
   // carry no state/status field but do carry body.code and body.msg).
   if (body.code !== undefined && body.code !== 200) {
-    const error = body.msg ?? data.failMsg ?? "Generation failed";
+    const error = data.failMsg ?? body.msg ?? "Generation failed";
     console.log("[callback] top-level error code:", body.code, error);
     settle(taskId, { status: "error", error });
     if (GUEST_MODE) {

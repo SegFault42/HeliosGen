@@ -14,6 +14,7 @@ import { useReadOnly } from "@/lib/readOnlyContext";
 
 type GenerateNodeType = Node<NodeData, "generateNode">;
 
+import { ShieldBan } from "lucide-react";
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 import { useGeneratingPhase } from "@/lib/useGeneratingPhase";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
@@ -870,7 +871,14 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
                         <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
                         <circle cx="12" cy="16" r="1" fill="#c04040" />
                       </svg>
-                      <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                      {(entry.error === "moderation_blocked" || entry.error?.includes?.("moderation_blocked") || entry.error?.includes?.("flagged as sensitive")) ? (
+                        <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#555]">
+                          <ShieldBan size={12} strokeWidth={1.5} className="shrink-0" />
+                          <span>NSFW content detected</span>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-[#555] leading-snug break-words">{entry.error}</p>
+                      )}
                       <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); handleDeleteSlot(i); }}
@@ -923,9 +931,18 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               <p className="text-white text-[12px] font-semibold leading-snug">
                 Oops! Something went wrong.
               </p>
-              <p className="text-[#555] text-[10px] leading-[1.5] break-words">
-                {(data.errorMsg as string) ?? "Generation failed"}
-              </p>
+              {(() => {
+                const msg = (data.errorMsg as string) ?? "Generation failed";
+                const isNsfw = msg === "moderation_blocked" || msg.includes("moderation_blocked") || msg.includes("flagged as sensitive");
+                return isNsfw ? (
+                  <div className="flex items-center gap-1.5 text-[#555] text-[10px]">
+                    <ShieldBan size={12} strokeWidth={1.5} className="shrink-0" />
+                    <span>NSFW content detected</span>
+                  </div>
+                ) : (
+                  <p className="text-[#555] text-[10px] leading-[1.5] break-words">{msg}</p>
+                );
+              })()}
             </div>
           ) : (
             <div className="w-full h-full" />

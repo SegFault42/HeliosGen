@@ -7,6 +7,7 @@ import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { useWorkflowStore } from "@/lib/store";
 import { useGeneratingPhase } from "@/lib/useGeneratingPhase";
 import type { User } from "@supabase/supabase-js";
+import { ShieldBan } from "lucide-react";
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -211,7 +212,7 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
       {/* Top: phase label + cancel — same row, wraps to next line if too narrow */}
       <div style={{
         position: "absolute", top: 8, left: 8, right: 8,
-        display: "flex", flexWrap: "wrap", alignItems: "center", gap: "5px",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
         zIndex: 5,
       }}>
         {/* Phase pill */}
@@ -1876,16 +1877,27 @@ function GalleryInner() {
                               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                               gap: "10px", padding: "16px 48px 16px 16px",
                             }}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="1.8" strokeLinecap="round">
-                                <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
-                              </svg>
-                              <p style={{
-                                fontSize: "11px", color: "#f87171", textAlign: "center",
-                                lineHeight: 1.45, wordBreak: "break-word",
-                                display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden",
-                              }}>
-                                {pg.error}
-                              </p>
+                              {(pg.error === "moderation_blocked" || pg.error?.includes?.("moderation_blocked") || pg.error?.includes?.("flagged as sensitive")) ? (
+                                <>
+                                  <ShieldBan size={20} strokeWidth={1.5} style={{ color: "#f87171", flexShrink: 0 }} />
+                                  <p style={{ fontSize: "11px", color: "#f87171", textAlign: "center", lineHeight: 1.45 }}>
+                                    NSFW content detected
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="1.8" strokeLinecap="round">
+                                    <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                                  </svg>
+                                  <p style={{
+                                    fontSize: "11px", color: "#f87171", textAlign: "center",
+                                    lineHeight: 1.45, wordBreak: "break-word",
+                                    display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden",
+                                  }}>
+                                    {pg.error}
+                                  </p>
+                                </>
+                              )}
                             </div>
                             <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 5, zIndex: 5 }}>
                               <button className="gallery-action-btn" title="Paste prompt & images" onClick={() => handleCopyPrompt(pg.prompt, pg.referenceImageUrls)}>
