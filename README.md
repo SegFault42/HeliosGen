@@ -1,4 +1,3 @@
-````md
 <p align="center">
   <img 
     src="https://helios.sdd.cash/HG.svg" 
@@ -216,5 +215,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-````
-
