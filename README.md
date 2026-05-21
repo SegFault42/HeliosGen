@@ -15,7 +15,7 @@
 
 # Demo
 
-You can check the demo here: https://helios.sdd.cash/
+You can check the demo here: https://demo.sdd.cash/
 
 ---
 
