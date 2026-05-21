@@ -31,6 +31,7 @@ const MODEL_CAPS = Object.fromEntries(
     qualityOptions: m.apiInput.qualityOptions,
     qualityKey: m.apiInput.qualityKey,
     azureQualityOptions: m.azureQualityOptions,
+    azureResolutionOptions: m.azureResolutionOptions,
   }])
 );
 const DEFAULT_CAPS = MODEL_CAPS["nano-banana-2"];
@@ -206,10 +207,12 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const [ratioOpen, setRatioOpen] = useState(false);
   const [qualityOpen, setQualityOpen] = useState(false);
   const [azureQualityOpen, setAzureQualityOpen] = useState(false);
+  const [azureResolutionOpen, setAzureResolutionOpen] = useState(false);
   const modelPopup = useAnimatedPopup(modelOpen && !data.imageUrl);
   const ratioPopup = useAnimatedPopup(ratioOpen);
   const qualityPopup = useAnimatedPopup(qualityOpen);
   const azureQualityPopup = useAnimatedPopup(azureQualityOpen);
+  const azureResolutionPopup = useAnimatedPopup(azureResolutionOpen);
   const [loading, setLoading] = useState(false);
   const [errorHandles, setErrorHandles] = useState<Set<string>>(new Set());
   const [hoveredHandle, setHoveredHandle] = useState<"prompt" | "image" | null>(null);
@@ -224,7 +227,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   useEffect(() => {
     const rfNode = cardRef.current?.closest<HTMLElement>(".react-flow__node");
     if (!rfNode) return;
-    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen;
+    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen || azureResolutionOpen;
     if (anyOpen) {
       rfNode.style.zIndex = "10000";
     } else {
@@ -234,11 +237,11 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   }, [modelOpen, ratioOpen, qualityOpen, azureQualityOpen]);
 
   useEffect(() => {
-    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen;
+    const anyOpen = modelOpen || ratioOpen || qualityOpen || azureQualityOpen || azureResolutionOpen;
     if (!anyOpen) return;
     const handler = (e: MouseEvent) => {
       if (controlBarRef.current && !controlBarRef.current.contains(e.target as unknown as globalThis.Node)) {
-        setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false);
+        setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); setAzureResolutionOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -616,6 +619,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       catch { return false; }
     })());
     const azureQuality = (data.azureQuality as string | undefined) ?? "auto";
+    const azureResolution = (data.azureResolution as string | undefined) ?? "1k";
 
     const payload = {
       model,
@@ -623,7 +627,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       imageUrls: orderedUrls,
       aspectRatio,
       quality,
-      ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality } : {}),
+      ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality, azureResolution } : {}),
     };
 
     if (!resolvedPrompt.trim()) {
@@ -1101,7 +1105,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             <div className="relative shrink-0">
               <button
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); }}
+                onClick={() => { setAzureQualityOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureResolutionOpen(false); }}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
                 style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
                 title="Quality (Azure Foundry)"
@@ -1140,6 +1144,49 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
             </div>
           )}
 
+          {/* Azure Resolution pill — shown alongside Azure Quality for gpt-image-2 */}
+          {caps.azureResolutionOptions && isAzureProvider && (
+            <div className="relative shrink-0">
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => { setAzureResolutionOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
+                style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                title="Resolution (Azure)"
+              >
+                <span className="text-[11px] text-white/30">Res</span>
+                <span className="text-[11px] text-white/70 uppercase">
+                  {(data.azureResolution as string | undefined) ?? "1k"}
+                </span>
+                <ChevronIcon open={azureResolutionOpen} />
+              </button>
+              {azureResolutionPopup.visible && (
+                <div className={`absolute bottom-full left-0 mb-2 w-36 bg-[#111622] border border-[#1E2840] rounded-md overflow-hidden z-[1002] shadow-2xl ${azureResolutionPopup.className}`}>
+                  <div className="px-3 py-1.5 border-b border-[#1C2436]">
+                    <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Resolution</span>
+                  </div>
+                  {[
+                    { id: "1k", label: "1K", meta: "Standard" },
+                    { id: "2k", label: "2K", meta: "High" },
+                    { id: "4k", label: "4K", meta: "Maximum" },
+                  ].map((r) => {
+                    const active = ((data.azureResolution as string | undefined) ?? "1k") === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={() => { updateNodeData(id, { azureResolution: r.id }); setAzureResolutionOpen(false); }}
+                        className={`w-full flex items-center justify-between px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${active ? "text-white" : "text-[#A0A0A0]"}`}
+                      >
+                        <span className="uppercase font-medium">{r.label}</span>
+                        <span className="text-[#4A4A45]">{r.meta}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
 
           </div>{/* end pills wrapper */}

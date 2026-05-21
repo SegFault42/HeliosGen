@@ -170,17 +170,19 @@ export async function POST(req: NextRequest) {
     aspectRatio = "1:1",
     quality     = "1k",
     azureQuality,
+    azureResolution,
     azureBaseUrl,
     azureDeployment,
   } = (await req.json()) as {
-    model?:          string;
-    prompt?:         string;
-    imageUrls?:      string[];
-    aspectRatio?:    string;
-    quality?:        string;
-    azureQuality?:   string;     // "auto" | "low" | "medium" | "high"
-    azureBaseUrl?:   string;     // global base URL from settings
-    azureDeployment?: string;    // per-model deployment name from settings
+    model?:           string;
+    prompt?:          string;
+    imageUrls?:       string[];
+    aspectRatio?:     string;
+    quality?:         string;
+    azureQuality?:    string;     // "auto" | "low" | "medium" | "high"
+    azureResolution?: string;     // "1k" | "2k" | "4k"
+    azureBaseUrl?:    string;     // global base URL from settings
+    azureDeployment?: string;     // per-model deployment name from settings
   };
 
   if (!prompt?.trim()) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
@@ -204,7 +206,8 @@ export async function POST(req: NextRequest) {
       : process.env.AZURE_API_KEY ?? null;
     if (!azureKey) return NextResponse.json({ error: "Azure API key is not configured. Add it in Settings." }, { status: 500 });
 
-    const sizeMap         = cfg.azureSizeMap ?? {};
+    const resSizeMaps     = cfg.azureResolutionSizeMaps ?? {};
+    const sizeMap         = (azureResolution && resSizeMaps[azureResolution]) ? resSizeMaps[azureResolution] : (cfg.azureSizeMap ?? {});
     const size            = sizeMap[aspectRatio] ?? "1024x1024";
     const quality         = azureQuality || "medium";
     const base            = azureBaseUrl.replace(/\/$/, "");

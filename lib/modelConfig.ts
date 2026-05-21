@@ -71,10 +71,20 @@ export interface ImageModel {
    */
   azureQualityOptions?: string[];
   /**
+   * When set and provider is "azure", a resolution picker (1k/2k/4k) is shown
+   * alongside the quality picker.
+   */
+  azureResolutionOptions?: string[];
+  /**
    * Maps app-level aspect ratio strings to Azure size strings (e.g. "1792x1024").
    * Fallback is "1024x1024" when a ratio is not listed.
    */
   azureSizeMap?: Record<string, string>;
+  /**
+   * Per-resolution size maps for Azure. Keys are resolution tiers ("1k", "2k", "4k");
+   * values are aspect-ratio → size-string maps. Takes precedence over azureSizeMap.
+   */
+  azureResolutionSizeMaps?: Record<string, Record<string, string>>;
   /**
    * Azure OpenAI API version to use for this model.
    * Defaults to "2024-02-01" (DALL-E 3). Newer models (e.g. gpt-image-2) require
@@ -211,14 +221,42 @@ export const IMAGE_MODELS: ImageModel[] = [
     supportsQuality: true,
     // Azure-specific quality options (sent as the "quality" field)
     azureQualityOptions: ["low", "medium", "high"],
+    azureResolutionOptions: ["1k", "2k", "4k"],
     azureApiVersion: "2025-04-01-preview",
+    azureResolutionSizeMaps: {
+      "1k": {
+        "auto":  "auto",
+        "1:1":   "1024x1024",
+        "16:9":  "1536x1024",
+        "9:16":  "1024x1536",
+        "4:3":   "1024x768",
+        "3:4":   "768x1024",
+      },
+      "2k": {
+        "auto":  "auto",
+        "1:1":   "2048x2048",
+        "16:9":  "2048x1152",
+        "9:16":  "1152x2048",
+        "4:3":   "2048x1536",
+        "3:4":   "1536x2048",
+      },
+      "4k": {
+        "auto":  "auto",
+        "1:1":   "2880x2880",
+        "16:9":  "3840x2160",
+        "9:16":  "2160x3840",
+        "4:3":   "3072x2304",
+        "3:4":   "2304x3072",
+      },
+    },
+    // Keep azureSizeMap as fallback (used when no azureResolution is specified)
     azureSizeMap: {
       "auto": "auto",
-      "1:1": "1024x1024",
+      "1:1":  "1024x1024",
       "16:9": "2048x1152",
       "9:16": "1152x2048",
-      "4:3": "1536x1024",
-      "3:4": "1024x1536",
+      "4:3":  "1536x1024",
+      "3:4":  "1024x1536",
     },
     apiInput: {
       aspectRatioKey: "aspect_ratio",

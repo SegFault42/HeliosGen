@@ -563,6 +563,7 @@ interface SavedSettings {
   quality: string; count: number; duration: number; mode: string;
   sound?: boolean;
   refImageUrls?: string[];
+  azureResolution?: string;
 }
 
 function loadSettings(tab: Tab): Partial<SavedSettings> | null {
@@ -775,6 +776,7 @@ function GalleryInner() {
   const [duration, setDuration] = useState<number>(() => loadSettings(tab)?.duration ?? 5);
   const [mode, setMode] = useState<string>(() => loadSettings(tab)?.mode ?? "");
   const [resolution, setResolution] = useState<string>("");
+  const [azureResolution, setAzureResolution] = useState<string>(() => loadSettings(tab)?.azureResolution ?? "1k");
   const [sound, setSound] = useState<boolean>(() => loadSettings(tab)?.sound ?? false);
   const [seed, setSeed] = useState<number | undefined>(0);
   const [durPickerOpen, setDurPickerOpen] = useState(false);
@@ -1188,8 +1190,8 @@ function GalleryInner() {
     const refImageUrls = [...new Set(refImages
       .filter(r => r.cdnUrl && !r.uploading && !r.error)
       .map(r => r.cdnUrl!))];
-    saveSettings(tab, { prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls });
-  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages]);
+    saveSettings(tab, { prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution });
+  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution]);
 
   // Track window width; set initial zoom from breakpoints only if NOT saved
   useEffect(() => {
@@ -1452,7 +1454,7 @@ function GalleryInner() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           prompt: resolvedPrompt, model: modelId, aspectRatio, quality, imageUrls,
-          ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality } : {}),
+          ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality, azureResolution } : {}),
         }),
       });
       const text = await res.text();
@@ -1613,7 +1615,7 @@ function GalleryInner() {
         type: isVideo ? "video" : "image",
         prompt: dbgPrompt, model: modelId, aspectRatio, quality,
         provider: dbgIsAzure ? "azure" : "kie",
-        ...(dbgIsAzure ? { azureBaseUrl: dbgAzureBaseUrl, azureDeployment: dbgAzureDeployment, azureQuality: "auto" } : {}),
+        ...(dbgIsAzure ? { azureBaseUrl: dbgAzureBaseUrl, azureDeployment: dbgAzureDeployment, azureQuality: quality, azureResolution } : {}),
         ...(isVideo
           ? { duration, mode }
           : { imageUrls: [...new Set([...dbgExtra, ...dbgRefUrls])], count: n }),
@@ -1830,6 +1832,7 @@ function GalleryInner() {
   const qualityOpts: string[] = isAzureProvider
     ? (imgModel!.azureQualityOptions ?? [])
     : (imgModel?.apiInput.qualityOptions ?? ["2k", "4k"]);
+  const azureResolutionOpts: string[] = isAzureProvider ? (imgModel?.azureResolutionOptions ?? []) : [];
   const durations = vidModel?.durations ?? [];
   const vidModes = vidModel?.modes ?? [];
   const activeModel = models.find(m => m.id === modelId);
@@ -2871,6 +2874,17 @@ function GalleryInner() {
                     onChange={setQuality}
                     disabled={submitting}
                     options={qualityOpts.map(q => ({ value: q, label: q.toUpperCase() }))}
+                    icon={<DiamondIcon />}
+                  />
+                )}
+
+                {/* Azure Resolution (gpt-image-2 + Azure provider only) */}
+                {azureResolutionOpts.length > 0 && (
+                  <CustomDropdown
+                    value={azureResolution}
+                    onChange={setAzureResolution}
+                    disabled={submitting}
+                    options={azureResolutionOpts.map(r => ({ value: r, label: r.toUpperCase() }))}
                     icon={<DiamondIcon />}
                   />
                 )}
