@@ -13,6 +13,12 @@
 
 ---
 
+# Demo
+
+You can check the demo here: https://helios.sdd.cash/
+
+---
+
 # 📸 Screenshots
 ## ✨ Simple Image & Video Generation
 
