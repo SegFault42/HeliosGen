@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
+import { MODEL_GROUPS } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 
@@ -15,9 +16,11 @@ export type ProviderId = (typeof PROVIDERS)[number]["id"];
 
 /* ─── Persistence ───────────────────────────────────────────────────────────── */
 
-const STORAGE_KEY       = "aiui-model-providers";
-const AZURE_DEPLOYS_KEY = "aiui-azure-endpoints";   // per-model deployment names
-const AZURE_BASE_KEY    = "aiui-azure-base-url";     // global Foundry base URL
+const STORAGE_KEY            = "aiui-model-providers";
+const AZURE_DEPLOYS_KEY      = "aiui-azure-endpoints";       // per-model deployment names
+const AZURE_BASE_KEY         = "aiui-azure-base-url";        // global Foundry base URL
+const AZURE_TEXT_DEPLOY_KEY  = "aiui-azure-text-deployment"; // text model deployment (URL path)
+const AZURE_TEXT_MODEL_KEY   = "aiui-azure-text-model";      // text model name (request body)
 
 export function loadModelProviders(): Record<string, ProviderId> {
   try {
@@ -79,9 +82,39 @@ export function saveAzureBaseUrl(url: string) {
 /** @deprecated renamed — use getAzureDeployment(). Kept for backwards compat. */
 export const getAzureEndpoint = getAzureDeployment;
 
+/** Deployment name — used in the URL path (defaults to "auto-model"). */
+export function loadAzureTextDeployment(): string {
+  try {
+    return localStorage.getItem(AZURE_TEXT_DEPLOY_KEY) ?? "auto-model";
+  } catch {
+    return "auto-model";
+  }
+}
+
+export function saveAzureTextDeployment(name: string) {
+  try {
+    localStorage.setItem(AZURE_TEXT_DEPLOY_KEY, name);
+  } catch { /* noop */ }
+}
+
+/** Model name — passed in the request body (defaults to "model-router"). */
+export function loadAzureTextModelName(): string {
+  try {
+    return localStorage.getItem(AZURE_TEXT_MODEL_KEY) ?? "model-router";
+  } catch {
+    return "model-router";
+  }
+}
+
+export function saveAzureTextModelName(name: string) {
+  try {
+    localStorage.setItem(AZURE_TEXT_MODEL_KEY, name);
+  } catch { /* noop */ }
+}
+
 /* ─── Nav items ─────────────────────────────────────────────────────────────── */
 
-type NavId = "api-keys";
+type NavId = "api-keys" | "image-models" | "video-models" | "text-models";
 
 const NAV: { id: NavId; label: string; icon: React.ReactNode }[] = [
   {
@@ -93,6 +126,36 @@ const NAV: { id: NavId; label: string; icon: React.ReactNode }[] = [
         <path d="m11.31 11.31 5.19-5.19" />
         <path d="m17 5 1.5 1.5" />
         <path d="m14 8 1.5 1.5" />
+      </svg>
+    ),
+  },
+  {
+    id: "image-models",
+    label: "Image Models",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <path d="m21 15-5-5L5 21" />
+      </svg>
+    ),
+  },
+  {
+    id: "video-models",
+    label: "Video Models",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m22 8-6 4 6 4V8z" />
+        <rect x="2" y="6" width="14" height="12" rx="2" />
+      </svg>
+    ),
+  },
+  {
+    id: "text-models",
+    label: "Text Models",
+    icon: (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
     ),
   },
@@ -328,10 +391,6 @@ const INPUT_STYLE: React.CSSProperties = {
 };
 
 function ApiKeysPanel({
-  providers,
-  onProviderChange,
-  azureDeployments,
-  onDeploymentChange,
   azureBaseUrl,
   onBaseUrlChange,
   kieKeyStatus,
@@ -341,10 +400,6 @@ function ApiKeysPanel({
   onAzureKeySave,
   onAzureKeyDelete,
 }: {
-  providers: Record<string, ProviderId>;
-  onProviderChange: (modelId: string, v: ProviderId) => void;
-  azureDeployments: Record<string, string>;
-  onDeploymentChange: (modelId: string, v: string) => void;
   azureBaseUrl: string;
   onBaseUrlChange: (v: string) => void;
   kieKeyStatus: "unknown" | "set" | "unset";
@@ -388,22 +443,6 @@ function ApiKeysPanel({
       setAzureSaving(false);
     }
   };
-
-  const imageModels = IMAGE_MODELS.map((m) => ({
-    id: m.id,
-    name: m.name,
-    provider: m.provider,
-    category: "Image",
-    hasAzureDeployment: !!m.azureSizeMap,
-  }));
-
-  const videoModels = VIDEO_MODELS.map((m) => ({
-    id: m.id,
-    name: m.name,
-    provider: m.provider,
-    category: "Video",
-    hasAzureDeployment: false,
-  }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
@@ -670,46 +709,334 @@ function ApiKeysPanel({
         </div>
       </div>
 
-      {/* Provider legend */}
-      <div style={{ display: "flex", gap: "12px", padding: "12px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px" }}>
-        {PROVIDERS.map((p) => (
-          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span
-              style={{
-                width: "24px", height: "24px", borderRadius: "6px",
-                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.02em",
-              }}
-            >
-              {p.id === "kie" ? "K" : "A"}
-            </span>
-            <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{p.label}</span>
+    </div>
+  );
+}
+
+/* ─── Provider legend (shared) ───────────────────────────────────────────────── */
+
+function ProviderLegend() {
+  return (
+    <div style={{ display: "flex", gap: "12px", padding: "12px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px" }}>
+      {PROVIDERS.map((p) => (
+        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ width: "24px", height: "24px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.02em" }}>
+            {p.id === "kie" ? "K" : "A"}
+          </span>
+          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{p.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Image Models panel ─────────────────────────────────────────────────────── */
+
+function ImageModelsPanel({
+  providers,
+  onProviderChange,
+  azureDeployments,
+  onDeploymentChange,
+}: {
+  providers: Record<string, ProviderId>;
+  onProviderChange: (modelId: string, v: ProviderId) => void;
+  azureDeployments: Record<string, string>;
+  onDeploymentChange: (modelId: string, v: string) => void;
+}) {
+  const models = IMAGE_MODELS.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: m.provider,
+    category: "Image",
+    hasAzureDeployment: !!m.azureSizeMap,
+  }));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
+      <div>
+        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
+          Image Models
+        </h2>
+        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
+          Choose which provider serves each image model. Azure-capable models show a deployment name field when Azure is selected.
+        </p>
+      </div>
+      <ProviderLegend />
+      <ModelGroup
+        title="Image Models"
+        accent="#fb923c"
+        models={models}
+        providers={providers}
+        onProviderChange={onProviderChange}
+        azureDeployments={azureDeployments}
+        onDeploymentChange={onDeploymentChange}
+      />
+    </div>
+  );
+}
+
+/* ─── Video Models panel ─────────────────────────────────────────────────────── */
+
+function VideoModelsPanel({
+  providers,
+  onProviderChange,
+  azureDeployments,
+  onDeploymentChange,
+}: {
+  providers: Record<string, ProviderId>;
+  onProviderChange: (modelId: string, v: ProviderId) => void;
+  azureDeployments: Record<string, string>;
+  onDeploymentChange: (modelId: string, v: string) => void;
+}) {
+  const models = VIDEO_MODELS.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: m.provider,
+    category: "Video",
+    hasAzureDeployment: false,
+  }));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
+      <div>
+        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
+          Video Models
+        </h2>
+        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
+          Choose which provider serves each video model.
+        </p>
+      </div>
+      <ProviderLegend />
+      <ModelGroup
+        title="Video Models"
+        accent="#5EEAD4"
+        models={models}
+        providers={providers}
+        onProviderChange={onProviderChange}
+        azureDeployments={azureDeployments}
+        onDeploymentChange={onDeploymentChange}
+      />
+    </div>
+  );
+}
+
+/* ─── Text Models panel ──────────────────────────────────────────────────────── */
+
+function TextModelsPanel({
+  azureKeyStatus,
+  azureBaseUrl,
+  azureTextDeployment,
+  azureTextModelName,
+  onDeploymentChange,
+  onModelNameChange,
+}: {
+  azureKeyStatus: "unknown" | "set" | "unset";
+  azureBaseUrl: string;
+  azureTextDeployment: string;
+  azureTextModelName: string;
+  onDeploymentChange: (v: string) => void;
+  onModelNameChange: (v: string) => void;
+}) {
+  const azureReady = azureKeyStatus === "set" && !!azureBaseUrl.trim();
+  const kieGroups = MODEL_GROUPS.filter(g => g.label !== "Azure");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
+      {/* Header */}
+      <div>
+        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
+          Text Models
+        </h2>
+        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
+          Configure AI text models for chat. Azure Auto uses your Azure Foundry credentials from the API Keys tab.
+        </p>
+      </div>
+
+      {/* Kie.ai models */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {kieGroups.map((group) => (
+          <div key={group.label}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: "#e5e5e5", flexShrink: 0 }} />
+              <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>
+                {group.label}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {group.models.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "14px",
+                    padding: "11px 16px", borderRadius: "10px",
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {m.label}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.28)", marginTop: "2px" }}>
+                      Kie.ai · {m.desc}
+                    </div>
+                  </div>
+                  <span style={{
+                    display: "flex", alignItems: "center", gap: "5px",
+                    padding: "3px 8px", borderRadius: "6px",
+                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+                    fontSize: "11px", fontWeight: 500, color: "rgba(255,255,255,0.4)",
+                    whiteSpace: "nowrap",
+                  }}>
+                    <span style={{ fontWeight: 700, color: "rgba(255,255,255,0.55)" }}>K</span>
+                    Kie.ai
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Image models */}
-      <ModelGroup
-        title="Image Models"
-        accent="#fb923c"
-        models={imageModels}
-        providers={providers}
-        onProviderChange={onProviderChange}
-        azureDeployments={azureDeployments}
-        onDeploymentChange={onDeploymentChange}
-      />
+      {/* Azure Auto card */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+          padding: "16px",
+          background: "rgba(96,165,250,0.04)",
+          border: "1px solid rgba(96,165,250,0.14)",
+          borderRadius: "12px",
+        }}
+      >
+        {/* Header row */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span
+            style={{
+              width: "28px", height: "28px", borderRadius: "7px",
+              background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "11px", fontWeight: 700, color: "rgba(96,165,250,0.85)",
+            }}
+          >
+            Az
+          </span>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Azure Auto</div>
+            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+              Model-router — automatically selects the best model for each request
+            </div>
+          </div>
+          <span
+            style={{
+              marginLeft: "auto", fontSize: "10px", fontWeight: 600,
+              color: azureReady ? "rgba(74,222,128,0.8)" : "rgba(251,146,60,0.8)",
+              background: azureReady ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)",
+              border: `1px solid ${azureReady ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`,
+              borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap",
+            }}
+          >
+            {azureReady ? "READY" : "NOT CONFIGURED"}
+          </span>
+        </div>
 
-      {/* Video models */}
-      <ModelGroup
-        title="Video Models"
-        accent="#5EEAD4"
-        models={videoModels}
-        providers={providers}
-        onProviderChange={onProviderChange}
-        azureDeployments={azureDeployments}
-        onDeploymentChange={onDeploymentChange}
-      />
+        {/* Status notice if not ready */}
+        {!azureReady && (
+          <div
+            style={{
+              padding: "10px 12px",
+              background: "rgba(251,146,60,0.05)",
+              border: "1px solid rgba(251,146,60,0.15)",
+              borderRadius: "8px",
+              fontSize: "11px",
+              color: "rgba(251,146,60,0.7)",
+              lineHeight: 1.5,
+            }}
+          >
+            {azureKeyStatus !== "set"
+              ? "Add your Azure Foundry API key in the API Keys tab to enable this model."
+              : "Add your Azure Foundry Base URL in the API Keys tab to enable this model."}
+          </div>
+        )}
+
+        {/* Two-column grid: Model Name + Deployment */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {/* Model Name */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+            <label
+              htmlFor="azure-text-model-name"
+              style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
+            >
+              Model Name
+            </label>
+            <input
+              id="azure-text-model-name"
+              type="text"
+              placeholder="model-router"
+              value={azureTextModelName}
+              onChange={(e) => onModelNameChange(e.target.value)}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "7px",
+                padding: "7px 11px",
+                fontSize: "12px",
+                color: "rgba(255,255,255,0.8)",
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+              onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
+              onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+            />
+            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+              Passed as <code style={{ fontFamily: "monospace" }}>model</code> in the request body.
+            </p>
+          </div>
+
+          {/* Deployment */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+            <label
+              htmlFor="azure-text-deployment"
+              style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
+            >
+              Deployment
+            </label>
+            <input
+              id="azure-text-deployment"
+              type="text"
+              placeholder="auto-model"
+              value={azureTextDeployment}
+              onChange={(e) => onDeploymentChange(e.target.value)}
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "7px",
+                padding: "7px 11px",
+                fontSize: "12px",
+                color: "rgba(255,255,255,0.8)",
+                outline: "none",
+                fontFamily: "inherit",
+              }}
+              onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
+              onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+            />
+            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+              Used in the URL path <code style={{ fontFamily: "monospace" }}>/deployments/{"{deployment}"}</code>.
+            </p>
+          </div>
+        </div>
+
+        {/* API version (read-only) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            API Version
+          </span>
+          <div style={{ padding: "7px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "7px", fontSize: "12px", color: "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>
+            2024-04-01-preview
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -720,10 +1047,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [activeNav, setActiveNav]             = useState<NavId>("api-keys");
   const [modelProviders, setModelProviders]   = useState<Record<string, ProviderId>>({});
   const [azureDeployments, setAzureDeployments] = useState<Record<string, string>>({});
-  const [azureBaseUrl, setAzureBaseUrl]       = useState("");
-  const [kieKeyStatus, setKieKeyStatus]       = useState<"unknown" | "set" | "unset">("unknown");
+  const [azureBaseUrl, setAzureBaseUrl]               = useState("");
+  const [azureTextDeployment, setAzureTextDeployment] = useState("auto-model");
+  const [azureTextModelName, setAzureTextModelName]   = useState("model-router");
+  const [kieKeyStatus, setKieKeyStatus]               = useState<"unknown" | "set" | "unset">("unknown");
   const [azureKeyStatus, setAzureKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
-  const setKieKeySet = useWorkflowStore((s) => s.setKieKeySet);
+  const setKieKeySet    = useWorkflowStore((s) => s.setKieKeySet);
+  const setAzureKeySet  = useWorkflowStore((s) => s.setAzureKeySet);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   async function authHeader(): Promise<Record<string, string>> {
@@ -738,6 +1068,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     setModelProviders(loadModelProviders());
     setAzureDeployments(loadAzureEndpoints());
     setAzureBaseUrl(loadAzureBaseUrl());
+    setAzureTextDeployment(loadAzureTextDeployment());
+    setAzureTextModelName(loadAzureTextModelName());
     // Check if Kie key is saved on the server
     authHeader().then((h) =>
       fetch("/api/settings/kie-key", { headers: h })
@@ -813,12 +1145,24 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     });
     if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
     setAzureKeyStatus("set");
+    setAzureKeySet(true);
   };
 
   const handleAzureKeyDelete = async () => {
     const h = await authHeader();
     await fetch("/api/settings/azure-key", { method: "DELETE", headers: h });
     setAzureKeyStatus("unset");
+    setAzureKeySet(false);
+  };
+
+  const handleAzureTextDeploymentChange = (v: string) => {
+    setAzureTextDeployment(v);
+    saveAzureTextDeployment(v);
+  };
+
+  const handleAzureTextModelNameChange = (v: string) => {
+    setAzureTextModelName(v);
+    saveAzureTextModelName(v);
   };
 
   return (
@@ -1006,10 +1350,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           >
             {activeNav === "api-keys" && (
               <ApiKeysPanel
-                providers={modelProviders}
-                onProviderChange={handleProviderChange}
-                azureDeployments={azureDeployments}
-                onDeploymentChange={handleDeploymentChange}
                 azureBaseUrl={azureBaseUrl}
                 onBaseUrlChange={handleBaseUrlChange}
                 kieKeyStatus={kieKeyStatus}
@@ -1018,6 +1358,32 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 azureKeyStatus={azureKeyStatus}
                 onAzureKeySave={handleAzureKeySave}
                 onAzureKeyDelete={handleAzureKeyDelete}
+              />
+            )}
+            {activeNav === "image-models" && (
+              <ImageModelsPanel
+                providers={modelProviders}
+                onProviderChange={handleProviderChange}
+                azureDeployments={azureDeployments}
+                onDeploymentChange={handleDeploymentChange}
+              />
+            )}
+            {activeNav === "video-models" && (
+              <VideoModelsPanel
+                providers={modelProviders}
+                onProviderChange={handleProviderChange}
+                azureDeployments={azureDeployments}
+                onDeploymentChange={handleDeploymentChange}
+              />
+            )}
+            {activeNav === "text-models" && (
+              <TextModelsPanel
+                azureKeyStatus={azureKeyStatus}
+                azureBaseUrl={azureBaseUrl}
+                azureTextDeployment={azureTextDeployment}
+                azureTextModelName={azureTextModelName}
+                onDeploymentChange={handleAzureTextDeploymentChange}
+                onModelNameChange={handleAzureTextModelNameChange}
               />
             )}
           </div>

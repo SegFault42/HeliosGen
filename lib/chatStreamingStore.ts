@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { flushSync } from "react-dom";
 import { getToken } from "./galleryUtils";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 import { useChatSessionStore, type StoredMessage } from "./chatSessionStore";
@@ -14,6 +15,9 @@ interface StartStreamParams {
   apiMessages: { role: string; content: string }[];
   model: string;
   contextMessages: StoredMessage[];
+  azureEndpoint?: string;
+  azureDeployment?: string;
+  azureModelName?: string;
 }
 
 interface ChatStreamingState {
@@ -32,7 +36,7 @@ export const useChatStreamingStore = create<ChatStreamingState>()((set, get) => 
     });
   },
 
-  startStream: ({ sessionId, apiMessages, model, contextMessages }) => {
+  startStream: ({ sessionId, apiMessages, model, contextMessages, azureEndpoint, azureDeployment, azureModelName }) => {
     if (get().streams[sessionId]?.status === "streaming") return;
 
     set((s) => ({ streams: { ...s.streams, [sessionId]: { content: "", status: "streaming" } } }));
@@ -46,12 +50,13 @@ export const useChatStreamingStore = create<ChatStreamingState>()((set, get) => 
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ model, messages: apiMessages, stream: true }),
+          body: JSON.stringify({ model, messages: apiMessages, stream: true, azureEndpoint, azureDeployment, azureModelName }),
         });
 
         if (!res.ok || !res.body) {
-          const err = await res.text().catch(() => "Unknown error");
-          set((s) => ({ streams: { ...s.streams, [sessionId]: { content: `Error: ${err}`, status: "error" } } }));
+          let errMsg = "Request failed";
+          try { const j = await res.json(); errMsg = j.error ?? errMsg; } catch { errMsg = await res.text().catch(() => errMsg); }
+          set((s) => ({ streams: { ...s.streams, [sessionId]: { content: `Error: ${errMsg}`, status: "error" } } }));
           return;
         }
 
@@ -78,9 +83,11 @@ export const useChatStreamingStore = create<ChatStreamingState>()((set, get) => 
                 null;
               if (chunk) {
                 accumulated += chunk;
-                set((s) => ({
-                  streams: { ...s.streams, [sessionId]: { content: accumulated, status: "streaming" } },
-                }));
+                flushSync(() => {
+                  set((s) => ({
+                    streams: { ...s.streams, [sessionId]: { content: accumulated, status: "streaming" } },
+                  }));
+                });
               }
             } catch { /* skip malformed SSE */ }
           }

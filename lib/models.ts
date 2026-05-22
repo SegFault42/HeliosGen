@@ -31,6 +31,12 @@ export const MODEL_GROUPS: ModelGroup[] = [
       { id: "gpt-5-2", label: "GPT 5.2", desc: "Latest" },
     ],
   },
+  {
+    label: "Azure",
+    models: [
+      { id: "azure-auto", label: "Azure Auto", desc: "Router" },
+    ],
+  },
 ];
 
 export const MODELS: Model[] = MODEL_GROUPS.flatMap(g => g.models);

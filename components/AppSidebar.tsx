@@ -128,11 +128,12 @@ export function AppSidebar() {
   const [user, setUser] = React.useState<User | null>(null);
   const [balance, setBalance] = React.useState<number | null>(null);
 
-  const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
-  const setSettingsOpen  = useWorkflowStore((s) => s.setSettingsOpen);
-  const setKieKeySet     = useWorkflowStore((s) => s.setKieKeySet);
-  const clearLocalData   = useWorkflowStore((s) => s.clearLocalData);
-  const clearSessions    = useChatSessionStore((s) => s.clearSessions);
+  const setAuthModalOpen  = useWorkflowStore((s) => s.setAuthModalOpen);
+  const setSettingsOpen   = useWorkflowStore((s) => s.setSettingsOpen);
+  const setKieKeySet      = useWorkflowStore((s) => s.setKieKeySet);
+  const setAzureKeySet    = useWorkflowStore((s) => s.setAzureKeySet);
+  const clearLocalData    = useWorkflowStore((s) => s.clearLocalData);
+  const clearSessions     = useChatSessionStore((s) => s.clearSessions);
   const supabase = createClient();
 
   React.useEffect(() => {
@@ -141,6 +142,10 @@ export function AppSidebar() {
         .then((r) => r.json())
         .then((d) => setKieKeySet(!!d.hasToken))
         .catch(() => setKieKeySet(null));
+      fetch("/api/settings/azure-key")
+        .then((r) => r.json())
+        .then((d) => setAzureKeySet(!!d.hasToken))
+        .catch(() => setAzureKeySet(null));
       return;
     }
     supabase.auth.getUser().then(({ data }) => {
@@ -154,9 +159,14 @@ export function AppSidebar() {
           .then((r) => r.json())
           .then((d) => setKieKeySet(!!d.hasToken))
           .catch(() => {});
+        fetch("/api/settings/azure-key", { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then((r) => r.json())
+          .then((d) => setAzureKeySet(!!d.hasToken))
+          .catch(() => {});
         useChatSessionStore.getState().loadFromSupabase();
       } else {
         setKieKeySet(null);
+        setAzureKeySet(null);
         if (event === "SIGNED_OUT") {
           clearLocalData();
           clearSessions();
@@ -164,7 +174,7 @@ export function AppSidebar() {
       }
     });
     return () => subscription.unsubscribe();
-  }, [supabase, setKieKeySet]);
+  }, [supabase, setKieKeySet, setAzureKeySet]);
 
   React.useEffect(() => {
     const fetchBalance = async () => {

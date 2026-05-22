@@ -1,5 +1,8 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
+import { getAzureToken } from "@/lib/getAzureKey";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -13,21 +16,20 @@ const OPENAI_COMPAT_ENDPOINTS: Record<string, string> = {
   "gpt-5-2":         "https://api.kie.ai/gpt-5-2/v1/chat/completions",
 };
 
+const AZURE_API_VERSION = "2024-04-01-preview";
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     messages?: Message[];
     prompt?: string;
     systemPrompt?: string;
     model?: string;
+    azureEndpoint?: string;
+    azureDeployment?: string;
+    azureModelName?: string;
   };
 
-  const apiKey = await getKieToken(req);
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: "No Kie.ai API key configured. Add one in Settings." }),
-      { status: 401, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  const model = body.model ?? "claude-sonnet-4-6";
 
   let messages: Message[];
 
@@ -47,7 +49,78 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const model = body.model ?? "claude-sonnet-4-6";
+  // ── Azure Auto (model-router) ──────────────────────────────────────────────
+  if (model === "azure-auto") {
+    const azureKey = await getAzureToken(req);
+    if (!azureKey) {
+      return new Response(
+        JSON.stringify({ error: "No Azure API key configured. Add one in Settings." }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    // Normalise: strip trailing slashes and any /openai suffix users may have pasted
+    const endpoint = (body.azureEndpoint ?? "")
+      .trim()
+      .replace(/\/+$/, "")
+      .replace(/\/openai$/i, "");
+    const deployment  = (body.azureDeployment || "auto-model").trim();
+    const modelName   = (body.azureModelName  || "model-router").trim();
+    if (!endpoint) {
+      return new Response(
+        JSON.stringify({ error: "Azure base URL not configured. Add it in Settings → API Keys." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${AZURE_API_VERSION}`;
+    console.log("[azure-auto] POST", url.replace(/api-version=.*/, "api-version=…"));
+    const upstream = await fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "api-key": azureKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: modelName,
+        messages,
+        stream: true,
+        max_tokens: 8192,
+        temperature: 0.7,
+        top_p: 0.95,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+      }),
+    });
+    if (!upstream.ok) {
+      const errText = await upstream.text();
+      // Extract human-readable message from Azure error envelope
+      let errorMsg = errText;
+      try {
+        const parsed = JSON.parse(errText);
+        errorMsg = parsed?.error?.message ?? parsed?.message ?? errText;
+      } catch { /* use raw text */ }
+      console.error("[azure-auto] upstream error", upstream.status, errorMsg);
+      return new Response(
+        JSON.stringify({ error: `Azure ${upstream.status}: ${errorMsg}` }),
+        { status: upstream.status, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(upstream.body, {
+      headers: {
+        "Content-Type":      "text/event-stream",
+        "Cache-Control":     "no-cache, no-transform",
+        "Connection":        "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }
+
+  // ── Kie.ai models ─────────────────────────────────────────────────────────
+  const apiKey = await getKieToken(req);
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ error: "No Kie.ai API key configured. Add one in Settings." }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
   const openaiEndpoint = OPENAI_COMPAT_ENDPOINTS[model];
 
   const upstream = openaiEndpoint
@@ -90,26 +163,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Pipe the upstream SSE stream directly — do NOT buffer
-  const stream = new ReadableStream({
-    async start(controller) {
-      const reader = upstream.body!.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) { controller.close(); break; }
-          controller.enqueue(value);
-        }
-      } catch (e) {
-        controller.error(e);
-      }
-    },
-    cancel() {
-      upstream.body?.cancel();
-    },
-  });
-
-  return new Response(stream, {
+  return new Response(upstream.body, {
     headers: {
       "Content-Type":       "text/event-stream",
       "Cache-Control":      "no-cache, no-transform",

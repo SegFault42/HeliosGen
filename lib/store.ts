@@ -160,6 +160,10 @@ interface WorkflowStore {
   kieKeySet:    boolean | null;
   setKieKeySet: (v: boolean | null) => void;
 
+  // ── Azure key status (null = unknown, true = set, false = not set)
+  azureKeySet:    boolean | null;
+  setAzureKeySet: (v: boolean | null) => void;
+
   // ── Spaces
   spaces:        Space[];
   activeSpaceId: string;
@@ -662,6 +666,9 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         kieKeySet:    null,
         setKieKeySet: (v) => set({ kieKeySet: v }),
+
+        azureKeySet:    null,
+        setAzureKeySet: (v) => set({ azureKeySet: v }),
 
         settingsOpen:              false,
         setSettingsOpen:           (v) => set({ settingsOpen: v }),

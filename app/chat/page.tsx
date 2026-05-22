@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChatSessionStore, type StoredMessage, type ChatSession } from "@/lib/chatSessionStore";
-import { useChatStreamingStore } from "@/lib/chatStreamingStore";
+import { getToken } from "@/lib/galleryUtils";
 import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Send, ChevronUp, Copy, Check } from "lucide-react";
@@ -13,6 +14,7 @@ import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
+import { loadAzureBaseUrl, loadAzureTextDeployment, loadAzureTextModelName } from "@/components/SettingsModal";
 import type { User } from "@supabase/supabase-js";
 
 // ── Logo ──────────────────────────────────────────────────────────────────────
@@ -24,11 +26,12 @@ function LogoIcon({ size = 40 }: { size?: number }) {
 // ── Model picker ──────────────────────────────────────────────────────────────
 
 function ModelPicker({
-  model, onChange, direction = "up",
+  model, onChange, direction = "up", disabledIds = [],
 }: {
   model: ModelId;
   onChange: (id: ModelId) => void;
   direction?: "up" | "down";
+  disabledIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -86,25 +89,33 @@ function ModelPicker({
                 <div style={{ padding: "4px 8px 2px", fontSize: "10px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>
                   {group.label}
                 </div>
-                {group.models.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => { onChange(m.id); setOpen(false); }}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none",
-                      background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent",
-                      color: model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)",
-                      fontSize: "13px", fontFamily: "inherit", cursor: "pointer", textAlign: "left",
-                      transition: "background 100ms",
-                    }}
-                    onMouseEnter={e => { if (model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
-                    onMouseLeave={e => { if (model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-                  >
-                    <span>{m.label}</span>
-                    <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginLeft: "8px" }}>{m.desc}</span>
-                  </button>
-                ))}
+                {group.models.map(m => {
+                  const disabled = disabledIds.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => { if (!disabled) { onChange(m.id); setOpen(false); } }}
+                      title={disabled ? "Configure Azure in Settings → API Keys" : undefined}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none",
+                        background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent",
+                        color: disabled ? "rgba(255,255,255,0.25)" : model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)",
+                        fontSize: "13px", fontFamily: "inherit",
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        textAlign: "left", transition: "background 100ms",
+                        opacity: disabled ? 0.5 : 1,
+                      }}
+                      onMouseEnter={e => { if (!disabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
+                      onMouseLeave={e => { if (!disabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                    >
+                      <span>{m.label}</span>
+                      <span style={{ fontSize: "10px", color: disabled ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.28)", marginLeft: "8px" }}>
+                        {disabled ? "needs Azure key" : m.desc}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -184,7 +195,9 @@ function LandingView({
   const [headingDone, setHeadingDone] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const animatedPlaceholder = useCyclingPlaceholder(!headingDone || input.length > 0);
-  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
+  const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
+  const azureKeySet = useWorkflowStore((s) => s.azureKeySet);
+  const disabledIds = azureKeySet === true ? [] : ["azure-auto"];
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -251,15 +264,15 @@ function LandingView({
             }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px", flexShrink: 0 }}>
-            <ModelPicker model={model} onChange={onModelChange} direction="down" />
+            <ModelPicker model={model} onChange={onModelChange} direction="down" disabledIds={disabledIds} />
             <button
               onClick={() => submit(input)}
-              disabled={!input.trim() || kieKeySet === false}
+              disabled={!input.trim() || kieKeySet === false || disabledIds.includes(model)}
               style={{
                 width: "36px", height: "36px", borderRadius: "50%", border: "none",
-                background: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
-                cursor: input.trim() && kieKeySet !== false ? "pointer" : "not-allowed",
+                background: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                cursor: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",
               }}
@@ -284,82 +297,36 @@ interface LiveMessage {
 }
 
 function ChatWindow({
-  session, onUpdate, defaultModel, onModelChange, onAuthRequired,
+  session, onUpdate, defaultModel, onModelChange, onAuthRequired, initialMessage,
 }: {
   session: ChatSession;
   onUpdate: (msgs: StoredMessage[], model: string) => void;
   defaultModel?: string;
   onModelChange?: (id: ModelId) => void;
   onAuthRequired?: () => void;
+  initialMessage?: string;
 }) {
-  const streamState = useChatStreamingStore((s) => s.streams[session.id]);
-  const startStream = useChatStreamingStore((s) => s.startStream);
-  const clearStream = useChatStreamingStore((s) => s.clearStream);
-
-  const isStreaming = streamState?.status === "streaming";
-
-  // Initialise messages from session, adding a streaming placeholder if a stream is already in flight
-  const [messages, setMessages] = useState<LiveMessage[]>(() => {
-    const base: LiveMessage[] = session.messages.map((m) => ({ ...m }));
-    const existing = useChatStreamingStore.getState().streams[session.id];
-    if (existing?.status === "streaming") {
-      base.push({ role: "assistant", content: existing.content, streaming: true });
-    }
-    return base;
-  });
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [messages, setMessages] = useState<LiveMessage[]>(() =>
+    session.messages.map((m) => ({ ...m }))
+  );
   const [input, setInput] = useState("");
   const [model, setModel] = useState<ModelId>((session.model || defaultModel || "claude-sonnet-4-6") as ModelId);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
+  const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
+  const azureKeySet = useWorkflowStore((s) => s.azureKeySet);
+  const disabledIds = azureKeySet === true ? [] : ["azure-auto"];
 
   function handleModelChange(id: ModelId) { setModel(id); onModelChange?.(id); }
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  // Sync live stream content into local messages
-  useEffect(() => {
-    if (!streamState) return;
-
-    setMessages((prev) => {
-      const lastIdx = prev.length - 1;
-      const last = prev[lastIdx];
-
-      if (last?.role === "assistant" && last.streaming) {
-        // Update existing placeholder
-        return prev.map((m, i) =>
-          i === lastIdx
-            ? { ...m, content: streamState.content, streaming: streamState.status === "streaming" }
-            : m
-        );
-      }
-
-      if (streamState.status === "streaming") {
-        // Add placeholder (user navigated back mid-stream)
-        return [...prev, { role: "assistant", content: streamState.content, streaming: true }];
-      }
-
-      return prev;
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamState?.content, streamState?.status]);
-
-  // When stream finishes, sync final messages from session store and clean up
-  useEffect(() => {
-    if (streamState?.status !== "done" && streamState?.status !== "error") return;
-    const stored = useChatSessionStore.getState().sessions.find((s) => s.id === session.id);
-    if (stored?.messages.length) {
-      setMessages(stored.messages.map((m) => ({ ...m })));
-    }
-    clearStream(session.id);
-    onUpdate(stored?.messages ?? [], model);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamState?.status]);
-
-  const send = useCallback((text: string) => {
+  const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
     if (onAuthRequired) { onAuthRequired(); return; }
@@ -369,26 +336,106 @@ function ChatWindow({
       { role: "user", content: trimmed },
     ];
 
-    setMessages((prev) => [
-      ...prev.filter((m) => !m.streaming),
-      { role: "user", content: trimmed },
-      { role: "assistant", content: "", streaming: true },
-    ]);
-    setInput("");
+    const assistantIdx = contextMessages.length; // index in the new messages array
+    flushSync(() => {
+      setMessages((prev) => [
+        ...prev.filter((m) => !m.streaming),
+        { role: "user", content: trimmed },
+        { role: "assistant", content: "", streaming: true },
+      ]);
+      setInput("");
+      setIsStreaming(true);
+    });
 
-    // Save user message immediately so it's not lost if the user navigates away
     onUpdate(contextMessages, model);
 
-    startStream({
-      sessionId: session.id,
-      apiMessages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        ...contextMessages.map((m) => ({ role: m.role, content: m.content })),
-      ],
-      model,
-      contextMessages,
-    });
-  }, [isStreaming, model, onAuthRequired, startStream, session, onUpdate]);
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      const token = await getToken();
+      const azureConfig = model === "azure-auto" ? {
+        azureEndpoint:   loadAzureBaseUrl(),
+        azureDeployment: loadAzureTextDeployment(),
+        azureModelName:  loadAzureTextModelName(),
+      } : {};
+
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...contextMessages.map((m) => ({ role: m.role, content: m.content })),
+          ],
+          stream: true,
+          ...azureConfig,
+        }),
+        signal: abort.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        let errMsg = "Request failed";
+        try { const j = await res.json(); errMsg = j.error ?? errMsg; } catch { errMsg = await res.text().catch(() => errMsg); }
+        setMessages((prev) => prev.map((m, i) => i === assistantIdx ? { ...m, content: `Error: ${errMsg}`, streaming: false } : m));
+        setIsStreaming(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const json = line.slice(6).trim();
+          if (json === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(json);
+            const chunk =
+              (parsed.type === "content_block_delta" ? parsed.delta?.text : null) ??
+              parsed.choices?.[0]?.delta?.content ??
+              null;
+            if (chunk) accumulated += chunk;
+          } catch { /* skip malformed SSE */ }
+        }
+        // One state update per network read — the await above yields to the browser for painting
+        setMessages((prev) => prev.map((m, i) =>
+          i === assistantIdx ? { ...m, content: accumulated } : m
+        ));
+      }
+
+      const finalMessages: StoredMessage[] = [...contextMessages, { role: "assistant", content: accumulated }];
+      setMessages(finalMessages.map((m) => ({ ...m })));
+      onUpdate(finalMessages, model);
+    } catch (err: unknown) {
+      if ((err as Error)?.name !== "AbortError") {
+        setMessages((prev) => prev.map((m, i) => i === assistantIdx ? { ...m, content: "Request failed.", streaming: false } : m));
+      }
+    } finally {
+      setIsStreaming(false);
+    }
+  }, [isStreaming, model, onAuthRequired, session, onUpdate]);
+
+  const hasSentInitial = useRef(false);
+  useEffect(() => {
+    if (initialMessage && !hasSentInitial.current) {
+      hasSentInitial.current = true;
+      send(initialMessage);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); }
@@ -413,8 +460,8 @@ function ChatWindow({
               onInput={e => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px"; }}
             />
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px", flexShrink: 0 }}>
-              <ModelPicker model={model} onChange={handleModelChange} direction="down" />
-              <button onClick={() => send(input)} disabled={!input.trim() || kieKeySet === false} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && kieKeySet !== false ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
+              <ModelPicker model={model} onChange={handleModelChange} direction="down" disabledIds={disabledIds} />
+              <button onClick={() => send(input)} disabled={!input.trim() || kieKeySet === false || disabledIds.includes(model)} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
                 <Send size={15} />
               </button>
             </div>
@@ -450,12 +497,14 @@ function ChatWindow({
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
                 {m.content}
-                {m.streaming && !m.content && (
-                  <span style={{ display: "inline-flex", gap: "3px", alignItems: "center" }}>
-                    {[0, 1, 2].map(d => (
-                      <span key={d} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)", animation: `chatDot 1s ${d * 0.2}s infinite` }} />
-                    ))}
-                  </span>
+                {m.streaming && (
+                  m.content
+                    ? <span style={{ display: "inline-block", width: "2px", height: "14px", background: "rgba(255,255,255,0.6)", borderRadius: "1px", marginLeft: "2px", verticalAlign: "text-bottom", animation: "cursorBlink 0.8s ease-in-out infinite" }} />
+                    : <span style={{ display: "inline-flex", gap: "3px", alignItems: "center" }}>
+                        {[0, 1, 2].map(d => (
+                          <span key={d} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)", animation: `chatDot 1s ${d * 0.2}s infinite` }} />
+                        ))}
+                      </span>
                 )}
               </div>
               {m.role === "assistant" && !m.streaming && m.content && (
@@ -517,15 +566,15 @@ function ChatWindow({
             }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px", flexShrink: 0 }}>
-            <ModelPicker model={model} onChange={handleModelChange} />
+            <ModelPicker model={model} onChange={handleModelChange} disabledIds={disabledIds} />
             <button
               onClick={() => send(input)}
-              disabled={!input.trim() || isStreaming || kieKeySet === false}
+              disabled={!input.trim() || isStreaming || kieKeySet === false || disabledIds.includes(model)}
               style={{
                 width: "32px", height: "32px", borderRadius: "8px", border: "none",
-                background: input.trim() && !isStreaming && kieKeySet !== false ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && !isStreaming && kieKeySet !== false ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
-                cursor: input.trim() && !isStreaming && kieKeySet !== false ? "pointer" : "not-allowed",
+                background: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
+                color: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                cursor: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 flexShrink: 0, transition: "background 150ms, color 150ms",
               }}
@@ -541,6 +590,10 @@ function ChatWindow({
           0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
           40% { opacity: 1; transform: scale(1); }
         }
+        @keyframes cursorBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
       `}</style>
     </div>
   );
@@ -554,9 +607,9 @@ function ChatInner() {
   const idParam = searchParams.get("id");
 
   const { sessions, createSession, upsertSession, preferredModel, setPreferredModel } = useChatSessionStore();
-  const startStream = useChatStreamingStore((s) => s.startStream);
   const [hydrated, setHydrated] = useState(false);
   const [landingModel, setLandingModel] = useState<ModelId>("claude-sonnet-4-6");
+  const [pendingMessage, setPendingMessage] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);
 
@@ -585,14 +638,7 @@ function ChatInner() {
   function handleLandingSubmit(text: string) {
     if (!user && !isGuestMode) { setAuthModalOpen(true); return; }
     const id = createSession(landingModel, text.slice(0, 50));
-    const userMsg = { role: "user" as const, content: text };
-    upsertSession(id, [userMsg], landingModel);
-    startStream({
-      sessionId: id,
-      apiMessages: [{ role: "system", content: SYSTEM_PROMPT }, userMsg],
-      model: landingModel,
-      contextMessages: [userMsg],
-    });
+    setPendingMessage(text);
     router.push(`/chat?id=${id}`);
   }
 
@@ -614,6 +660,7 @@ function ChatInner() {
           defaultModel={preferredModel}
           onModelChange={setPreferredModel}
           onAuthRequired={!user && !isGuestMode ? () => setAuthModalOpen(true) : undefined}
+          initialMessage={pendingMessage || undefined}
         />
       ) : (
         <LandingView

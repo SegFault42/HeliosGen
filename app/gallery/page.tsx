@@ -13,6 +13,8 @@ import { MediaPickerModal } from "@/components/MediaPickerModal";
 import { useSidebar } from "@/components/ui/sidebar";
 import { QuickAssist } from "@/components/QuickAssist";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Button } from "@/components/ui/button";
 
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
@@ -905,6 +907,7 @@ function GalleryInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+
   // Close ref preview on Escape
   useEffect(() => {
     if (!refPreview) return;
@@ -1103,6 +1106,11 @@ function GalleryInner() {
     setVidStartFrame(null); setVidEndFrame(null); setVidResources([]);
     setVidVideoRef(null); setVidRefVideos([]); setVidRefAudios([]);
     setVidElements([]);
+    const restoredPrompt = saved?.prompt ?? "";
+    if (restoredPrompt && inputRef.current) {
+      const el = inputRef.current;
+      requestAnimationFrame(() => requestAnimationFrame(() => resizeTextarea(el)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -3156,39 +3164,32 @@ function GalleryInner() {
                   </div>
                 )}
 
-                <button
+                <Button
                   onClick={generate}
                   disabled={!canGenerate}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    border: "none",
-                    background: canGenerate ? "rgba(45,212,191,0.25)" : "rgba(45,212,191,0.1)",
-                    color: canGenerate ? "rgba(45,212,191,0.9)" : "rgba(45,212,191,0.3)",
-                    cursor: !canGenerate ? "not-allowed" : "pointer",
-                    flexShrink: 0,
-                    transition: "background 150ms, color 150ms",
-                  }}
-                  onMouseEnter={e => { if (canGenerate) { e.currentTarget.style.background = "rgba(45,212,191,0.38)"; } }}
-                  onMouseLeave={e => { if (canGenerate) { e.currentTarget.style.background = "rgba(45,212,191,0.25)"; } }}
+                  variant="outline"
+                  size="sm"
+                  className="border-none bg-[rgba(45,212,191,0.25)] text-[rgba(45,212,191,0.9)] hover:bg-[rgba(45,212,191,0.38)] hover:text-[rgba(45,212,191,0.9)] disabled:bg-[rgba(45,212,191,0.1)] disabled:text-[rgba(45,212,191,0.3)]"
                 >
                   {submitting ? (
                     <span style={{
-                      width: "15px", height: "15px", borderRadius: "50%",
+                      width: "11px", height: "11px", borderRadius: "50%",
                       border: "2px solid rgba(45,212,191,0.25)", borderTopColor: "rgba(45,212,191,0.9)",
                       display: "inline-block", animation: "spin 0.75s linear infinite",
                     }} />
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon="inline-start">
                       <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
                       <path d="m21.854 2.147-10.94 10.939" />
                     </svg>
                   )}
-                </button>
+                  {!submitting && (
+                    <KbdGroup data-icon="inline-end" className="gap-0.5">
+                      <Kbd>⌘</Kbd>
+                      <Kbd>↵</Kbd>
+                    </KbdGroup>
+                  )}
+                </Button>
               </div>
             </div>{/* end bottom row */}
           </div>
