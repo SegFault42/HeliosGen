@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import GitHubButton from "react-github-btn";
 import {
   ReactFlow,
   Background,
@@ -176,6 +177,32 @@ export default function PublicWorkflowViewer({ id }: { id: string }) {
               </button>
             );
           })}
+        </div>
+
+        <div style={{
+          position: "fixed", top: 16, right: 16,
+          zIndex: 100, display: "flex", gap: "8px", alignItems: "center",
+        }}>
+          <GitHubButton
+            href="https://github.com/segfault42/HeliosGen"
+            data-color-scheme="no-preference: light; light: light; dark: dark;"
+            data-icon="octicon-star"
+            data-size="large"
+            data-show-count="true"
+            aria-label="Star segfault42/HeliosGen on GitHub"
+          >
+            Star
+          </GitHubButton>
+          <GitHubButton
+            href="https://github.com/segfault42/HeliosGen/fork"
+            data-color-scheme="no-preference: light; light: light; dark: dark;"
+            data-icon="octicon-repo-forked"
+            data-size="large"
+            data-show-count="true"
+            aria-label="Fork segfault42/HeliosGen on GitHub"
+          >
+            Fork
+          </GitHubButton>
         </div>
 
         <div style={{
