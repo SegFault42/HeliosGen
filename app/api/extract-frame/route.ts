@@ -38,9 +38,17 @@ export async function POST(req: NextRequest) {
     outputPath = join(tmpDir, "frame.jpg");
     await writeFile(inputPath, videoBuffer);
 
-    const ffmpegArgs = lastFrame
-      ? ["-sseof", "-0.5", "-i", inputPath, "-frames:v", "1", "-q:v", "2", "-y", outputPath]
-      : ["-ss", String(Math.max(0, timeSeconds)), "-i", inputPath, "-frames:v", "1", "-q:v", "2", "-y", outputPath];
+    let ffmpegArgs: string[];
+    if (lastFrame) {
+      const { stdout } = await execFileAsync("ffprobe", [
+        "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", inputPath,
+      ]);
+      const dur = parseFloat(stdout.trim());
+      const seekTime = isNaN(dur) ? 0 : Math.max(0, dur - 0.1);
+      ffmpegArgs = ["-ss", String(seekTime), "-i", inputPath, "-frames:v", "1", "-q:v", "2", "-y", outputPath];
+    } else {
+      ffmpegArgs = ["-ss", String(Math.max(0, timeSeconds)), "-i", inputPath, "-frames:v", "1", "-q:v", "2", "-y", outputPath];
+    }
 
     await execFileAsync("ffmpeg", ffmpegArgs);
 

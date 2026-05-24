@@ -5,20 +5,22 @@ interface Props {
   onClick: () => void;
   busy?: boolean;
   disabled?: boolean;
+  extracting?: boolean;
 }
 
-export default function GenerateButton({ onClick, busy, disabled }: Props) {
+export default function GenerateButton({ onClick, busy, disabled, extracting }: Props) {
   return (
     <button
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      disabled={disabled || busy}
-      className="shrink-0 h-7 px-3 rounded-lg flex items-center gap-1.5 transition-all disabled:opacity-30 hover:brightness-110"
+      disabled={disabled || busy || extracting}
+      className="shrink-0 h-7 px-3 rounded-lg flex items-center gap-1.5 transition-all disabled:opacity-50 hover:brightness-110"
       style={{
-        background: "rgba(45,212,191,0.18)",
+        background: extracting ? "rgba(251,146,60,0.15)" : "rgba(45,212,191,0.18)",
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",
-        border: "1px solid rgba(45,212,191,0.55)",
+        border: extracting ? "1px solid rgba(251,146,60,0.45)" : "1px solid rgba(45,212,191,0.55)",
+        cursor: disabled || busy ? "not-allowed" : "pointer",
       }}
     >
       {busy ? (
@@ -26,6 +28,14 @@ export default function GenerateButton({ onClick, busy, disabled }: Props) {
           <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
           <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
+      ) : extracting ? (
+        <>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
+            <circle cx="5" cy="5" r="4" stroke="rgba(251,146,60,0.25)" strokeWidth="1.5" />
+            <path d="M5 1 A4 4 0 0 1 9 5" stroke="#fb923c" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span className="text-[11px] font-medium" style={{ color: "#fb923c" }}>Extracting…</span>
+        </>
       ) : (
         <>
           <svg width="9" height="9" viewBox="0 0 8 8" fill="currentColor" style={{ color: "rgba(255,255,255,0.9)", flexShrink: 0 }}>

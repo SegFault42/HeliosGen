@@ -36,6 +36,10 @@ export default function CuttableEdge({
   const nodes = useNodes();
   const srcNode = nodes.find((n) => n.id === source);
 
+  const isExtractingEdge =
+    !!(srcNode?.data.extractingFrame as boolean | undefined) &&
+    (sourceHandleId === "startFrameOut" || sourceHandleId === "endFrameOut" || sourceHandleId === "imagePickOut");
+
   const tgtStyle   = edgeStyle(colorKey ?? targetHandleId);
   const tgtColor   = (tgtStyle.stroke as string) ?? "#555";
   const srcColor   = getSourceHandleColor(srcNode?.type, sourceHandleId);
@@ -127,18 +131,22 @@ export default function CuttableEdge({
         fill="none"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
-        strokeDasharray={pathLength > 0 ? pathLength : undefined}
-        strokeDashoffset={dying ? pathLength : 0}
+        strokeDasharray={isExtractingEdge ? "6 6" : pathLength > 0 ? pathLength : undefined}
+        strokeDashoffset={isExtractingEdge ? undefined : dying ? pathLength : 0}
         style={{
           stroke: strokeValue,
           ["--edge-color" as string]: edgeColorVar,
           pointerEvents: "none",
-          opacity: dimmed ? 0.15 : 1,
+          opacity: dimmed ? 0.15 : isExtractingEdge ? 0.7 : 1,
           transition: [
             dying  ? "stroke-dashoffset 0.42s ease-in" : null,
             "opacity 150ms",
           ].filter(Boolean).join(", "),
-          animation: error ? "edge-error-blink 1.4s ease 1 forwards" : undefined,
+          animation: error
+            ? "edge-error-blink 1.4s ease 1 forwards"
+            : isExtractingEdge
+            ? "edge-extracting 0.5s linear infinite"
+            : undefined,
         }}
       />
 

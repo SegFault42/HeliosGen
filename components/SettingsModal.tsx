@@ -114,9 +114,11 @@ export function saveAzureTextModelName(name: string) {
 
 /* ─── Nav items ─────────────────────────────────────────────────────────────── */
 
-type NavId = "api-keys" | "image-models" | "video-models" | "text-models";
+const IS_DEBUG = process.env.NEXT_PUBLIC_DEBUG === "true";
 
-const NAV: { id: NavId; label: string; icon: React.ReactNode }[] = [
+type NavId = "api-keys" | "image-models" | "video-models" | "text-models" | "debug";
+
+const NAV_BASE: { id: NavId; label: string; icon: React.ReactNode }[] = [
   {
     id: "api-keys",
     label: "API Keys",
@@ -160,6 +162,20 @@ const NAV: { id: NavId; label: string; icon: React.ReactNode }[] = [
     ),
   },
 ];
+
+const DEBUG_NAV_ITEM: { id: NavId; label: string; icon: React.ReactNode } = {
+  id: "debug",
+  label: "Debug",
+  icon: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
+  ),
+};
+
+const NAV = IS_DEBUG ? [...NAV_BASE, DEBUG_NAV_ITEM] : NAV_BASE;
 
 /* ─── Props ─────────────────────────────────────────────────────────────────── */
 
@@ -1041,6 +1057,60 @@ function TextModelsPanel({
   );
 }
 
+/* ─── Debug panel ───────────────────────────────────────────────────────────── */
+
+function DebugPanel() {
+  const debugMode     = useWorkflowStore((s) => s.debugMode);
+  const toggleDebug   = useWorkflowStore((s) => s.toggleDebug);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      <div>
+        <h2 style={{ fontSize: "15px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, marginBottom: "4px" }}>Debug</h2>
+        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", margin: 0 }}>
+          Only visible when <code style={{ fontFamily: "monospace", color: "rgba(251,146,60,0.8)" }}>NEXT_PUBLIC_DEBUG=true</code>
+        </p>
+      </div>
+
+      {/* Simulate generation */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "14px 16px", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+          <span style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)" }}>Simulate generation</span>
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
+            Skip the real API call — fake a 5-second generation and log the payload to the server console.
+          </span>
+        </div>
+        <button
+          onClick={toggleDebug}
+          style={{
+            flexShrink: 0,
+            width: "40px",
+            height: "22px",
+            borderRadius: "11px",
+            border: "none",
+            cursor: "pointer",
+            padding: "2px",
+            background: debugMode ? "rgba(251,146,60,0.8)" : "rgba(255,255,255,0.12)",
+            transition: "background 200ms",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <div style={{
+            width: "18px",
+            height: "18px",
+            borderRadius: "50%",
+            background: "#fff",
+            transform: debugMode ? "translateX(18px)" : "translateX(0px)",
+            transition: "transform 200ms cubic-bezier(0.34,1.56,0.64,1)",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+          }} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main modal ─────────────────────────────────────────────────────────────── */
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
@@ -1386,6 +1456,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onModelNameChange={handleAzureTextModelNameChange}
               />
             )}
+            {activeNav === "debug" && IS_DEBUG && <DebugPanel />}
           </div>
         </div>
       </div>

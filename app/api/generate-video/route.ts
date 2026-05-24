@@ -291,8 +291,9 @@ export async function POST(req: NextRequest) {
     ? { model: effectiveApiId, ...input }
     : { model: effectiveApiId, callBackUrl, input };
 
-  // Debug mode — return the exact kie.ai payload and endpoint without submitting
+  // Debug mode — log payload to server console and return without submitting
   if (debugOnly) {
+    console.log(`[DEBUG] generate-video payload → ${endpoint}`, JSON.stringify(kieBody, null, 2));
     return NextResponse.json({ debugPayload: kieBody, debugEndpoint: endpoint });
   }
 

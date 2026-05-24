@@ -644,10 +644,17 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     }
 
     if (debugMode) {
-      console.log(`[DEBUG] node=${id}`, payload);
       setLoading(true);
-      await new Promise((r) => setTimeout(r, 3000));
-      setLoading(false);
+      try {
+        await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, debugOnly: true }),
+        });
+        await new Promise((r) => setTimeout(r, 5000));
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 

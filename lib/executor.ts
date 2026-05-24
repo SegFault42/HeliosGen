@@ -64,6 +64,31 @@ export function buildPipelineWaves(nodes: Node<NodeData>[], edges: Edge[]): stri
   return waves;
 }
 
+const FRAME_OUT_HANDLES = new Set(["startFrameOut", "endFrameOut", "imagePickOut"]);
+
+/** Returns the specific frame URL for a video node based on which output handle was used. */
+function resolveVideoNodeFrameUrl(src: Node<NodeData>, sourceHandle: string | null | undefined): string | undefined {
+  if (src.type !== "videoInputNode" && src.type !== "videoGeneratorNode") return undefined;
+  if (sourceHandle === "startFrameOut") return src.data.eagerStartFrameUrl as string | undefined;
+  if (sourceHandle === "endFrameOut")   return src.data.eagerEndFrameUrl   as string | undefined;
+  if (sourceHandle === "imagePickOut")  return src.data.capturedFrameUrl   as string | undefined;
+  return undefined;
+}
+
+/** Resolves the image URL for a connection, always honouring the source handle.
+ *  Frame-specific handles (startFrameOut / endFrameOut / imagePickOut) return only
+ *  their designated frame — no fallback to unrelated image fields. */
+function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | undefined): string | undefined {
+  if (FRAME_OUT_HANDLES.has(sourceHandle ?? "")) {
+    return resolveVideoNodeFrameUrl(src, sourceHandle);
+  }
+  return (resolveVideoNodeFrameUrl(src, sourceHandle)
+    ?? src.data.capturedFrameUrl
+    ?? src.data.r2Url
+    ?? src.data.inputImage
+    ?? src.data.imageUrl) as string | undefined;
+}
+
 /** Resolve upstream prompt + images for a target node */
 export function resolveInputs(
   nodeId: string,
@@ -108,7 +133,7 @@ export function resolveInputs(
 
     // "image" handle — multi-image input for generateNode (up to 14)
     if (edge.targetHandle === "image") {
-      const imgSrc = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
+      const imgSrc = resolveImageUrl(src, edge.sourceHandle);
       if (imgSrc) {
         result.imageUrls.push(imgSrc);
         result.imageNodeLabels.push((src.data.label as string | undefined) ?? "");
@@ -119,21 +144,17 @@ export function resolveInputs(
       }
     }
 
-    // "startFrame" handle — Kling first frame
-    if (edge.targetHandle === "startFrame") {
-      const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
-      if (url) result.startFrameUrl = url;
-    }
-
-    // "endFrame" handle — Kling last frame
-    if (edge.targetHandle === "endFrame") {
-      const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
-      if (url) result.endFrameUrl = url;
+    if (edge.targetHandle === "startFrame" || edge.targetHandle === "endFrame") {
+      const url = resolveImageUrl(src, edge.sourceHandle);
+      if (url) {
+        if (edge.targetHandle === "startFrame") result.startFrameUrl = url;
+        else result.endFrameUrl = url;
+      }
     }
 
     // "resource" handle — reference images (cap enforced at node level via maxResources)
     if (edge.targetHandle === "resource") {
-      const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
+      const url = resolveImageUrl(src, edge.sourceHandle);
       const label = src.data.label as string | undefined;
       if (url) result.resources.push({ url, label: label ?? "element" });
     }

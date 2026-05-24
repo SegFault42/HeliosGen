@@ -32,6 +32,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const edges           = useWorkflowStore((s) => s.edges);
   const nodes           = useWorkflowStore((s) => s.nodes);
+  const addToast        = useWorkflowStore((s) => s.addToast);
   const { deleteElements, setNodes } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
 
@@ -137,13 +138,39 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
            e.sourceHandle !== "endFrameOut"
   );
   const connectedToImageHandle = !!imageEdge;
-  const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
+
+  // Mutually exclusive frame output handles — once one is connected, hide the others
+  const FRAME_OUT_HANDLES = new Set(["startFrameOut", "endFrameOut", "imagePickOut"]);
+  const connectedFrameHandles = new Set(
+    edges
+      .filter((e) => e.source === id && FRAME_OUT_HANDLES.has(e.sourceHandle ?? ""))
+      .map((e) => e.sourceHandle!)
+  );
+  const visibleHandles = VIDEO_SOURCE_HANDLES.filter(
+    (h) => !FRAME_OUT_HANDLES.has(h.id) || connectedFrameHandles.size === 0 || connectedFrameHandles.has(h.id)
+  );
+  const capturedFrameUrl    = data.capturedFrameUrl    as string | undefined;
+  const eagerStartFrameUrl  = data.eagerStartFrameUrl  as string | undefined;
+  const eagerEndFrameUrl    = data.eagerEndFrameUrl    as string | undefined;
+  const eagerFrameUrl = connectedFrameHandles.has("endFrameOut")
+    ? eagerEndFrameUrl
+    : connectedFrameHandles.has("startFrameOut")
+    ? eagerStartFrameUrl
+    : (eagerEndFrameUrl ?? eagerStartFrameUrl);
+  const displayFrameUrl = connectedFrameHandles.has("imagePickOut")
+    ? capturedFrameUrl
+    : connectedFrameHandles.has("endFrameOut")
+    ? eagerEndFrameUrl
+    : connectedFrameHandles.has("startFrameOut")
+    ? eagerStartFrameUrl
+    : (capturedFrameUrl ?? eagerEndFrameUrl ?? eagerStartFrameUrl);
   const isExtractingFrame = !!(data.extractingFrame as boolean | undefined);
   const capturedFrameRef     = useRef(capturedFrameUrl);
   capturedFrameRef.current   = capturedFrameUrl;
   const prevCapturedRef      = useRef(capturedFrameUrl);
+  const prevEagerRef         = useRef(eagerFrameUrl);
 
-  // Auto-switch to frame view whenever a new capturedFrameUrl arrives
+  // Auto-switch to frame view whenever a new capturedFrameUrl or eagerFrameUrl arrives
   useEffect(() => {
     const prev = prevCapturedRef.current;
     prevCapturedRef.current = capturedFrameUrl;
@@ -152,6 +179,14 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       setPickerOpen(false);
     }
   }, [capturedFrameUrl]);
+
+  useEffect(() => {
+    const prev = prevEagerRef.current;
+    prevEagerRef.current = eagerFrameUrl;
+    if (eagerFrameUrl && eagerFrameUrl !== prev && !capturedFrameUrl) {
+      setViewMode("frame");
+    }
+  }, [eagerFrameUrl, capturedFrameUrl]);
 
   // ── Frame picker ────────────────────────────────────────────────────────────
 
@@ -169,6 +204,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     if (!v) return;
     setCaptureErr(null);
     setCapturing(true);
+    updateNodeData(id, { extractingFrame: true });
     try {
       const seekTime = v.currentTime;
       const srcUrl   = v.src;
@@ -251,6 +287,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       setCaptureErr(err instanceof Error ? err.message : "Capture failed");
     } finally {
       setCapturing(false);
+      updateNodeData(id, { extractingFrame: false });
     }
   }, [id, updateNodeData, edges, nodes]);
 
@@ -278,6 +315,79 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagePickEdgeCount]);
+
+  // ── Eager frame extraction — source handle decides which frame to extract ────
+  const trimStart = data.trimStart as number | undefined;
+  const trimEnd   = data.trimEnd   as number | undefined;
+
+  const startFrameKey = edges.some((e) => e.source === id && e.sourceHandle === "startFrameOut") && videoUrl && !videoUrl.startsWith("blob:")
+    ? `sf:${videoUrl}:${trimStart ?? 0}` : "";
+  const endFrameKey = edges.some((e) => e.source === id && e.sourceHandle === "endFrameOut") && videoUrl && !videoUrl.startsWith("blob:")
+    ? `ef:${videoUrl}:${trimEnd ?? "last"}` : "";
+
+  const prevStartKeyRef = useRef("");
+  const prevEndKeyRef   = useRef("");
+  const activeExtRef    = useRef(0);
+
+  const runExtract = useCallback(async (isLastFrame: boolean) => {
+    const vUrl = (useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data.videoUrl as string | undefined);
+    if (!vUrl || vUrl.startsWith("blob:")) return;
+    activeExtRef.current++;
+    updateNodeData(id, { extractingFrame: true });
+    addToast("Extracting frame…", "info");
+    try {
+      const { data: authData } = await createClient().auth.getSession();
+      const token = authData.session?.access_token;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const nodeData = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data;
+      const tStart = nodeData?.trimStart as number | undefined;
+      const tEnd   = nodeData?.trimEnd   as number | undefined;
+      const body = isLastFrame
+        ? { videoUrl: vUrl, ...(tEnd !== undefined ? { timeSeconds: tEnd } : { lastFrame: true }) }
+        : { videoUrl: vUrl, timeSeconds: tStart ?? 0 };
+      const r = await fetch("/api/extract-frame", { method: "POST", headers, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (j.cdnUrl) {
+        const field = isLastFrame ? "eagerEndFrameUrl" : "eagerStartFrameUrl";
+        updateNodeData(id, { [field]: j.cdnUrl });
+        addToast("Frame extracted.", "success");
+      }
+    } catch { /* silent */ } finally {
+      activeExtRef.current--;
+      if (activeExtRef.current === 0) updateNodeData(id, { extractingFrame: false });
+    }
+  }, [id, updateNodeData, addToast]);
+
+  useEffect(() => {
+    if (!startFrameKey) {
+      if (prevStartKeyRef.current) {
+        prevStartKeyRef.current = "";
+        updateNodeData(id, { eagerStartFrameUrl: undefined });
+      }
+      return;
+    }
+    if (prevStartKeyRef.current === startFrameKey) return;
+    prevStartKeyRef.current = startFrameKey;
+    updateNodeData(id, { eagerStartFrameUrl: undefined });
+    runExtract(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startFrameKey]);
+
+  useEffect(() => {
+    if (!endFrameKey) {
+      if (prevEndKeyRef.current) {
+        prevEndKeyRef.current = "";
+        updateNodeData(id, { eagerEndFrameUrl: undefined });
+      }
+      return;
+    }
+    if (prevEndKeyRef.current === endFrameKey) return;
+    prevEndKeyRef.current = endFrameKey;
+    updateNodeData(id, { eagerEndFrameUrl: undefined });
+    runExtract(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endFrameKey]);
 
   // ── Video upload ─────────────────────────────────────────────────────────────
 
@@ -554,20 +664,23 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
       >
         <CornerResizer minWidth={160} minHeight={80} keepAspectRatio />
         <span className="node-above-label">{data.label as string}</span>
-        {VIDEO_SOURCE_HANDLES.map((h, i) => (
-          <Handle
-            key={h.id}
-            type="source"
-            position={Position.Right}
-            id={h.id}
-            style={{ top: 20 + i * 32 }}
-            className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
-            onMouseEnter={() => setHoveredSrcHandle(h.id)}
-            onMouseLeave={() => setHoveredSrcHandle(null)}
-          >
-            {h.icon}
-          </Handle>
-        ))}
+        {VIDEO_SOURCE_HANDLES.map((h, i) => {
+          const visible = visibleHandles.some((v) => v.id === h.id);
+          return (
+            <Handle
+              key={h.id}
+              type="source"
+              position={Position.Right}
+              id={h.id}
+              style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+              className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+              onMouseEnter={() => { if (visible) setHoveredSrcHandle(h.id); }}
+              onMouseLeave={() => setHoveredSrcHandle(null)}
+            >
+              {h.icon}
+            </Handle>
+          );
+        })}
 
         {hoveredSrcHandle && (() => {
           const idx = VIDEO_SOURCE_HANDLES.findIndex((h) => h.id === hoveredSrcHandle);
@@ -678,10 +791,10 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
           )}
 
           {/* Frame view overlay — shown when toggle is set to "frame" */}
-          {viewMode === "frame" && capturedFrameUrl && (
+          {viewMode === "frame" && displayFrameUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={capturedFrameUrl}
+              src={displayFrameUrl}
               alt="Captured frame"
               className="absolute inset-0 w-full h-full block"
               style={{ objectFit: "fill", zIndex: 5 }}
@@ -703,7 +816,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                   top: 4, left: 4,
                   width: 28, height: 28,
                   borderRadius: "50%",
-                  background: viewMode === "frame" && capturedFrameUrl ? "transparent" : "rgba(255,255,255,0.18)",
+                  background: viewMode === "frame" && displayFrameUrl ? "transparent" : "rgba(255,255,255,0.18)",
                   border: "1.5px solid rgba(255,255,255,0.45)",
                   transform: `translateX(${viewMode === "frame" ? 30 : 0}px)`,
                   transition: "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
@@ -723,7 +836,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (capturedFrameUrl) {
+                    if (displayFrameUrl) {
                       setViewMode("frame");
                     } else {
                       const v = videoRef.current;
@@ -732,12 +845,12 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
                     }
                   }}
                   className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
-                  title={capturedFrameUrl ? "Show captured frame" : "Pick a frame"}
+                  title={displayFrameUrl ? "Show frame" : "Pick a frame"}
                 >
-                  {capturedFrameUrl ? (
+                  {displayFrameUrl ? (
                     <div style={{
                       width: 22, height: 22, borderRadius: "50%",
-                      backgroundImage: `url(${capturedFrameUrl})`,
+                      backgroundImage: `url(${displayFrameUrl})`,
                       backgroundSize: "cover", backgroundPosition: "center",
                       flexShrink: 0,
                     }} />
@@ -864,7 +977,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
               )}
 
               {/* "Pick a frame" CTA — shown on hover when connected but not locked */}
-              {connectedToImageHandle && !capturedFrameUrl && (
+              {connectedToImageHandle && !displayFrameUrl && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); openPicker(); }}
@@ -880,7 +993,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
               )}
 
               {/* Retake button — shown on hover when in frame mode */}
-              {capturedFrameUrl && viewMode === "frame" && (
+              {displayFrameUrl && viewMode === "frame" && (
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
@@ -1204,20 +1317,23 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
     >
       <CornerResizer minWidth={160} minHeight={100} />
       <span className="node-above-label">{data.label as string}</span>
-      {VIDEO_SOURCE_HANDLES.map((h, i) => (
-        <Handle
-          key={h.id}
-          type="source"
-          position={Position.Right}
-          id={h.id}
-          style={{ top: 20 + i * 32 }}
-          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
-          onMouseEnter={() => setHoveredSrcHandle(h.id)}
-          onMouseLeave={() => setHoveredSrcHandle(null)}
-        >
-          {h.icon}
-        </Handle>
-      ))}
+      {VIDEO_SOURCE_HANDLES.map((h, i) => {
+        const visible = visibleHandles.some((v) => v.id === h.id);
+        return (
+          <Handle
+            key={h.id}
+            type="source"
+            position={Position.Right}
+            id={h.id}
+            style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+            className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
+            onMouseEnter={() => { if (visible) setHoveredSrcHandle(h.id); }}
+            onMouseLeave={() => setHoveredSrcHandle(null)}
+          >
+            {h.icon}
+          </Handle>
+        );
+      })}
 
       {hoveredSrcHandle && (() => {
         const idx = VIDEO_SOURCE_HANDLES.findIndex((h) => h.id === hoveredSrcHandle);

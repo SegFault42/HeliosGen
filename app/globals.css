@@ -965,6 +965,11 @@ body {
 }
 
 /* ── Edge error blink ────────────────────────────────────────────────────── */
+@keyframes edge-extracting {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -12; }
+}
+
 @keyframes edge-error-blink {
 
   0%,

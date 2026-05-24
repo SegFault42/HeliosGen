@@ -173,6 +173,7 @@ export async function POST(req: NextRequest) {
     azureResolution,
     azureBaseUrl,
     azureDeployment,
+    debugOnly,
   } = (await req.json()) as {
     model?:           string;
     prompt?:          string;
@@ -183,7 +184,14 @@ export async function POST(req: NextRequest) {
     azureResolution?: string;     // "1k" | "2k" | "4k"
     azureBaseUrl?:    string;     // global base URL from settings
     azureDeployment?: string;     // per-model deployment name from settings
+    debugOnly?:       boolean;
   };
+
+  if (debugOnly) {
+    const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution };
+    console.log("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
+    return NextResponse.json({ ok: true });
+  }
 
   if (!prompt?.trim()) return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
 

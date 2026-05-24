@@ -164,7 +164,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const killEdgesForHandles = useWorkflowStore((s) => s.killEdgesForHandles);
   const remapTargetHandle = useWorkflowStore((s) => s.remapTargetHandle);
   const flashEdgeError = useWorkflowStore((s) => s.flashEdgeError);
-  const addToast  = useWorkflowStore((s) => s.addToast);
+  const addToast = useWorkflowStore((s) => s.addToast);
   const kieKeySet = useWorkflowStore((s) => s.kieKeySet);
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const onEdgesChange = useWorkflowStore((s) => s.onEdgesChange);
@@ -388,6 +388,11 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
   useGeneratingBorderAnimation(cardRef, animBusy);
   const videoUrl = data.videoUrl as string | undefined;
+  const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
+  const eagerStartFrameUrl = data.eagerStartFrameUrl as string | undefined;
+  const eagerEndFrameUrl = data.eagerEndFrameUrl as string | undefined;
+
+  // displayFrameUrl is computed after connectedFrameOutHandles is defined (see below).
 
   const promptOverLimit = (() => {
     const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
@@ -519,13 +524,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   // HappyHorse: startFrame and resource are mutually exclusive — hide the other once one is connected
   if (cfg.id === "happyhorse") {
     if (connectedHandles.has("startFrame")) activeHandles.delete("resource");
-    if (connectedHandles.has("resource"))   activeHandles.delete("startFrame");
+    if (connectedHandles.has("resource")) activeHandles.delete("startFrame");
   }
 
   // Seedance: first/last frames and multimodal references are mutually exclusive scenarios
   if (cfg.id === "seedance-2-fast") {
     const hasFrame = connectedHandles.has("startFrame") || connectedHandles.has("endFrame");
-    const hasRef   = connectedHandles.has("resource") || connectedHandles.has("referenceVideo") || connectedHandles.has("audioRef");
+    const hasRef = connectedHandles.has("resource") || connectedHandles.has("referenceVideo") || connectedHandles.has("audioRef");
     if (hasFrame) {
       activeHandles.delete("resource");
       activeHandles.delete("referenceVideo");
@@ -543,11 +548,19 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   useEffect(() => {
     const raf = requestAnimationFrame(() => updateNodeInternals(id));
     return () => cancelAnimationFrame(raf);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, hhConnKey, updateNodeInternals]);
 
+  // Lock input handles once at least one generation has completed.
+  const hasGeneration = generations.some((g) => typeof g === "string" && !!g && !g.startsWith("blob:"));
+
   // Compute bottom-anchored positions — active handles stack together with no gaps.
-  const activeInOrder = HANDLE_ORDER.filter((hid) => activeHandles.has(hid));
+  // When locked, unconnected handles are excluded so the remaining ones restack cleanly.
+  const activeInOrder = HANDLE_ORDER.filter((hid) => {
+    if (!activeHandles.has(hid)) return false;
+    if (hasGeneration && !connectedHandles.has(hid)) return false;
+    return true;
+  });
   const N = activeInOrder.length;
   const handleBottomMap = new Map(
     activeInOrder.map((hid, idx) => [hid, HANDLE_BOTTOM_BASE + (N - 1 - idx) * HANDLE_SPACING])
@@ -584,8 +597,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const IMAGE_HANDLES = new Set(["startFrame", "endFrame", "resource", "image"]);
   const imagePickEdges = edges.filter(
     (e) => e.source === id &&
-           (IMAGE_HANDLES.has(e.targetHandle as string) || !e.targetHandle) &&
-           e.sourceHandle === "imagePickOut"
+      (IMAGE_HANDLES.has(e.targetHandle as string) || !e.targetHandle) &&
+      e.sourceHandle === "imagePickOut"
   );
   const imagePickEdgeCount = imagePickEdges.length;
   const prevEdgeCountRef = useRef(imagePickEdgeCount);
@@ -609,6 +622,101 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     }
   }, [imagePickEdgeCount]);
 
+  // Derive extracting state from any connected source node that is currently extracting
+  const frameSourceNodeIds = new Set(
+    edges
+      .filter((e) => e.target === id && (e.targetHandle === "startFrame" || e.targetHandle === "endFrame"))
+      .map((e) => e.source)
+  );
+  const isExtractingFrames = nodes.some(
+    (n) => frameSourceNodeIds.has(n.id) && !!(n.data.extractingFrame as boolean | undefined)
+  );
+
+  // ── Mutual exclusivity + eager extraction for this node's output frame handles ─
+  const FRAME_OUT_IDS = new Set(["startFrameOut", "endFrameOut", "imagePickOut"]);
+  const connectedFrameOutHandles = new Set(
+    edges.filter((e) => e.source === id && FRAME_OUT_IDS.has(e.sourceHandle ?? "")).map((e) => e.sourceHandle!)
+  );
+  const visibleSourceHandles = SOURCE_HANDLES.filter(
+    (h) => !FRAME_OUT_IDS.has(h.id) || connectedFrameOutHandles.size === 0 || connectedFrameOutHandles.has(h.id)
+  );
+
+  const eagerFrameUrl = connectedFrameOutHandles.has("endFrameOut")
+    ? eagerEndFrameUrl
+    : connectedFrameOutHandles.has("startFrameOut")
+    ? eagerStartFrameUrl
+    : (eagerEndFrameUrl ?? eagerStartFrameUrl);
+  const displayFrameUrl = connectedFrameOutHandles.has("imagePickOut")
+    ? capturedFrameUrl
+    : connectedFrameOutHandles.has("endFrameOut")
+    ? eagerEndFrameUrl
+    : connectedFrameOutHandles.has("startFrameOut")
+    ? eagerStartFrameUrl
+    : (capturedFrameUrl ?? eagerEndFrameUrl ?? eagerStartFrameUrl);
+
+  // Current generated video URL (first non-null, non-error generation)
+  const currentGenUrl = (() => {
+    const genEntry = generations[currentGenIdx];
+    if (typeof genEntry === "string" && genEntry && !genEntry.startsWith("blob:")) return genEntry;
+    return typeof videoUrl === "string" && videoUrl && !videoUrl.startsWith("blob:") ? videoUrl : undefined;
+  })();
+
+  // Determine which temporal frames need extracting — source handle decides.
+  const outFrameEdges = edges.filter((e) => e.source === id && (e.sourceHandle === "startFrameOut" || e.sourceHandle === "endFrameOut"));
+  const needsStartFrame = outFrameEdges.some((e) => e.sourceHandle === "startFrameOut");
+  const needsEndFrame   = outFrameEdges.some((e) => e.sourceHandle === "endFrameOut");
+  const sfVGKey = needsStartFrame && currentGenUrl ? `sf:${currentGenUrl}` : "";
+  const efVGKey = needsEndFrame && currentGenUrl ? `ef:${currentGenUrl}` : "";
+  const prevSfVGKeyRef = useRef("");
+  const prevEfVGKeyRef = useRef("");
+  const activeVGExtRef = useRef(0);
+
+  const runVGExtract = useCallback(async (isLastFrame: boolean, url: string) => {
+    activeVGExtRef.current++;
+    updateNodeData(id, { extractingFrame: true });
+    addToast("Extracting frame…", "info");
+    try {
+      const { data: authData } = await (await import("@/lib/supabase/client")).createClient().auth.getSession();
+      const token = authData.session?.access_token;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const body = isLastFrame ? { videoUrl: url, lastFrame: true } : { videoUrl: url, timeSeconds: 0 };
+      const r = await fetch("/api/extract-frame", { method: "POST", headers, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (j.cdnUrl) {
+        updateNodeData(id, { [isLastFrame ? "eagerEndFrameUrl" : "eagerStartFrameUrl"]: j.cdnUrl });
+        addToast("Frame extracted.", "success");
+      }
+    } catch { /* silent */ } finally {
+      activeVGExtRef.current--;
+      if (activeVGExtRef.current === 0) updateNodeData(id, { extractingFrame: false });
+    }
+  }, [id, updateNodeData, addToast]);
+
+  useEffect(() => {
+    if (!sfVGKey) {
+      if (prevSfVGKeyRef.current) { prevSfVGKeyRef.current = ""; updateNodeData(id, { eagerStartFrameUrl: undefined }); }
+      return;
+    }
+    if (prevSfVGKeyRef.current === sfVGKey) return;
+    prevSfVGKeyRef.current = sfVGKey;
+    updateNodeData(id, { eagerStartFrameUrl: undefined });
+    runVGExtract(false, currentGenUrl!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sfVGKey]);
+
+  useEffect(() => {
+    if (!efVGKey) {
+      if (prevEfVGKeyRef.current) { prevEfVGKeyRef.current = ""; updateNodeData(id, { eagerEndFrameUrl: undefined }); }
+      return;
+    }
+    if (prevEfVGKeyRef.current === efVGKey) return;
+    prevEfVGKeyRef.current = efVGKey;
+    updateNodeData(id, { eagerEndFrameUrl: undefined });
+    runVGExtract(true, currentGenUrl!);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [efVGKey]);
+
   const openPicker = useCallback(() => {
     const v = videoRef.current;
     if (v) {
@@ -623,9 +731,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     if (!v) return;
     setCaptureErr(null);
     setCapturing(true);
+    updateNodeData(id, { extractingFrame: true });
     try {
       const seekTime = v.currentTime;
-      const srcUrl   = v.src;
+      const srcUrl = v.src;
       if (!srcUrl) throw new Error("No video source");
 
       const token = await (async () => {
@@ -662,6 +771,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       setCaptureErr(e.message || "Failed to capture frame");
     } finally {
       setCapturing(false);
+      updateNodeData(id, { extractingFrame: false });
     }
   }, [id, updateNodeData, edges, nodes]);
 
@@ -756,12 +866,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     {
       type HandleSpec = { handle: string; getUrl: (d: Record<string, unknown>) => string | undefined };
       const handleSpecs: HandleSpec[] = [
-        { handle: "startFrame",     getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "endFrame",       getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "resource",       getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "videoRef",       getUrl: (d) => (d.videoUrl) as string | undefined },
+        { handle: "startFrame", getUrl: (d) => (d.eagerStartFrameUrl ?? d.eagerEndFrameUrl ?? d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "endFrame", getUrl: (d) => (d.eagerEndFrameUrl ?? d.eagerStartFrameUrl ?? d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "resource", getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
+        { handle: "videoRef", getUrl: (d) => (d.videoUrl) as string | undefined },
         { handle: "referenceVideo", getUrl: (d) => (d.videoUrl ?? d.r2Url) as string | undefined },
-        { handle: "audioRef",       getUrl: (d) => (d.audioUrl ?? d.r2Url) as string | undefined },
+        { handle: "audioRef", getUrl: (d) => (d.audioUrl ?? d.r2Url) as string | undefined },
       ];
 
       const flashSet = new Set<string>();
@@ -828,36 +938,34 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     let finalEndFrameUrl = upstream.endFrameUrl;
     const frameHeaders: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` };
 
-    const sfEdge = edges.find((e) => e.target === id && e.targetHandle === "startFrame" && e.sourceHandle === "startFrameOut");
-    if (sfEdge) {
-      const sfSrc = nodes.find((n) => n.id === sfEdge.source);
-      if (sfSrc?.type === "videoInputNode") {
-        const vUrl = sfSrc.data.videoUrl as string | undefined;
-        if (vUrl && !vUrl.startsWith("blob:")) {
-          const timeSeconds = (sfSrc.data.trimStart as number | undefined) ?? 0;
-          try {
-            const r = await fetch("/api/extract-frame", { method: "POST", headers: frameHeaders, body: JSON.stringify({ videoUrl: vUrl, timeSeconds }) });
-            const j = await r.json();
-            if (j.cdnUrl) finalStartFrameUrl = j.cdnUrl;
-          } catch { /* proceed without */ }
+    // Fallback: if eager extraction didn't run (e.g. blob URL at connect time), extract now.
+    // Frame type is determined by the SOURCE handle on A, not the target handle on B.
+    const frameEdges = edges.filter(
+      (e) => e.target === id &&
+        (e.targetHandle === "startFrame" || e.targetHandle === "endFrame") &&
+        (e.sourceHandle === "startFrameOut" || e.sourceHandle === "endFrameOut")
+    );
+    for (const fe of frameEdges) {
+      const isLast = fe.sourceHandle === "endFrameOut";
+      const targetSlotFilled = fe.targetHandle === "startFrame" ? !!finalStartFrameUrl : !!finalEndFrameUrl;
+      if (targetSlotFilled) continue;
+      const feSrc = nodes.find((n) => n.id === fe.source);
+      if (feSrc?.type !== "videoInputNode") continue;
+      const vUrl = feSrc.data.videoUrl as string | undefined;
+      if (!vUrl || vUrl.startsWith("blob:")) continue;
+      const tStart = feSrc.data.trimStart as number | undefined;
+      const tEnd = feSrc.data.trimEnd as number | undefined;
+      try {
+        const body = isLast
+          ? { videoUrl: vUrl, ...(tEnd !== undefined ? { timeSeconds: tEnd } : { lastFrame: true }) }
+          : { videoUrl: vUrl, timeSeconds: tStart ?? 0 };
+        const r = await fetch("/api/extract-frame", { method: "POST", headers: frameHeaders, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (j.cdnUrl) {
+          if (fe.targetHandle === "startFrame") finalStartFrameUrl = j.cdnUrl;
+          else finalEndFrameUrl = j.cdnUrl;
         }
-      }
-    }
-
-    const efEdge = edges.find((e) => e.target === id && e.targetHandle === "endFrame" && e.sourceHandle === "endFrameOut");
-    if (efEdge) {
-      const efSrc = nodes.find((n) => n.id === efEdge.source);
-      if (efSrc?.type === "videoInputNode") {
-        const vUrl = efSrc.data.videoUrl as string | undefined;
-        if (vUrl && !vUrl.startsWith("blob:")) {
-          const trimEnd = efSrc.data.trimEnd as number | undefined;
-          try {
-            const r = await fetch("/api/extract-frame", { method: "POST", headers: frameHeaders, body: JSON.stringify({ videoUrl: vUrl, ...(trimEnd !== undefined ? { timeSeconds: trimEnd } : { lastFrame: true }) }) });
-            const j = await r.json();
-            if (j.cdnUrl) finalEndFrameUrl = j.cdnUrl;
-          } catch { /* proceed without */ }
-        }
-      }
+      } catch { /* proceed without */ }
     }
 
     // Build full payload first so debug log matches what gets sent
@@ -891,18 +999,25 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     };
 
     if (debugMode) {
+      // Simulate a 5-second generation and log payload to backend console
+      const storeNode0 = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+      const prevGens = [...((storeNode0?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
+      const prevMeta = [...((storeNode0?.data?.generationsMeta as (GenMeta | null)[] | undefined) ?? [])];
+      const thisMeta: GenMeta = { videoModel: videoModelId, aspectRatio, duration, klingMode: mode, grokResolution: resolution, sound };
+      updateNodeData(id, { status: "running", generations: [...prevGens, null] as GenEntry[], generationsMeta: [...prevMeta, thisMeta], currentGenIdx: prevGens.length });
       setLoading(true);
       try {
-        const res = await fetch("/api/generate-video", {
+        await fetch("/api/generate-video", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
           body: JSON.stringify({ ...payload, debugOnly: true }),
         });
-        const json = await res.json();
-        console.log(`[DEBUG] videoNode=${id} — kie.ai payload:`, json.debugPayload ?? json);
-      } catch (e) {
-        console.log(`[DEBUG] videoNode=${id} — app payload (API unreachable):`, payload);
+        await new Promise((r) => setTimeout(r, 5000));
       } finally {
+        const storeNode1 = useWorkflowStore.getState().nodes.find((n) => n.id === id);
+        const gens = [...((storeNode1?.data?.generations as GenEntry[] | undefined) ?? [])];
+        gens[prevGens.length] = undefined as unknown as GenEntry;
+        updateNodeData(id, { status: "idle", generations: gens.filter((g) => g !== undefined) as GenEntry[] });
         setLoading(false);
       }
       return;
@@ -954,7 +1069,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     if (!data.pendingGenerate) return;
     updateNodeData(id, { pendingGenerate: false });
     generateRef.current();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.pendingGenerate]);
 
   const hoveredDef = hoveredHand && activeHandles.has(hoveredHand)
@@ -1004,20 +1119,24 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       )}
 
       {/* ── Source (output) handles — top-right ──────────────────────── */}
-      {SOURCE_HANDLES.map((h, i) => (
-        <Handle
-          key={h.id}
-          type="source"
-          position={Position.Right}
-          id={h.id}
-          style={{ top: 20 + i * 32 }}
-          className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
-          onMouseEnter={() => setHoveredSourceHandle(h.id)}
-          onMouseLeave={() => setHoveredSourceHandle(null)}
-        >
-          {h.icon}
-        </Handle>
-      ))}
+      {/* Render all handles at fixed positions so edges don't jump when frame handles hide. */}
+      {SOURCE_HANDLES.map((h, i) => {
+        const visible = visibleSourceHandles.some((v) => v.id === h.id);
+        return (
+          <Handle
+            key={h.id}
+            type="source"
+            position={Position.Right}
+            id={h.id}
+            style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+            className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
+            onMouseEnter={() => { if (visible) setHoveredSourceHandle(h.id); }}
+            onMouseLeave={() => setHoveredSourceHandle(null)}
+          >
+            {h.icon}
+          </Handle>
+        );
+      })}
 
       {/* Source handle tooltip */}
       {hoveredSourceHandle && (() => {
@@ -1045,12 +1164,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
       {/* ── Handles ──────────────────────────────────────────────────── */}
       {handles.map((h) => {
-        const hidden = !activeHandles.has(h.id);
+        const hidden = !activeHandles.has(h.id) || (hasGeneration && !connectedHandles.has(h.id));
         const bottomPx = handleBottomMap.get(h.id) ?? 0;
         const isMotionStartFrame = h.id === "startFrame" && cfg.id === "kling-2.6-motion-control";
         const compatible = !connectingHandleType
           || (CONNECTABLE_FOR_TYPE[connectingHandleType]?.has(h.id) ?? false);
-        const connectable = !hidden && compatible;
+        const connectable = !hidden && compatible && !hasGeneration;
         return (
           <Handle
             key={h.id}
@@ -1221,10 +1340,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           )}
 
           {/* Frame view overlay — shown when toggle is set to "frame" */}
-          {viewMode === "frame" && (data.capturedFrameUrl as string | undefined) && (
+          {viewMode === "frame" && displayFrameUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={data.capturedFrameUrl as string}
+              src={displayFrameUrl}
               alt="Captured frame"
               className="absolute inset-0 w-full h-full block"
               style={{ objectFit: "fill", zIndex: 5 }}
@@ -1236,7 +1355,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         {!pickerOpen && (
           <>
             {/* Video / Frame toggle switch — top-left, visible on hover */}
-            {!busy && (data.capturedFrameUrl as string | undefined) && (
+            {!busy && displayFrameUrl && (
               <div
                 className="absolute top-2 left-2 z-10 flex items-center p-1 rounded-full gap-0.5 opacity-0 group-hover/player:opacity-100 transition-opacity node-slide-reveal"
                 style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
@@ -1272,7 +1391,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 >
                   <div style={{
                     width: 20, height: 20, borderRadius: "50%",
-                    backgroundImage: `url(${data.capturedFrameUrl as string})`,
+                    backgroundImage: `url(${displayFrameUrl})`,
                     backgroundSize: "cover", backgroundPosition: "center",
                     flexShrink: 0,
                     border: "1px solid rgba(255,255,255,0.15)",
@@ -1377,7 +1496,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    videoRef.current?.play().catch(() => {});
+                    videoRef.current?.play().catch(() => { });
                     if (lastEdgeIdRef.current) onEdgesChange([{ type: "remove", id: lastEdgeIdRef.current }]);
                     setPickerOpen(false);
                     lastEdgeIdRef.current = null;
@@ -1443,7 +1562,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         )}
 
         {/* Mute button — top right, shown on hover when video is ready */}
-        {typeof generations[currentGenIdx] === "string" && (
+        {!pickerOpen && typeof generations[currentGenIdx] === "string" && (
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setGlobalMuted(!muted); }}
@@ -1467,7 +1586,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         )}
 
         {/* Player bar — timer + progress + play/pause at very bottom */}
-        {typeof generations[currentGenIdx] === "string" && (
+        {!pickerOpen && typeof generations[currentGenIdx] === "string" && (
           <div
             className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-2.5 h-9 opacity-0 group-hover/player:opacity-100 transition-opacity z-20"
             onMouseDown={(e) => e.stopPropagation()}
@@ -1491,7 +1610,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 e.stopPropagation();
                 const v = videoRef.current;
                 if (!v) return;
-                if (v.paused) v.play().catch(() => {}); else v.pause();
+                if (v.paused) v.play().catch(() => { }); else v.pause();
               }}
               className="shrink-0 pointer-events-auto opacity-70 hover:opacity-100 transition-opacity"
               title={isPlaying ? "Pause" : "Play"}
@@ -1565,198 +1684,198 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           return (
             <div
               ref={controlBarRef}
-              className={`absolute left-0 right-0 flex items-end gap-2 px-2.5 pb-2 pt-1 z-[1001] transition-opacity duration-150 ${hovering || selected ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+              className={`absolute left-0 right-0 flex items-end gap-2 px-2.5 pb-2 pt-1 z-[1001] transition-opacity duration-150 ${(hovering || selected) && !pickerOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
               style={{ bottom: 36 }}
               onMouseDown={(e) => e.stopPropagation()}
             >
               {/* Pills — wrap freely */}
               <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
 
-              {/* Model */}
-              <div className="relative">
-                <Pill onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
-                  <span className="shrink-0 text-white/60" style={{ lineHeight: 0 }}>
-                    <NodeProviderIcon provider={cfg.provider} />
-                  </span>
-                  <span className="text-[11px] text-white/70">{cfg.name}</span>
-                  <ChevronIcon open={modelOpen} />
-                </Pill>
-                <FloatMenu open={modelOpen}>
-                  {[...new Set(VIDEO_MODEL_CFG.map(m => m.provider))].map((provider, pi) => (
-                    <Fragment key={provider}>
-                      {pi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />}
-                      <div style={{ padding: "5px 10px 3px", fontSize: "10px", color: "rgba(255,255,255,0.22)", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 500 }}>
-                        {provider}
-                      </div>
-                      {VIDEO_MODEL_CFG.filter(m => m.provider === provider).map(m => (
-                        <button
-                          key={m.id}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => {
-                            const validRatio = m.ratios.includes(aspectRatio) ? aspectRatio : m.defaultRatio;
-                            const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
-                            const validRes = m.resolutions
-                              ? (m.resolutions.includes(resolution) ? resolution : (m.defaultResolution ?? m.resolutions[0]))
-                              : undefined;
-                            updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur, ...(validRes !== undefined && { grokResolution: validRes }) });
-                            const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
-                            const wasMotionControl = cfg.id === "kling-2.6-motion-control";
-                            const isMotionControl = m.id === "kling-2.6-motion-control";
-                            if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
-                              removedHandles.push("startFrame");
-                            }
-                            const oldHasVideoRef = (cfg.handles as string[]).includes("videoRef");
-                            const newHasVideoRef = (m.handles as string[]).includes("videoRef");
-                            const oldHasRefVideo = (cfg.handles as string[]).includes("referenceVideo");
-                            const newHasRefVideo = (m.handles as string[]).includes("referenceVideo");
-                            if (oldHasVideoRef && !newHasVideoRef && newHasRefVideo) {
-                              remapTargetHandle(id, "videoRef", "referenceVideo");
-                              removedHandles.splice(removedHandles.indexOf("videoRef"), 1);
-                            } else if (oldHasRefVideo && !newHasRefVideo && newHasVideoRef) {
-                              remapTargetHandle(id, "referenceVideo", "videoRef");
-                              removedHandles.splice(removedHandles.indexOf("referenceVideo"), 1);
-                            }
-                            if (removedHandles.length) killEdgesForHandles(id, removedHandles);
-                            setModelOpen(false);
-                          }}
-                          className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-[#141C28] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#A0A0A0]"}`}
-                        >
-                          <span className="shrink-0 text-white/50" style={{ lineHeight: 0 }}>
-                            <NodeProviderIcon provider={m.provider} />
-                          </span>
-                          <span className="flex-1 text-left whitespace-nowrap">{m.name}</span>
-                        </button>
-                      ))}
-                    </Fragment>
-                  ))}
-                </FloatMenu>
-              </div>
-
-              {/* Duration */}
-              {durations.length > 0 && (
+                {/* Model */}
                 <div className="relative">
-                  <Pill onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
-                    <span className="text-[11px] text-white/70 tabular-nums">{duration}s</span>
-                    <ChevronIcon open={durOpen} />
+                  <Pill onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
+                    <span className="shrink-0 text-white/60" style={{ lineHeight: 0 }}>
+                      <NodeProviderIcon provider={cfg.provider} />
+                    </span>
+                    <span className="text-[11px] text-white/70">{cfg.name}</span>
+                    <ChevronIcon open={modelOpen} />
                   </Pill>
-                  <FloatMenu open={durOpen}>
-                    <div className="p-3 min-w-[200px]" onMouseDown={(e) => e.stopPropagation()}>
-                      <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
-                      <div
-                        className="nodrag flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-lg"
-                        style={{ background: "#141C28" }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <span className="text-[11px] text-[#AAA] tabular-nums shrink-0 w-6">{duration}s</span>
-                        <div className="w-px h-3.5 shrink-0" style={{ background: "#2A2A2A" }} />
-                        <input
-                          type="range"
-                          min={0}
-                          max={(durations as readonly number[]).length - 1}
-                          step={1}
-                          value={Math.max(0, (durations as readonly number[]).indexOf(duration))}
-                          onChange={(e) => {
-                            const idx = parseInt(e.target.value);
-                            updateNodeData(id, { duration: (durations as readonly number[])[idx] });
-                          }}
-                          className="dur-slider"
-                        />
-                      </div>
-                    </div>
-                  </FloatMenu>
-                </div>
-              )}
-
-              {/* Ratio */}
-              {ratios.length > 0 && (
-                <div className="relative">
-                  <Pill onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
-                    <AspectIcon ratio={aspectRatio} />
-                    <span className="text-[11px] text-white/70">{aspectRatio}</span>
-                    <ChevronIcon open={ratioOpen} />
-                  </Pill>
-                  <FloatMenu open={ratioOpen}>
-                    {(ratios as readonly string[]).map((r) => (
-                      <FloatItem key={r} active={aspectRatio === r} onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}>
-                        {r}
-                      </FloatItem>
+                  <FloatMenu open={modelOpen}>
+                    {[...new Set(VIDEO_MODEL_CFG.map(m => m.provider))].map((provider, pi) => (
+                      <Fragment key={provider}>
+                        {pi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />}
+                        <div style={{ padding: "5px 10px 3px", fontSize: "10px", color: "rgba(255,255,255,0.22)", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 500 }}>
+                          {provider}
+                        </div>
+                        {VIDEO_MODEL_CFG.filter(m => m.provider === provider).map(m => (
+                          <button
+                            key={m.id}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              const validRatio = m.ratios.includes(aspectRatio) ? aspectRatio : m.defaultRatio;
+                              const validDur = m.durations.includes(duration) ? duration : m.defaultDuration;
+                              const validRes = m.resolutions
+                                ? (m.resolutions.includes(resolution) ? resolution : (m.defaultResolution ?? m.resolutions[0]))
+                                : undefined;
+                              updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur, ...(validRes !== undefined && { grokResolution: validRes }) });
+                              const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
+                              const wasMotionControl = cfg.id === "kling-2.6-motion-control";
+                              const isMotionControl = m.id === "kling-2.6-motion-control";
+                              if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
+                                removedHandles.push("startFrame");
+                              }
+                              const oldHasVideoRef = (cfg.handles as string[]).includes("videoRef");
+                              const newHasVideoRef = (m.handles as string[]).includes("videoRef");
+                              const oldHasRefVideo = (cfg.handles as string[]).includes("referenceVideo");
+                              const newHasRefVideo = (m.handles as string[]).includes("referenceVideo");
+                              if (oldHasVideoRef && !newHasVideoRef && newHasRefVideo) {
+                                remapTargetHandle(id, "videoRef", "referenceVideo");
+                                removedHandles.splice(removedHandles.indexOf("videoRef"), 1);
+                              } else if (oldHasRefVideo && !newHasRefVideo && newHasVideoRef) {
+                                remapTargetHandle(id, "referenceVideo", "videoRef");
+                                removedHandles.splice(removedHandles.indexOf("referenceVideo"), 1);
+                              }
+                              if (removedHandles.length) killEdgesForHandles(id, removedHandles);
+                              setModelOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-[#141C28] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#A0A0A0]"}`}
+                          >
+                            <span className="shrink-0 text-white/50" style={{ lineHeight: 0 }}>
+                              <NodeProviderIcon provider={m.provider} />
+                            </span>
+                            <span className="flex-1 text-left whitespace-nowrap">{m.name}</span>
+                          </button>
+                        ))}
+                      </Fragment>
                     ))}
                   </FloatMenu>
                 </div>
-              )}
 
-              {modePicker}
-              {resPicker}
+                {/* Duration */}
+                {durations.length > 0 && (
+                  <div className="relative">
+                    <Pill onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
+                      <span className="text-[11px] text-white/70 tabular-nums">{duration}s</span>
+                      <ChevronIcon open={durOpen} />
+                    </Pill>
+                    <FloatMenu open={durOpen}>
+                      <div className="p-3 min-w-[200px]" onMouseDown={(e) => e.stopPropagation()}>
+                        <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
+                        <div
+                          className="nodrag flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-lg"
+                          style={{ background: "#141C28" }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <span className="text-[11px] text-[#AAA] tabular-nums shrink-0 w-6">{duration}s</span>
+                          <div className="w-px h-3.5 shrink-0" style={{ background: "#2A2A2A" }} />
+                          <input
+                            type="range"
+                            min={0}
+                            max={(durations as readonly number[]).length - 1}
+                            step={1}
+                            value={Math.max(0, (durations as readonly number[]).indexOf(duration))}
+                            onChange={(e) => {
+                              const idx = parseInt(e.target.value);
+                              updateNodeData(id, { duration: (durations as readonly number[])[idx] });
+                            }}
+                            className="dur-slider"
+                          />
+                        </div>
+                      </div>
+                    </FloatMenu>
+                  </div>
+                )}
 
-              {/* Sound toggle */}
-              {cfg.sound && (
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => updateNodeData(id, { sound: !sound })}
-                  className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
-                  style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
-                >
-                  <ToggleSwitch on={sound} activeColor="#2dd4bf" />
-                  <span className="text-[11px] text-white/70">Sound</span>
-                </button>
-              )}
+                {/* Ratio */}
+                {ratios.length > 0 && (
+                  <div className="relative">
+                    <Pill onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
+                      <AspectIcon ratio={aspectRatio} />
+                      <span className="text-[11px] text-white/70">{aspectRatio}</span>
+                      <ChevronIcon open={ratioOpen} />
+                    </Pill>
+                    <FloatMenu open={ratioOpen}>
+                      {(ratios as readonly string[]).map((r) => (
+                        <FloatItem key={r} active={aspectRatio === r} onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}>
+                          {r}
+                        </FloatItem>
+                      ))}
+                    </FloatMenu>
+                  </div>
+                )}
 
-              {/* Veo mode toggle */}
-              {isVeo && (videoModelId === "veo3" || videoModelId === "veo3_fast") && (
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    const next = veoMode === "frames" ? "references" : "frames";
-                    updateNodeData(id, { veoMode: next });
-                    if (next === "references") {
-                      killEdgesForHandles(id, ["startFrame", "endFrame"]);
-                    } else {
-                      killEdgesForHandles(id, ["resource"]);
-                    }
-                  }}
-                  className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
-                  style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
-                >                  <ToggleSwitch on={veoMode === "references"} activeColor="#fb923c" />
-                  <span className="text-[11px] text-white/70">{veoMode === "references" ? "References" : "Frames"}</span>
-                </button>
-              )}
-              {/* Seed input */}
-              {cfg.supportsSeeds && (
-                <div
-                  className="flex items-center gap-1.5 rounded-full px-2 py-1"
-                  style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <span className="text-[11px] text-white/70 shrink-0 select-none">Seed</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={2147483647}
-                    placeholder="—"
-                    value={seed}
-                    readOnly={readOnly}
-                    onChange={(e) => {
-                      const v = e.target.value === "" ? 0 : Math.max(0, Math.min(2147483647, parseInt(e.target.value, 10)));
-                      updateNodeData(id, { seed: isNaN(v) ? 0 : v });
+                {modePicker}
+                {resPicker}
+
+                {/* Sound toggle */}
+                {cfg.sound && (
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => updateNodeData(id, { sound: !sound })}
+                    className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
+                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                  >
+                    <ToggleSwitch on={sound} activeColor="#2dd4bf" />
+                    <span className="text-[11px] text-white/70">Sound</span>
+                  </button>
+                )}
+
+                {/* Veo mode toggle */}
+                {isVeo && (videoModelId === "veo3" || videoModelId === "veo3_fast") && (
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      const next = veoMode === "frames" ? "references" : "frames";
+                      updateNodeData(id, { veoMode: next });
+                      if (next === "references") {
+                        killEdgesForHandles(id, ["startFrame", "endFrame"]);
+                      } else {
+                        killEdgesForHandles(id, ["resource"]);
+                      }
                     }}
-                    className="nodrag w-12 bg-transparent border-none outline-none text-[11px] text-white/90 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                </div>
-              )}
+                    className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
+                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                  >                  <ToggleSwitch on={veoMode === "references"} activeColor="#fb923c" />
+                    <span className="text-[11px] text-white/70">{veoMode === "references" ? "References" : "Frames"}</span>
+                  </button>
+                )}
+                {/* Seed input */}
+                {cfg.supportsSeeds && (
+                  <div
+                    className="flex items-center gap-1.5 rounded-full px-2 py-1"
+                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <span className="text-[11px] text-white/70 shrink-0 select-none">Seed</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={2147483647}
+                      placeholder="—"
+                      value={seed}
+                      readOnly={readOnly}
+                      onChange={(e) => {
+                        const v = e.target.value === "" ? 0 : Math.max(0, Math.min(2147483647, parseInt(e.target.value, 10)));
+                        updateNodeData(id, { seed: isNaN(v) ? 0 : v });
+                      }}
+                      className="nodrag w-12 bg-transparent border-none outline-none text-[11px] text-white/90 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                )}
 
-              {/* Img ref indicator */}
-              {activeHandles.has("resource") && hasResource && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c] shrink-0" />
-                  <span className="text-[10px] text-white/60">Img ref</span>
-                </div>
-              )}
+                {/* Img ref indicator */}
+                {activeHandles.has("resource") && hasResource && (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c] shrink-0" />
+                    <span className="text-[10px] text-white/60">Img ref</span>
+                  </div>
+                )}
 
               </div>{/* end pills wrapper */}
 
               {/* Generate button — always right */}
-              {!readOnly && <GenerateButton onClick={generate} busy={animBusy} disabled={promptOverLimit || kieKeySet === false || busy} />}
+              {!readOnly && <GenerateButton onClick={generate} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || kieKeySet === false || busy || isExtractingFrames} />}
             </div>
           );
         })()}
@@ -2043,7 +2162,7 @@ function NodeProviderIcon({ provider }: { provider: string }) {
     case "Bytedance":
       return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M3.1544 12.1539L0.533203 12.8092V1.19824L3.1544 1.85354V12.1539Z" /><path d="M15.8225 12.8333L13.1963 13.4886V0.518555L15.8225 1.169V12.8333Z" /><path d="M7.31261 12.5083L4.69141 13.1636V6.32422L7.31261 6.97947V12.5083Z" /><path d="M9.02539 5.3096L11.6516 4.6543V11.4937L9.02539 10.8384V5.3096Z" /></svg>;
     case "Alibaba":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9.39589 9.99064C10.2791 8.81304 11.9431 7.16184 11.9943 5.99704C12.0967 4.48664 10.5735 3.98744 8.99909 4.00024C7.89829 4.01304 6.77189 4.33304 6.00389 4.60184C3.32869 5.54904 1.66469 7.04664 0.60229 8.72344C-0.51131 10.3746 -0.14011 11.949 2.21509 12.0002C4.01989 11.9234 5.19749 11.4242 6.42629 10.797C6.43909 10.797 3.03429 11.7698 1.79269 11.053C1.66469 10.9762 1.52389 10.8738 1.48549 10.5922C1.47269 10.0034 2.45829 9.38904 3.00869 9.19704V8.17304C3.41829 8.32664 3.85349 8.41624 4.31429 8.41624C5.19749 8.41624 6.00389 8.09624 6.63109 7.57144C6.65669 7.66104 6.66949 7.76344 6.65669 7.86584H6.89989C6.92549 7.59704 6.78469 7.39224 6.78469 7.39224C6.56709 7.03384 6.17029 7.04664 6.17029 7.04664C6.17029 7.04664 6.37509 7.13624 6.52869 7.35384C5.95269 7.84024 5.21029 8.12184 4.40389 8.12184C4.05829 8.12184 3.72549 8.07064 3.41829 7.96824L4.22469 7.16184L4.00709 6.57304C5.63269 6.00984 6.98949 5.57464 9.21669 5.17784L8.70469 4.80664L8.96069 4.65304C10.3047 5.02424 11.1879 5.29304 11.1367 6.00984C11.1111 6.12504 11.0727 6.26584 11.0087 6.41944C10.6247 7.18744 9.45989 8.48024 8.98629 9.01784C8.67909 9.37624 8.37189 9.72184 8.15429 10.0546C7.93669 10.3874 7.79589 10.7074 7.78309 11.0018C7.80869 13.3442 14.6695 9.91384 16.0007 9.00504C14.0423 9.84984 11.9303 10.6562 9.60069 10.8098C8.94789 10.8482 9.02469 10.5026 9.39589 9.99064Z"/></svg>;
+      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9.39589 9.99064C10.2791 8.81304 11.9431 7.16184 11.9943 5.99704C12.0967 4.48664 10.5735 3.98744 8.99909 4.00024C7.89829 4.01304 6.77189 4.33304 6.00389 4.60184C3.32869 5.54904 1.66469 7.04664 0.60229 8.72344C-0.51131 10.3746 -0.14011 11.949 2.21509 12.0002C4.01989 11.9234 5.19749 11.4242 6.42629 10.797C6.43909 10.797 3.03429 11.7698 1.79269 11.053C1.66469 10.9762 1.52389 10.8738 1.48549 10.5922C1.47269 10.0034 2.45829 9.38904 3.00869 9.19704V8.17304C3.41829 8.32664 3.85349 8.41624 4.31429 8.41624C5.19749 8.41624 6.00389 8.09624 6.63109 7.57144C6.65669 7.66104 6.66949 7.76344 6.65669 7.86584H6.89989C6.92549 7.59704 6.78469 7.39224 6.78469 7.39224C6.56709 7.03384 6.17029 7.04664 6.17029 7.04664C6.17029 7.04664 6.37509 7.13624 6.52869 7.35384C5.95269 7.84024 5.21029 8.12184 4.40389 8.12184C4.05829 8.12184 3.72549 8.07064 3.41829 7.96824L4.22469 7.16184L4.00709 6.57304C5.63269 6.00984 6.98949 5.57464 9.21669 5.17784L8.70469 4.80664L8.96069 4.65304C10.3047 5.02424 11.1879 5.29304 11.1367 6.00984C11.1111 6.12504 11.0727 6.26584 11.0087 6.41944C10.6247 7.18744 9.45989 8.48024 8.98629 9.01784C8.67909 9.37624 8.37189 9.72184 8.15429 10.0546C7.93669 10.3874 7.79589 10.7074 7.78309 11.0018C7.80869 13.3442 14.6695 9.91384 16.0007 9.00504C14.0423 9.84984 11.9303 10.6562 9.60069 10.8098C8.94789 10.8482 9.02469 10.5026 9.39589 9.99064Z" /></svg>;
     default:
       return null;
   }
