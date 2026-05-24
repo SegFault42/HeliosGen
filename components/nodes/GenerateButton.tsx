@@ -38,8 +38,9 @@ export default function GenerateButton({ onClick, busy, disabled, extracting }: 
         </>
       ) : (
         <>
-          <svg width="9" height="9" viewBox="0 0 8 8" fill="currentColor" style={{ color: "rgba(255,255,255,0.9)", flexShrink: 0 }}>
-            <polygon points="1,0.5 7.5,4 1,7.5" />
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
           </svg>
           <span className="text-[11px] font-medium text-white/90">Generate</span>
         </>
