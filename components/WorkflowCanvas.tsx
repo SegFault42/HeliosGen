@@ -1633,7 +1633,7 @@ export default function WorkflowCanvas() {
 
               {/* Node cards */}
               <motion.div
-                className="flex items-stretch gap-[22px] pointer-events-auto"
+                className="flex items-stretch gap-4 pointer-events-auto"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.25 }}
@@ -1644,21 +1644,21 @@ export default function WorkflowCanvas() {
                     label: "Text",
                     desc: "Write & refine prompts",
                     accent: "#4ee5b7",
-                    icon: <MessageSquare size={84} strokeWidth={1.4} />,
+                    icon: <MessageSquare size={20} strokeWidth={1.6} />,
                   },
                   {
                     type: "generateNode",
-                    label: "Image Gen",
-                    desc: "AI image creation",
+                    label: "Image Generator",
+                    desc: "Generate images from a text prompt",
                     accent: "#ff955a",
-                    icon: <Sparkles size={84} strokeWidth={1.4} />,
+                    icon: <Sparkles size={20} strokeWidth={1.6} />,
                   },
                   {
                     type: "videoGeneratorNode",
-                    label: "Video Gen",
-                    desc: "AI video creation",
+                    label: "Video Generator",
+                    desc: "Generate videos from a text prompt",
                     accent: "#a78bfa",
-                    icon: <Clapperboard size={84} strokeWidth={1.4} />,
+                    icon: <Clapperboard size={20} strokeWidth={1.6} />,
                   },
                 ].map(({ type, label, desc, icon, accent }) => (
                   <button
@@ -1668,68 +1668,60 @@ export default function WorkflowCanvas() {
                       position: "relative",
                       display: "flex",
                       flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "20px",
-                      width: "260px",
-                      height: "260px",
-                      padding: "32px 24px",
-                      borderRadius: "20px",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: `radial-gradient(80% 60% at 50% 30%, ${accent}2E, transparent 70%), rgb(12,17,16)`,
+                      alignItems: "flex-start",
+                      gap: "16px",
+                      width: "210px",
+                      padding: "24px 22px 26px",
+                      borderRadius: "18px",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
                       cursor: "pointer",
                       outline: "none",
-                      transition: "transform 200ms ease, box-shadow 220ms ease, border-color 220ms ease",
+                      transition: "transform 200ms ease, box-shadow 220ms ease, border-color 220ms ease, background 220ms ease",
                     }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget;
-                      el.style.transform = "translateY(-5px)";
-                      el.style.boxShadow = `0 0 0 1px ${accent}40, 0 12px 48px ${accent}22`;
-                      el.style.borderColor = `${accent}45`;
+                      el.style.transform = "translateY(-4px)";
+                      el.style.boxShadow = `0 0 0 1px ${accent}35, 0 16px 40px rgba(0,0,0,0.4)`;
+                      el.style.borderColor = `${accent}35`;
+                      el.style.background = `rgba(255,255,255,0.05)`;
                     }}
                     onMouseLeave={(e) => {
                       const el = e.currentTarget;
                       el.style.transform = "translateY(0)";
                       el.style.boxShadow = "";
-                      el.style.borderColor = "rgba(255,255,255,0.1)";
+                      el.style.borderColor = "rgba(255,255,255,0.08)";
+                      el.style.background = "rgba(255,255,255,0.03)";
                     }}
                   >
-                    {/* Icon — large, bare, glowing */}
-                    <span style={{
+                    {/* Icon badge */}
+                    <div style={{
                       display: "flex",
-                      color: `${accent}B3`,
-                      filter: `drop-shadow(${accent}59 0px 0px 18px)`,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "12px",
+                      background: `${accent}22`,
+                      color: accent,
                       flexShrink: 0,
                     }}>
                       {icon}
-                    </span>
+                    </div>
 
                     {/* Label + desc */}
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "7px" }}>
                       <span style={{
-                        fontSize: "16.5px", fontWeight: 600,
-                        color: "rgba(255,255,255,0.94)",
-                        letterSpacing: "-0.165px",
+                        fontSize: "15px", fontWeight: 700,
+                        color: "rgba(255,255,255,0.92)",
+                        letterSpacing: "-0.2px",
+                        lineHeight: 1.2,
                       }}>
                         {label}
                       </span>
-                      <span style={{ fontSize: "11.5px", color: "rgba(255,255,255,0.62)", fontWeight: 400 }}>
+                      <span style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.42)", fontWeight: 400, lineHeight: 1.4 }}>
                         {desc}
                       </span>
-                    </div>
-
-                    {/* "+ Add" pill */}
-                    <div style={{
-                      padding: "5px 16px",
-                      borderRadius: "20px",
-                      border: `1px solid ${accent}50`,
-                      background: `${accent}15`,
-                      color: accent,
-                      fontSize: "12px",
-                      fontWeight: 500,
-                      letterSpacing: "0.01em",
-                    }}>
-                      + Add
                     </div>
                   </button>
                 ))}
