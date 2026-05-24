@@ -691,7 +691,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             React never writes .value, so cursor position is never reset. */}
             <textarea
               ref={textareaRef}
-              className={`relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[13px] leading-[1.6] resize-none outline-none overflow-y-auto z-10${textMode === "json" ? " font-mono" : ""}`}
+              className={`prompt-ta relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[13px] leading-[1.6] resize-none outline-none overflow-y-auto z-10${textMode === "json" ? " font-mono" : ""}`}
               style={{ color: "transparent", caretColor: "white", overscrollBehavior: "contain", ...(textMode === "json" ? { overflowY: "scroll" as const } : {}) }}
               defaultValue={storePrompt}
               readOnly={readOnly}

@@ -1133,6 +1133,19 @@ body {
   animation: node-queued-pulse 2s ease-in-out infinite;
 }
 
+/* ── Prompt node textarea scrollbar — overlay style, no hover change ─────── */
+/* scrollbar-width:thin keeps the native overlay model (appears on scroll,
+   no reserved gutter, no macOS mode-switch on hover) */
+.prompt-ta {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Suppress the always-visible WebKit classic track that causes the black bar */
+.prompt-ta::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── @mention chip in PromptNode ─────────────────────────────────────────── */
 /* ── Canvas hand/pan mode cursor ─────────────────────────────────────────── */
 .canvas-hand-mode,
