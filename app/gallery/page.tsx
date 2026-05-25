@@ -1122,7 +1122,7 @@ function GalleryInner() {
   useEffect(() => {
     if (inputRef.current && prompt && !multiPromptMode) {
       const el = inputRef.current;
-      requestAnimationFrame(() => resizeTextarea(el));
+      requestAnimationFrame(() => requestAnimationFrame(() => resizeTextarea(el)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2929,10 +2929,11 @@ function GalleryInner() {
                           }
                         }}
                         style={{
+                          position: "relative",
                           display: "flex", alignItems: "flex-start", gap: "8px",
                           background: isExpanded ? "rgba(45,212,191,0.04)" : "rgba(255,255,255,0.03)",
                           border: `1px solid ${isExpanded ? "rgba(45,212,191,0.18)" : isNonEmpty ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"}`,
-                          borderRadius: "8px", padding: "7px 10px",
+                          borderRadius: "8px", padding: "7px 24px 7px 10px",
                           opacity: isNonEmpty ? 1 : 0.4,
                           cursor: isExpanded ? "default" : "pointer",
                           transition: "background 120ms, border-color 120ms",
@@ -3064,13 +3065,51 @@ function GalleryInner() {
                           </div>
                         )}
                         </div>
-                        <span style={{
-                          fontSize: "10px", fontWeight: 600, color: "rgba(255,255,255,0.25)",
-                          fontFamily: "monospace", lineHeight: "22px", flexShrink: 0,
-                          display: isNonEmpty ? undefined : "none",
-                        }}>
-                          {block.replace(/\n/g, '').length}c
-                        </span>
+                        {isNonEmpty && promptMaxLength !== null && (
+                          <span style={{
+                            fontSize: "10px", fontWeight: 600,
+                            color: block.length > promptMaxLength ? "#f87171" : "rgba(255,255,255,0.25)",
+                            fontFamily: "monospace", lineHeight: "22px",
+                            fontVariantNumeric: "tabular-nums",
+                            ...(isExpanded
+                              ? { position: "absolute", bottom: "6px", right: "24px" }
+                              : { flexShrink: 0 }
+                            ),
+                          } as React.CSSProperties}>
+                            {block.length}/{promptMaxLength}
+                          </span>
+                        )}
+                        {blocks.length > 1 && (
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              const updated = blocks.filter((_, i) => i !== blockIdx);
+                              setPrompt(updated.join('\n\n'));
+                              setExpandedPromptIdx(prev => {
+                                if (prev === null) return null;
+                                if (prev === blockIdx) return null;
+                                return prev > blockIdx ? prev - 1 : prev;
+                              });
+                            }}
+                            disabled={submitting}
+                            style={{
+                              position: "absolute", top: "50%", right: "5px",
+                              transform: "translateY(-50%)",
+                              width: "16px", height: "16px",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              background: "none", border: "none", padding: 0,
+                              color: "rgba(255,255,255,0.3)",
+                              cursor: submitting ? "not-allowed" : "pointer",
+                              borderRadius: "4px",
+                              fontSize: "12px", lineHeight: 1,
+                              transition: "color 120ms",
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.75)")}
+                            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -3412,7 +3451,7 @@ function GalleryInner() {
 
               {/* Character count + Generate button */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-                {promptMaxLength !== null && (
+                {promptMaxLength !== null && !multiPromptMode && (
                   <div
                     aria-hidden
                     style={{
