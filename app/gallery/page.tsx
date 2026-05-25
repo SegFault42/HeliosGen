@@ -4910,36 +4910,13 @@ function Lightbox({ item, onClose, onCopyPrompt }: { item: GalleryItem; onClose:
               </button>
             </div>
             <div style={{
-              padding: "0 16px",
+              padding: "0 16px 16px",
               fontSize: "13px", lineHeight: 1.65,
-              ...(promptExpanded ? {} : {
-                display: "-webkit-box" as "block",
-                WebkitBoxOrient: "vertical" as const,
-                WebkitLineClamp: 5,
-                overflow: "hidden",
-              }),
+              maxHeight: "220px",
+              overflowY: "auto",
             }}>
               {renderLightboxPrompt(item.prompt, item.referenceImageUrls)}
             </div>
-            <button
-              onClick={() => setPromptExpanded(p => !p)}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                width: "100%", padding: "10px 16px 14px",
-                background: "transparent", border: "none",
-                color: "rgba(255,255,255,0.3)",
-                fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
-                transition: "color 140ms",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
-              onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
-            >
-              {promptExpanded ? "Show less" : "See all"}
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-                style={{ transform: promptExpanded ? "rotate(180deg)" : "none", transition: "transform 200ms" }}>
-                <path d="m6 9 6 6 6-6" />
-              </svg>
-            </button>
           </div>
         )}
 
