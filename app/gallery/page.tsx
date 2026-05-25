@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { useWorkflowStore } from "@/lib/store";
-import { useGeneratingPhase } from "@/lib/useGeneratingPhase";
 import type { User } from "@supabase/supabase-js";
 import { ShieldBan } from "lucide-react";
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
@@ -595,13 +594,13 @@ function saveKlingElements(elements: KlingElement[]) {
 // ── Pending generation tile (needs hooks, must be a component) ────────────────
 
 function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void }) {
-  const phaseLabel = useGeneratingPhase(!pg.prePending);
   return (
     <>
       {/* Top: phase label + cancel — same row, wraps to next line if too narrow */}
       <div style={{
         position: "absolute", top: 8, left: 8, right: 8,
         display: "flex", justifyContent: "space-between", alignItems: "center",
+        flexWrap: "wrap", gap: "6px",
         zIndex: 5,
       }}>
         {/* Phase pill */}
@@ -624,7 +623,7 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
             </svg>
           )}
           <span style={{ fontSize: "11px", color: pg.prePending ? "#888" : "#2DD4BF", fontWeight: 500 }}>
-            {pg.prePending ? "Pending" : (phaseLabel || "Generating…")}
+            {pg.prePending ? "Pending" : "Generating…"}
           </span>
         </div>
 

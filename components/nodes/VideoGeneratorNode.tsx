@@ -12,7 +12,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
-import { useGeneratingPhase } from "@/lib/useGeneratingPhase";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import MissingInputWarning from "./MissingInputWarning";
 
@@ -384,8 +383,6 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const animBusy = loading || status === "running";
   const busy = animBusy || isPending;
   const isQueued = !busy && !!data.pipelineQueued;
-  const phaseLabel = useGeneratingPhase(animBusy);
-
   useGeneratingBorderAnimation(cardRef, animBusy);
   const videoUrl = data.videoUrl as string | undefined;
   const capturedFrameUrl = data.capturedFrameUrl as string | undefined;
@@ -1535,10 +1532,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
         {/* Generating badge + cancel */}
         {busy && generations[currentGenIdx] === null && (
-          <>
+          <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5 z-20" style={{ alignItems: "flex-start" }}>
             <div
-              className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
-              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: isPending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(45,212,191,0.25)" }}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-full pointer-events-none select-none"
+              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: isPending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(45,212,191,0.25)", flexShrink: 0 }}
             >
               {isPending ? (
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
@@ -1552,14 +1549,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 </svg>
               )}
               <span className="text-[11px] font-medium" style={{ color: isPending ? "#888" : "#2DD4BF" }}>
-                {isPending ? "Pending" : (phaseLabel || "Generating…")}
+                {isPending ? "Pending" : "Generating…"}
               </span>
             </div>
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); handleCancel(); }}
-              className="absolute top-2 right-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 transition-colors hover:bg-white/10"
-              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)" }}
+              className="ml-auto flex items-center gap-1.5 h-7 px-3 rounded-full transition-colors hover:bg-white/10"
+              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="9" />
@@ -1567,7 +1564,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               </svg>
               <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
             </button>
-          </>
+          </div>
         )}
 
         {/* Mute button — top right, shown on hover when video is ready */}
