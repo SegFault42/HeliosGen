@@ -901,6 +901,8 @@ function GalleryInner() {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionSelIdx, setMentionSelIdx] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeBlockRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeBlockIdxRef = useRef<number | null>(null);
   const promptBarRef = useRef<HTMLDivElement>(null);
   const overlayInnerRef = useRef<HTMLDivElement>(null);
   const [chipPreview, setChipPreview] = useState<{ tag: TaggedImage; rect: DOMRect } | null>(null);
@@ -1841,6 +1843,36 @@ function GalleryInner() {
     const label = ref.label || "img1";
     if (!taggedImages.some(t => t.refId === ref.id))
       setTaggedImages(prev => [...prev, { label, refId: ref.id, url: ref.cdnUrl!, kind: isVideo ? (ref.kind || "image") : "image" }]);
+
+    if (multiPromptMode && activeBlockIdxRef.current !== null) {
+      const blocks = prompt.split(/\n\n+/).reduce<string[]>((acc, b) => {
+        if (!b.trim() && acc.some(x => !x.trim())) return acc;
+        return [...acc, b];
+      }, []);
+      const idx = activeBlockIdxRef.current;
+      if (idx < blocks.length) {
+        const blockInput = activeBlockRef.current;
+        const blockText = blocks[idx];
+        const cursor = blockInput?.selectionStart ?? blockText.length;
+        const before = blockText.slice(0, cursor);
+        const after = blockText.slice(cursor);
+        const lastAt = before.lastIndexOf("@");
+        const newBlockText = lastAt >= 0
+          ? `${before.slice(0, lastAt)}@${label} ${after}`
+          : `${before}@${label} ${after}`;
+        const newPos = (lastAt >= 0 ? lastAt : cursor) + label.length + 2;
+        const updatedBlocks = [...blocks];
+        updatedBlocks[idx] = newBlockText;
+        setPrompt(updatedBlocks.join('\n\n'));
+        setMentionQuery(null);
+        requestAnimationFrame(() => {
+          if (!blockInput) return;
+          blockInput.focus();
+          blockInput.setSelectionRange(newPos, newPos);
+        });
+      }
+      return;
+    }
 
     const input = inputRef.current;
     const cursor = input?.selectionStart ?? prompt.length;
@@ -2990,16 +3022,39 @@ function GalleryInner() {
                         <textarea
                           value={block}
                           rows={1}
+                          data-prompt-input=""
                           placeholder={blockIdx === 0 && !isNonEmpty ? "Describe the scene you imagine…" : undefined}
                           onClick={e => { if (isExpanded) e.stopPropagation(); }}
+                          onFocus={e => {
+                            activeBlockRef.current = e.currentTarget;
+                            activeBlockIdxRef.current = blockIdx;
+                            const ta = e.currentTarget;
+                            const cursor = ta.selectionStart ?? ta.value.length;
+                            const match = ta.value.slice(0, cursor).match(/@(\w*)$/);
+                            setMentionQuery(match ? match[1] : null);
+                          }}
+                          onSelect={e => {
+                            const ta = e.currentTarget;
+                            const cursor = ta.selectionStart ?? ta.value.length;
+                            const match = ta.value.slice(0, cursor).match(/@(\w*)$/);
+                            setMentionQuery(match ? match[1] : null);
+                          }}
                           onScroll={e => {
+                            const st = e.currentTarget.scrollTop;
+                            const wrapper = (e.target as HTMLElement).closest('[data-block-wrapper]');
                             if (promptTextMode === "json") {
-                              const overlay = (e.target as HTMLElement).closest('[data-block-wrapper]')?.querySelector('[data-block-overlay]') as HTMLElement | null;
-                              if (overlay) overlay.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`;
+                              const overlay = wrapper?.querySelector('[data-block-overlay]') as HTMLElement | null;
+                              if (overlay) overlay.style.transform = `translateY(-${st}px)`;
+                            } else {
+                              const overlay = wrapper?.querySelector('[data-block-text-overlay]') as HTMLElement | null;
+                              if (overlay) overlay.style.transform = `translateY(-${st}px)`;
                             }
                           }}
                           onChange={e => {
                             const newVal = e.target.value;
+                            const cursor = e.target.selectionStart ?? newVal.length;
+                            const match = newVal.slice(0, cursor).match(/@(\w*)$/);
+                            setMentionQuery(match ? match[1] : null);
                             if (newVal.includes('\n\n')) {
                               // Double newline → split into a new block
                               const splitIdx = newVal.indexOf('\n\n');
@@ -3013,11 +3068,13 @@ function GalleryInner() {
                               setPrompt(normalized.join('\n\n'));
                               const focusIdx = blockIdx + 1;
                               setExpandedPromptIdx(focusIdx);
+                              activeBlockIdxRef.current = focusIdx;
                               requestAnimationFrame(() => {
                                 const stack = document.querySelector('[data-prompt-stack]');
                                 const rows = stack?.querySelectorAll<HTMLTextAreaElement>('textarea');
                                 const newRow = rows?.[focusIdx];
                                 if (newRow) {
+                                  activeBlockRef.current = newRow;
                                   newRow.focus();
                                   newRow.setSelectionRange(0, 0);
                                   newRow.style.height = "auto";
@@ -3036,6 +3093,12 @@ function GalleryInner() {
                             }
                           }}
                           onKeyDown={e => {
+                            if (atMenuOpen) {
+                              if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
+                              if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
+                              if (e.key === "Enter") { e.preventDefault(); insertMention(filteredMentions[mentionSelIdx]); return; }
+                              if (e.key === "Escape") { setMentionQuery(null); return; }
+                            }
                             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); return; }
                             if (e.key === "Enter" && !isExpanded) {
                               // Expand collapsed block on Enter instead of inserting newline
@@ -3076,7 +3139,7 @@ function GalleryInner() {
                           style={{
                             display: "block", width: "100%",
                             background: "transparent", border: "none", outline: "none",
-                            color: promptTextMode === "json" ? "transparent" : (isNonEmpty ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.3)"),
+                            color: "transparent",
                             caretColor: "#2DD4BF",
                             fontSize: "13.5px",
                             fontFamily: promptTextMode === "json" ? "monospace" : "inherit",
@@ -3089,7 +3152,7 @@ function GalleryInner() {
                             ),
                           } as React.CSSProperties}
                         />
-                        {promptTextMode === "json" && (
+                        {promptTextMode === "json" ? (
                           <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
                             <div
                               data-block-overlay=""
@@ -3100,6 +3163,36 @@ function GalleryInner() {
                               }}
                             >
                               {syntaxHighlightJson(block)}
+                            </div>
+                          </div>
+                        ) : (
+                          <div aria-hidden style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
+                            <div
+                              data-block-text-overlay=""
+                              style={{
+                                fontSize: "13.5px", fontFamily: "inherit", lineHeight: "22px",
+                                letterSpacing: "-0.01em",
+                                whiteSpace: isExpanded ? "pre-wrap" : "nowrap",
+                                wordBreak: "break-word",
+                                willChange: "transform",
+                              }}
+                            >
+                              {renderGalleryMentions(
+                                block,
+                                taggedImages,
+                                (tag, rect) => setChipPreview({ tag, rect }),
+                                () => setChipPreview(null),
+                                tag => {
+                                  const stack = document.querySelector('[data-prompt-stack]');
+                                  const ta = stack?.querySelectorAll<HTMLTextAreaElement>('textarea')[blockIdx];
+                                  if (!ta) return;
+                                  activeBlockRef.current = ta;
+                                  activeBlockIdxRef.current = blockIdx;
+                                  const pos = block.indexOf(`@${tag.label}`);
+                                  ta.focus();
+                                  ta.setSelectionRange(pos >= 0 ? pos + tag.label.length + 1 : block.length, pos >= 0 ? pos + tag.label.length + 1 : block.length);
+                                },
+                              )}
                             </div>
                           </div>
                         )}
@@ -5459,6 +5552,7 @@ function EmptyState({ tab }: { tab: Tab }) {
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
 const GALLERY_CSS = `
+  [data-prompt-input]::placeholder { color: rgba(255,255,255,0.3); }
   .picker-scroll { scrollbar-width: none; }
   .picker-scroll::-webkit-scrollbar { display: none; }
   .seed-input::-webkit-inner-spin-button, .seed-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
