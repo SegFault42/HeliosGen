@@ -8,6 +8,7 @@ import { useWorkflowStore } from "@/lib/store";
 import type { User } from "@supabase/supabase-js";
 import { ShieldAlert } from "lucide-react";
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
+import { useFolderStore } from "@/lib/folderStore";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 import { useSidebar } from "@/components/ui/sidebar";
 import { QuickAssist } from "@/components/QuickAssist";
@@ -419,6 +420,7 @@ interface PendingGen {
   tab?: Tab;
   prePending?: boolean;
   retried?: boolean;
+  folderId?: string | null;
 }
 
 
@@ -748,6 +750,8 @@ function GalleryInner() {
   const rawSource = searchParams.get("source");
   const initialSource = (rawSource === "uploaded" ? "uploaded" : "generated") as "generated" | "uploaded";
 
+  const { selectedFolderId, itemFolderMap, assignItemsToFolder, removeItemsFromFolder, folders } = useFolderStore();
+
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
 
@@ -765,7 +769,7 @@ function GalleryInner() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const anySelected = selectedIds.size > 0;
   const toggleSelect = (id: string) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const clearSelection = () => setSelectedIds(new Set());
+  const clearSelection = () => { setSelectedIds(new Set()); setFolderPickerOpen(false); };
 
   const isVideo = tab === "videos";
   const models = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
@@ -859,6 +863,25 @@ function GalleryInner() {
   const [videoMuted, setVideoMuted] = useState(true);
   const [refPreview, setRefPreview] = useState<{ url: string; mediaKind: "image" | "video" | "audio" } | null>(null);
   const [hoveredRefId, setHoveredRefId] = useState<string | null>(null);
+
+  // Folder picker (multi-select toolbar)
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const folderPickerRef = useRef<HTMLDivElement>(null);
+  const folderPickerBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!folderPickerOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (
+        folderPickerRef.current && !folderPickerRef.current.contains(e.target as Node) &&
+        folderPickerBtnRef.current && !folderPickerBtnRef.current.contains(e.target as Node)
+      ) {
+        setFolderPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [folderPickerOpen]);
 
   // Media picker
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -959,6 +982,11 @@ function GalleryInner() {
         const fresh = await fetchNewItems(tabRef.current);
         setPendingGens(prev => prev.filter(p => p.id !== pending.id));
         if (fresh.length > 0) {
+          if (pending.folderId) {
+            const existingMap = useFolderStore.getState().itemFolderMap;
+            const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+            if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
+          }
           setItems(prev => {
             const merged = mergeByNewest(prev, fresh);
             if (merged === prev) return prev;
@@ -1037,7 +1065,7 @@ function GalleryInner() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
-      const { items: newItems, hasMore: more } = await res.json() as { items: GalleryItem[]; hasMore: boolean };
+      const { items: newItems, hasMore: more, total } = await res.json() as { items: GalleryItem[]; hasMore: boolean; total?: number };
       if (replace) {
         setItems(newItems);
         galleryCache.set(currentTab, { items: newItems, hasMore: more });
@@ -1050,6 +1078,9 @@ function GalleryInner() {
       }
       setHasMore(more);
       pageRef.current = page;
+      if (typeof total === "number") {
+        useFolderStore.getState().setGalleryCount(currentTab, total);
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -1633,8 +1664,9 @@ function GalleryInner() {
     const multiPrompts = multiPromptMode && !isVideo ? prompt.split(/\n\n+/).map(p => p.trim()).filter(Boolean) : null;
     const n = multiPrompts ? multiPrompts.length : (isVideo ? 1 : count);
     const snapshotRefUrls = [...new Set(refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!))];
+    const snapshotFolderId = selectedFolderId;
     const newPendings: PendingGen[] = Array.from({ length: n }, (_, i) => ({
-      id: randomUUID(), aspectRatio, prompt: multiPrompts ? multiPrompts[i] : prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(), tab, prePending: true,
+      id: randomUUID(), aspectRatio, prompt: multiPrompts ? multiPrompts[i] : prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(), tab, prePending: true, folderId: snapshotFolderId,
     }));
     setPendingGens(prev => [...newPendings, ...prev]);
 
@@ -1712,6 +1744,11 @@ function GalleryInner() {
           const fresh = await fetchNewItems(tabRef.current);
           setPendingGens(prev => prev.filter(p => p.id !== pending.id));
           if (fresh.length > 0) {
+            if (pending.folderId) {
+              const existingMap = useFolderStore.getState().itemFolderMap;
+              const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+              if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
+            }
             setItems(prev => {
               const merged = mergeByNewest(prev, fresh);
               if (merged === prev) return prev;
@@ -2123,11 +2160,13 @@ function GalleryInner() {
 
   const GALLERY_GAP = 1;
 
-  const filteredItems = useMemo(() =>
-    sourceFilter === "generated"
+  const filteredItems = useMemo(() => {
+    const bySource = sourceFilter === "generated"
       ? items.filter(item => item.source === "generation")
-      : items.filter(item => item.source === "upload"),
-    [items, sourceFilter]);
+      : items.filter(item => item.source === "upload");
+    if (!selectedFolderId) return bySource;
+    return bySource.filter(item => itemFolderMap[item.id]?.includes(selectedFolderId));
+  }, [items, sourceFilter, selectedFolderId, itemFolderMap]);
 
   type GalleryLayoutItem =
     | { kind: "pending"; pg: PendingGen; ratio: number; width: number }
@@ -2163,7 +2202,7 @@ function GalleryInner() {
 
     // Pending gens are only shown in the "generated" source filter, not "uploaded".
     const allPendingVisible = sourceFilter === "generated"
-      ? pendingGens.filter(pg => pg.tab == null || pg.tab === tab)
+      ? pendingGens.filter(pg => (pg.tab == null || pg.tab === tab) && (!selectedFolderId || pg.folderId === selectedFolderId))
       : [];
     const activePendings = allPendingVisible.filter(pg => !pg.error && !pg.retried);
     const mixedPendings = allPendingVisible.filter(pg => !!pg.error || !!pg.retried);
@@ -2469,7 +2508,7 @@ function GalleryInner() {
                               </button>
                               <button className="gallery-action-btn" title="Retry" onClick={async () => {
                                 const newId = randomUUID();
-                                const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: pg.createdAt ?? new Date().toISOString(), tab: pg.tab, retried: true };
+                                const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: pg.createdAt ?? new Date().toISOString(), tab: pg.tab, retried: true, folderId: pg.folderId };
                                 setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
                                 const token = await getToken();
                                 if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p)); return; }
@@ -2498,6 +2537,11 @@ function GalleryInner() {
                                   const fresh = await fetchNewItems(tabRef.current);
                                   setPendingGens(prev => prev.filter(p => p.id !== newId));
                                   if (fresh.length > 0) {
+                                    if (newPending.folderId) {
+                                      const existingMap = useFolderStore.getState().itemFolderMap;
+                                      const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+                                      if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, newPending.folderId);
+                                    }
                                     setItems(prev => {
                                       const merged = mergeByNewest(prev, fresh);
                                       if (merged === prev) return prev;
@@ -2641,6 +2685,139 @@ function GalleryInner() {
           </svg>
           Remove
         </button>
+        {/* Add to folder button + popup */}
+        {folders.length > 0 && (() => {
+          const selectedArr = [...selectedIds];
+          return (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                ref={folderPickerBtnRef}
+                onClick={() => setFolderPickerOpen(o => !o)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "7px",
+                  padding: "7px 14px", borderRadius: "10px", border: "none",
+                  background: folderPickerOpen ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.07)",
+                  color: folderPickerOpen ? "#2DD4BF" : "rgba(255,255,255,0.85)",
+                  fontSize: "13px", fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
+                  transition: "background 140ms, color 140ms",
+                }}
+                onMouseEnter={e => { if (!folderPickerOpen) { e.currentTarget.style.background = "rgba(255,255,255,0.13)"; } }}
+                onMouseLeave={e => { if (!folderPickerOpen) { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; } }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                Add to folder
+              </button>
+
+              {/* Popup */}
+              {folderPickerOpen && (
+                <div
+                  ref={folderPickerRef}
+                  style={{
+                    position: "absolute",
+                    bottom: "calc(100% + 10px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    minWidth: "220px",
+                    background: "rgba(14,16,20,0.97)",
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "14px",
+                    boxShadow: "0 16px 48px rgba(0,0,0,0.85), 0 2px 8px rgba(0,0,0,0.4)",
+                    overflow: "hidden",
+                    zIndex: 400,
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)" }}>
+                      Add to folder
+                    </span>
+                  </div>
+
+                  {/* Folder rows */}
+                  <div style={{ padding: "6px 0" }}>
+                    {folders.map(folder => {
+                      const getIds = (id: string) => itemFolderMap[id] ?? [];
+                      const checkedCount = selectedArr.filter(id => getIds(id).includes(folder.id)).length;
+                      const allChecked = checkedCount === selectedArr.length && selectedArr.length > 0;
+                      const someChecked = checkedCount > 0 && !allChecked;
+                      // Items in this folder across ALL loaded items (both tabs combined best-effort)
+                      const totalInFolder = items.filter(it => (itemFolderMap[it.id] ?? []).includes(folder.id)).length;
+                      // How many selected items would be newly added
+                      const toAddCount = selectedArr.filter(id => !getIds(id).includes(folder.id)).length;
+
+                      const toggleFolder = () => {
+                        if (allChecked) {
+                          removeItemsFromFolder(selectedArr, folder.id);
+                        } else {
+                          assignItemsToFolder(selectedArr, folder.id);
+                        }
+                      };
+
+                      return (
+                        <div
+                          key={folder.id}
+                          onClick={toggleFolder}
+                          style={{
+                            display: "flex", alignItems: "center", gap: "10px",
+                            padding: "9px 14px", cursor: "pointer",
+                            transition: "background 120ms",
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                        >
+                          {/* Folder icon */}
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={allChecked ? "#2DD4BF" : someChecked ? "rgba(45,212,191,0.5)" : "rgba(255,255,255,0.35)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "stroke 150ms" }}>
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                          </svg>
+
+                          {/* Name + count */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", color: (allChecked || someChecked) ? "#fff" : "rgba(255,255,255,0.75)", fontWeight: 500, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                              {folder.name}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "1px" }}>
+                              {!allChecked && toAddCount > 0
+                                ? `${totalInFolder} → ${totalInFolder + toAddCount} item${totalInFolder + toAddCount !== 1 ? "s" : ""}`
+                                : `${totalInFolder} item${totalInFolder !== 1 ? "s" : ""}`}
+                            </div>
+                          </div>
+
+                          {/* Custom checkbox matching gallery-checkbox style */}
+                          <div
+                            onClick={e => { e.stopPropagation(); toggleFolder(); }}
+                            style={{
+                              width: "18px", height: "18px", borderRadius: "5px", flexShrink: 0, cursor: "pointer",
+                              border: `2px solid ${allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.45)"}`,
+                              background: allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.15)" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "background 120ms, border-color 120ms",
+                            }}
+                          >
+                            {allChecked && (
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0E14" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 6 9 17l-5-5"/>
+                              </svg>
+                            )}
+                            {someChecked && !allChecked && (
+                              <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                                <rect width="10" height="2" rx="1" fill="#0B0E14"/>
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)", flexShrink: 0, marginLeft: "2px" }} />
         <button
           onClick={clearSelection}

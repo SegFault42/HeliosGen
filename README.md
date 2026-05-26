@@ -182,6 +182,15 @@ Requirements:
 - Cloudflare R2
 - Kie.ai API key
 
+### 3a. Database setup
+
+Open the **SQL Editor** in your Supabase project and run the two migration files in order:
+
+1. **`supabase-setup.sql`** — core tables (generations, uploads, spaces, settings)
+2. **`supabase-folders.sql`** — gallery folders & folder items
+
+### 3b. Environment variables
+
 Create `.env.local`:
 
 ```env
@@ -198,7 +207,7 @@ R2_BUCKET_NAME=
 R2_PUBLIC_URL=
 ```
 
-Run:
+### 3c. Run
 
 ```bash
 npm run dev

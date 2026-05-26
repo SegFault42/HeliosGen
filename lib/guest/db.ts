@@ -36,11 +36,30 @@ interface Upload {
   created_at: string;
 }
 
+interface FolderRecord {
+  id: string;
+  user_id: string;
+  name: string;
+  parent_id: string | null;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface FolderItemRecord {
+  folder_id: string;
+  item_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 interface GuestDb {
   generations: Generation[];
   uploads: Upload[];
   assetCache: Record<string, { cdn_url: string; mime_type: string; byte_size: number }>;
   settings?: { kie_api_token?: string; azure_api_key?: string };
+  folders: FolderRecord[];
+  folder_items: FolderItemRecord[];
 }
 
 function now(): string {
@@ -48,9 +67,13 @@ function now(): string {
 }
 
 function read(): GuestDb {
-  if (!existsSync(DB_FILE)) return { generations: [], uploads: [], assetCache: {} };
-  try { return JSON.parse(readFileSync(DB_FILE, "utf8")); }
-  catch { return { generations: [], uploads: [], assetCache: {} }; }
+  const defaults: GuestDb = { generations: [], uploads: [], assetCache: {}, folders: [], folder_items: [] };
+  if (!existsSync(DB_FILE)) return defaults;
+  try {
+    const parsed = JSON.parse(readFileSync(DB_FILE, "utf8")) as Partial<GuestDb>;
+    return { ...defaults, ...parsed };
+  }
+  catch { return defaults; }
 }
 
 function write(data: GuestDb): void {
@@ -178,5 +201,68 @@ export function setAzureApiKey(key: string): void {
 export function deleteAzureApiKey(): void {
   const db = read();
   if (db.settings) delete db.settings.azure_api_key;
+  write(db);
+}
+
+// ── Folders ────────────────────────────────────────────────────────────────
+
+export function getFolders(userId: string): FolderRecord[] {
+  return read()
+    .folders
+    .filter((f) => f.user_id === userId)
+    .sort((a, b) => a.order_index - b.order_index);
+}
+
+export function insertFolder(data: Omit<FolderRecord, "created_at" | "updated_at">): FolderRecord {
+  const db = read();
+  const record: FolderRecord = { ...data, created_at: now(), updated_at: now() };
+  db.folders.push(record);
+  write(db);
+  return record;
+}
+
+export function updateFolder(
+  id: string,
+  userId: string,
+  updates: Partial<Pick<FolderRecord, "name" | "parent_id" | "order_index">>,
+): void {
+  const db = read();
+  const folder = db.folders.find((f) => f.id === id && f.user_id === userId);
+  if (!folder) return;
+  Object.assign(folder, updates, { updated_at: now() });
+  write(db);
+}
+
+export function deleteFolder(id: string, userId: string): void {
+  const db = read();
+  db.folders = db.folders.filter((f) => !(f.id === id && f.user_id === userId));
+  db.folder_items = db.folder_items.filter((fi) => fi.folder_id !== id);
+  write(db);
+}
+
+// ── Folder Items ───────────────────────────────────────────────────────────
+
+export function getFolderItems(userId: string): FolderItemRecord[] {
+  return read().folder_items.filter((fi) => fi.user_id === userId);
+}
+
+export function insertFolderItems(folderId: string, itemIds: string[], userId: string): void {
+  const db = read();
+  for (const itemId of itemIds) {
+    const exists = db.folder_items.some(
+      (fi) => fi.folder_id === folderId && fi.item_id === itemId,
+    );
+    if (!exists) {
+      db.folder_items.push({ folder_id: folderId, item_id: itemId, user_id: userId, created_at: now() });
+    }
+  }
+  write(db);
+}
+
+export function deleteFolderItems(folderId: string, itemIds: string[], userId: string): void {
+  const db = read();
+  db.folder_items = db.folder_items.filter(
+    (fi) => !(fi.folder_id === folderId && itemIds.includes(fi.item_id) && fi.user_id === userId),
+  );
   write(db);
 }

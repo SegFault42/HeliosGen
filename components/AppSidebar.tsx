@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
+import { useFolderStore } from "@/lib/folderStore";
 import type { User } from "@supabase/supabase-js";
 import {
   Workflow,
@@ -22,6 +23,12 @@ import {
   Pencil,
   Trash2,
   Star,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  LayoutGrid,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -151,6 +158,285 @@ function GitHubButtons() {
   );
 }
 
+// ── Module-level drag tracker (avoids stale closures across re-renders) ──────
+let _dragFolderId: string | null = null;
+
+// ── FolderRow — defined at module level so React never remounts it on parent re-renders ──
+interface FolderRowProps {
+  folder: import("@/lib/folderStore").Folder;
+  allFolders: import("@/lib/folderStore").Folder[];
+  depth: number;
+  expandedIds: Set<string>;
+  selectedFolderId: string | null;
+  onToggleExpand: (id: string) => void;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
+  onMove: (id: string, newParentId: string | null, newOrderIndex: number) => void;
+  creatingInFolderId: string | null;
+  newFolderName: string;
+  onNameChange: (v: string) => void;
+  onNameKeyDown: (e: React.KeyboardEvent) => void;
+  onNameBlur: () => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  getCount: (id: string) => number;
+}
+
+const FolderRow = React.memo(function FolderRow({
+  folder, allFolders, depth, expandedIds, selectedFolderId,
+  onToggleExpand, onSelect, onDelete, onRename, onMove,
+  creatingInFolderId, newFolderName, onNameChange, onNameKeyDown, onNameBlur, inputRef,
+  getCount,
+}: FolderRowProps) {
+  const [drop, setDrop] = React.useState<"before" | "after" | "inside" | null>(null);
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [menuPos, setMenuPos] = React.useState<{ x: number; y: number } | null>(null);
+  const [isRenaming, setIsRenaming] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState("");
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const renameInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Focus rename input once it mounts
+  React.useEffect(() => {
+    if (isRenaming) renameInputRef.current?.focus();
+  }, [isRenaming]);
+
+  // Close menu on click outside
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    function handle(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
+
+  function openMenu(e: React.MouseEvent) {
+    e.stopPropagation();
+    const rect = btnRef.current!.getBoundingClientRect();
+    setMenuPos({ x: rect.right, y: rect.bottom + 4 });
+    setMenuOpen(true);
+  }
+
+  function startRename() {
+    setMenuOpen(false);
+    setRenameValue(folder.name);
+    setIsRenaming(true);
+  }
+
+  function confirmRename() {
+    const name = renameValue.trim();
+    if (name && name !== folder.name) onRename(folder.id, name);
+    setIsRenaming(false);
+  }
+
+  const children = allFolders
+    .filter(f => f.parentId === folder.id)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+  const hasChildren = children.length > 0;
+  const isCreatingHere = creatingInFolderId === folder.id;
+  const isExpanded = expandedIds.has(folder.id);
+  const isActive = selectedFolderId === folder.id;
+
+  function getPos(e: React.DragEvent<HTMLDivElement>): "before" | "after" | "inside" {
+    const { top, height } = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientY - top) / height;
+    return pct < 0.3 ? "before" : pct > 0.7 ? "after" : "inside";
+  }
+
+  const sharedChildProps = {
+    allFolders, expandedIds, selectedFolderId,
+    onToggleExpand, onSelect, onDelete, onRename, onMove,
+    creatingInFolderId, newFolderName, onNameChange, onNameKeyDown, onNameBlur, inputRef,
+    getCount,
+  };
+
+  return (
+    <React.Fragment>
+      {drop === "before" && (
+        <div style={{ height: 1, background: "#2DD4BF", margin: "1px 8px", borderRadius: 1, pointerEvents: "none" }} />
+      )}
+      <div
+        draggable
+        onDragStart={e => {
+          _dragFolderId = folder.id;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", folder.id);
+        }}
+        onDragOver={e => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (_dragFolderId === folder.id) return;
+          setDrop(getPos(e));
+        }}
+        onDragLeave={e => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrop(null);
+        }}
+        onDrop={e => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dragged = _dragFolderId;
+          setDrop(null);
+          _dragFolderId = null;
+          if (!dragged || dragged === folder.id) return;
+          const pos = getPos(e);
+          if (pos === "inside") {
+            const sibs = allFolders.filter(f => f.parentId === folder.id).sort((a, b) => a.orderIndex - b.orderIndex);
+            onMove(dragged, folder.id, sibs.length > 0 ? Math.max(...sibs.map(f => f.orderIndex)) + 1 : 0);
+          } else {
+            const sibs = allFolders.filter(f => f.parentId === folder.parentId && f.id !== dragged).sort((a, b) => a.orderIndex - b.orderIndex);
+            const idx = sibs.findIndex(f => f.id === folder.id);
+            onMove(dragged, folder.parentId, pos === "before" ? idx : idx + 1);
+          }
+        }}
+        onDragEnd={() => { _dragFolderId = null; setDrop(null); }}
+        onClick={() => !isRenaming && onSelect(folder.id)}
+        className={cn(
+          "group flex items-center gap-2 py-2 rounded-lg cursor-pointer transition-colors select-none",
+          isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]",
+        )}
+        style={{
+          paddingLeft: `${8 + depth * 14}px`,
+          paddingRight: "8px",
+          outline: drop === "inside" ? "1px solid rgba(45,212,191,0.7)" : "none",
+          outlineOffset: -1,
+        }}
+      >
+        {/* Expand toggle */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggleExpand(folder.id); }}
+          style={{
+            width: 10, height: 10, display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0, opacity: (hasChildren || isCreatingHere) ? 0.45 : 0,
+            pointerEvents: (hasChildren || isCreatingHere) ? "auto" : "none",
+            background: "none", border: "none", padding: 0, cursor: "pointer",
+          }}
+        >
+          {isExpanded ? <ChevronDown size={10} color="white" /> : <ChevronRight size={10} color="white" />}
+        </button>
+
+        {isActive
+          ? <FolderOpen size={13} className="shrink-0 text-white/70" />
+          : <Folder size={13} className="shrink-0 text-white/35" />}
+
+        {isRenaming ? (
+          <input
+            ref={renameInputRef}
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); confirmRename(); }
+              if (e.key === "Escape") { e.stopPropagation(); setIsRenaming(false); }
+            }}
+            onBlur={confirmRename}
+            onClick={e => e.stopPropagation()}
+            className="flex-1 bg-transparent text-[12px] text-white/90 outline-none border-b border-white/30 pb-0.5 min-w-0"
+          />
+        ) : (
+          <span className={cn(
+            "flex-1 text-[12px] truncate leading-tight",
+            isActive ? "text-white/90" : "text-white/55",
+          )}>
+            {folder.name}
+          </span>
+        )}
+
+        {!isRenaming && (() => { const c = getCount(folder.id); return c > 0 ? (
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+            {c}
+          </span>
+        ) : null; })()}
+
+        {/* ⋯ context menu button */}
+        <button
+          ref={btnRef}
+          onClick={openMenu}
+          className="w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/35 hover:text-white/70 hover:bg-white/[0.08] transition-all shrink-0"
+        >
+          <MoreHorizontal size={12} />
+        </button>
+      </div>
+
+      {/* Context menu — fixed-position to escape overflow:auto clipping */}
+      {menuOpen && menuPos && (
+        <div
+          ref={menuRef}
+          onMouseDown={e => e.preventDefault()}
+          style={{
+            position: "fixed",
+            left: menuPos.x,
+            top: menuPos.y,
+            transform: "translateX(-100%)",
+            zIndex: 9999,
+            background: "#16181f",
+            border: "1px solid rgba(255,255,255,0.09)",
+            borderRadius: 8,
+            padding: 4,
+            minWidth: 130,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.6)",
+          }}
+        >
+          <button
+            onClick={e => { e.stopPropagation(); startRename(); }}
+            style={{
+              display: "block", width: "100%", textAlign: "left",
+              padding: "6px 10px", borderRadius: 5, fontSize: 12,
+              color: "rgba(255,255,255,0.72)", background: "none", border: "none", cursor: "pointer",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+          >
+            Rename
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); setMenuOpen(false); onDelete(folder.id); }}
+            style={{
+              display: "block", width: "100%", textAlign: "left",
+              padding: "6px 10px", borderRadius: 5, fontSize: 12,
+              color: "rgba(248,113,113,0.85)", background: "none", border: "none", cursor: "pointer",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
+      {drop === "after" && (
+        <div style={{ height: 1, background: "#2DD4BF", margin: "1px 8px", borderRadius: 1, pointerEvents: "none" }} />
+      )}
+      {isExpanded && (hasChildren || isCreatingHere) && (
+        <>
+          {children.map(child => (
+            <FolderRow key={child.id} folder={child} depth={depth + 1} {...sharedChildProps} />
+          ))}
+          {isCreatingHere && (
+            <div
+              className="flex items-center gap-2 py-1"
+              style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, paddingRight: "8px" }}
+            >
+              <Folder size={13} className="shrink-0 text-white/40" />
+              <input
+                ref={inputRef}
+                value={newFolderName}
+                onChange={e => onNameChange(e.target.value)}
+                onKeyDown={onNameKeyDown}
+                onBlur={onNameBlur}
+                placeholder="Folder name…"
+                className="flex-1 bg-transparent text-[12px] text-white/80 placeholder:text-white/25 outline-none border-b border-white/20 pb-0.5 min-w-0"
+              />
+            </div>
+          )}
+        </>
+      )}
+    </React.Fragment>
+  );
+});
+
 // ── Static icons ──────────────────────────────────────────────────────────────
 function LogoIcon() {
   return <Image src="/HG.svg" alt="Logo" width={26} height={26} />;
@@ -257,6 +543,24 @@ export function AppSidebar() {
   const isGuestMode = process.env.NEXT_PUBLIC_GUEST_MODE === "true";
   const sessions = (user || isGuestMode) ? allSessions : [];
 
+  const {
+    folders, selectedFolderId, itemFolderMap,
+    createFolder, deleteFolder, selectFolder,
+    updateFolder, moveFolder, folderItemCount,
+    galleryImageCount, galleryVideoCount,
+    loadFromServer,
+  } = useFolderStore();
+  const [creatingFolder, setCreatingFolder] = React.useState(false);
+  const [newFolderName, setNewFolderName] = React.useState("");
+  const newFolderInputRef = React.useRef<HTMLInputElement>(null);
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    if (user || isGuestMode) {
+      loadFromServer();
+    }
+  }, [user, isGuestMode, loadFromServer]);
+
   function startNewChat() {
     router.push("/chat");
   }
@@ -269,15 +573,58 @@ export function AppSidebar() {
     }
   }
 
+  function handleCreateFolder() {
+    setCreatingFolder(true);
+    setNewFolderName("");
+    // Auto-expand parent folder so the inline input is visible
+    if (selectedFolderId) {
+      setExpandedIds(prev => new Set([...prev, selectedFolderId]));
+    }
+    setTimeout(() => newFolderInputRef.current?.focus(), 50);
+  }
+
+  function confirmCreateFolder() {
+    const name = newFolderName.trim();
+    if (name) {
+      // If a folder is currently selected, create subfolder under it
+      const parentId = selectedFolderId ?? null;
+      createFolder(name, parentId);
+    }
+    setCreatingFolder(false);
+    setNewFolderName("");
+  }
+
+  function handleFolderKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") confirmCreateFolder();
+    if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+  }
+
+  // ── Folder tree helpers ──────────────────────────────────────────────────────
+  function buildTree(parentId: string | null): typeof folders {
+    return folders
+      .filter((f) => f.parentId === parentId)
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+
+  function handleToggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const displayName = user
     ? (user.user_metadata?.full_name || user.email?.split("@")[0] || "User")
     : "Guest User";
 
   const avatarSeed = user?.id || "guest";
 
+  const folderParam = selectedFolderId ? `&folder=${selectedFolderId}` : "";
   const navItems = [
-    { label: "Image", href: "/gallery?tab=images", icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
-    { label: "Video", href: "/gallery?tab=videos", icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
+    { label: "Image", href: `/gallery?tab=images${folderParam}`, icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
+    { label: "Video", href: `/gallery?tab=videos${folderParam}`, icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
     { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
@@ -338,6 +685,91 @@ export function AppSidebar() {
               <Link key={item.label} href={item.href} onClick={item.onClick} className={itemCls(item.active)} title={item.label}>{content}</Link>
             );
           })}
+        </div>
+
+        {/* Folders section — hidden in icon mode */}
+        <div className="group-data-[collapsible=icon]:hidden flex flex-col shrink-0 px-2">
+          <div className="border-t border-white/[0.06] mb-1" />
+
+          {/* Section header */}
+          <div className="flex items-center justify-between px-1 py-2 shrink-0">
+            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-white/25">Folders</span>
+            <button
+              onClick={handleCreateFolder}
+              title="New folder"
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-colors"
+            >
+              <FolderPlus size={12} />
+            </button>
+          </div>
+
+          {/* Folder list — max 7 rows, scrollable */}
+          <div className="flex flex-col gap-0.5" style={{ maxHeight: "calc(7 * 36px)", overflowY: "auto" }}>
+            {/* All assets row */}
+            <div
+              onClick={() => selectFolder(null)}
+              className={cn(
+                "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
+                selectedFolderId === null ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
+              )}
+            >
+              <LayoutGrid size={13} className={cn("shrink-0", selectedFolderId === null ? "text-white/70" : "text-white/35")} />
+              <span className={cn(
+                "flex-1 text-[12px] truncate leading-tight",
+                selectedFolderId === null ? "text-white/90" : "text-white/55"
+              )}>
+                All assets
+              </span>
+              {pathname === "/gallery" && (() => {
+                const c = tab === "videos" ? galleryVideoCount : galleryImageCount;
+                return c > 0 ? (
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                    {c}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+
+            {/* Recursive folder tree — root folders only, children rendered inside FolderRow */}
+            {buildTree(null).map((folder) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                allFolders={folders}
+                depth={0}
+                expandedIds={expandedIds}
+                selectedFolderId={selectedFolderId}
+                onToggleExpand={handleToggleExpand}
+                onSelect={selectFolder}
+                onDelete={deleteFolder}
+                onRename={(id, name) => updateFolder(id, { name })}
+                onMove={moveFolder}
+                creatingInFolderId={creatingFolder ? selectedFolderId : null}
+                newFolderName={newFolderName}
+                onNameChange={setNewFolderName}
+                onNameKeyDown={handleFolderKeyDown}
+                onNameBlur={confirmCreateFolder}
+                inputRef={newFolderInputRef}
+                getCount={folderItemCount}
+              />
+            ))}
+
+            {/* Root-level new folder input — shown at bottom when no folder is selected */}
+            {creatingFolder && selectedFolderId === null && (
+              <div className="flex items-center gap-2 px-2 py-1">
+                <Folder size={13} className="shrink-0 text-white/40" />
+                <input
+                  ref={newFolderInputRef}
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  onKeyDown={handleFolderKeyDown}
+                  onBlur={confirmCreateFolder}
+                  placeholder="Folder name…"
+                  className="flex-1 bg-transparent text-[12px] text-white/80 placeholder:text-white/25 outline-none border-b border-white/20 pb-0.5 min-w-0"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Chat history — hidden in icon mode */}
