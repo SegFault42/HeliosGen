@@ -94,6 +94,8 @@ export function MediaPickerModal({
   const [urlInput, setUrlInput] = useState("");
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState("");
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<GalleryItem | null>(null);
 
   const submitUrl = async () => {
     const trimmed = urlInput.trim();
@@ -310,7 +312,7 @@ export function MediaPickerModal({
           { id: "uploads",   label: "Uploads" },
         ];
 
-  return createPortal(
+  const modal = createPortal(
     <div data-prompt-overlay="" style={{ position: "fixed", inset: 0, zIndex: 100000, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
       <style>{SHIMMER_CSS}</style>
       <div
@@ -485,6 +487,7 @@ export function MediaPickerModal({
                     }}
                     onMouseEnter={(e) => {
                       if (isDisabled) return;
+                      setHoveredItemId(item.id);
                       if (!isSelected) e.currentTarget.style.borderColor = "rgba(255,255,255,0.5)";
                       e.currentTarget.style.transform = "scale(1.04)";
                       const v = e.currentTarget.querySelector("video");
@@ -493,6 +496,7 @@ export function MediaPickerModal({
                       if (overlay) overlay.style.opacity = "0";
                     }}
                     onMouseLeave={(e) => {
+                      setHoveredItemId(null);
                       if (!isSelected) e.currentTarget.style.borderColor = "transparent";
                       e.currentTarget.style.transform = "scale(1)";
                       const v = e.currentTarget.querySelector("video");
@@ -522,10 +526,13 @@ export function MediaPickerModal({
                         </div>
                       </div>
                     )}
-                    {isSelected && (
-                      <div style={{ position: "absolute", top: "4px", right: "4px", width: "18px", height: "18px", borderRadius: "50%", background: "#2DD4BF", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                        <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="2 6 5 9 10 3" />
+                    {hoveredItemId === item.id && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); setPreviewItem(item); }}
+                        style={{ position: "absolute", top: "4px", right: "4px", width: "18px", height: "18px", borderRadius: "4px", background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 2 }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
                         </svg>
                       </div>
                     )}
@@ -549,5 +556,42 @@ export function MediaPickerModal({
       </div>
     </div>,
     document.body,
+  );
+
+  return (
+    <>
+      {modal}
+      {previewItem && createPortal(
+        <div
+          onClick={(e) => { e.stopPropagation(); setPreviewItem(null); }}
+          style={{ position: "fixed", inset: 0, zIndex: 200000, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          {previewItem.mediaType === "video" ? (
+            <video
+              src={previewItem.url}
+              controls
+              autoPlay
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: "10px", boxShadow: "0 24px 80px rgba(0,0,0,0.8)" }}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewItem.url}
+              alt=""
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: "10px", boxShadow: "0 24px 80px rgba(0,0,0,0.8)" }}
+            />
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); setPreviewItem(null); }}
+            style={{ position: "absolute", top: "20px", right: "20px", width: "32px", height: "32px", borderRadius: "50%", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.8)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
