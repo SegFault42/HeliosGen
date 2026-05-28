@@ -484,6 +484,55 @@ function resolveGalleryMentions(
   return { resolvedPrompt, extraUrls, extraAssets };
 }
 
+function splitByMentions(
+  text: string,
+  baseColor: string | undefined,
+  tagged: TaggedImage[],
+  keyStart: number,
+  onEnter: (tag: TaggedImage, rect: DOMRect) => void,
+  onLeave: () => void,
+  onMouseDown: (tag: TaggedImage) => void,
+): { nodes: React.ReactNode[]; nextKey: number } {
+  if (!tagged.length) {
+    return {
+      nodes: [<span key={keyStart} style={baseColor ? { color: baseColor } : undefined}>{text}</span>],
+      nextKey: keyStart + 1,
+    };
+  }
+  const sorted = [...tagged].sort((a, b) => b.label.length - a.label.length);
+  const nodes: React.ReactNode[] = [];
+  let k = keyStart;
+  let rest = text;
+  while (rest.length > 0) {
+    let earliest: { idx: number; tag: TaggedImage } | null = null;
+    for (const tag of sorted) {
+      const idx = rest.indexOf(`@${tag.label}`);
+      if (idx !== -1 && (earliest === null || idx < earliest.idx)) earliest = { idx, tag };
+    }
+    if (!earliest) {
+      nodes.push(<span key={k++} style={baseColor ? { color: baseColor } : undefined}>{rest}</span>);
+      break;
+    }
+    if (earliest.idx > 0) {
+      nodes.push(<span key={k++} style={baseColor ? { color: baseColor } : undefined}>{rest.slice(0, earliest.idx)}</span>);
+    }
+    const tag = earliest.tag;
+    nodes.push(
+      <span
+        key={k++}
+        style={{ color: "#2DD4BF", fontWeight: 500, cursor: "text", pointerEvents: "auto", userSelect: "none", background: "rgba(119,229,68,0.15)", boxShadow: "0 0 0 3px rgba(119,229,68,0.15)", borderRadius: "3px" }}
+        onMouseEnter={e => onEnter(tag, e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={onLeave}
+        onMouseDown={e => { e.preventDefault(); onMouseDown(tag); }}
+      >
+        @{tag.label}
+      </span>,
+    );
+    rest = rest.slice(earliest.idx + tag.label.length + 1);
+  }
+  return { nodes, nextKey: k };
+}
+
 function renderGalleryMentions(
   text: string,
   tagged: TaggedImage[],
@@ -534,8 +583,10 @@ function renderGalleryMentions(
 }
 
 function resizeTextarea(el: HTMLTextAreaElement, maxH = 264) {
+  const st = el.scrollTop;
   el.style.height = "auto";
   el.style.height = Math.min(el.scrollHeight, maxH) + "px";
+  el.scrollTop = st;
 }
 
 
@@ -1639,8 +1690,19 @@ function GalleryInner() {
   };
 
   const pollTask = async (taskId: string): Promise<void> => {
+    // Resolves after `ms` OR immediately when the tab becomes visible — whichever is first.
+    // This ensures polling catches up instantly after the user returns to the tab,
+    // even if the browser throttled the timer while it was hidden.
+    const waitOrVisible = (ms: number) => new Promise<void>(resolve => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; clearTimeout(t); document.removeEventListener("visibilitychange", onVisible); resolve(); };
+      const onVisible = () => { if (!document.hidden) finish(); };
+      const t = setTimeout(finish, ms);
+      document.addEventListener("visibilitychange", onVisible);
+    });
+
     for (let i = 0; i < 150; i++) {
-      await new Promise(r => setTimeout(r, 3_000));
+      await waitOrVisible(3_000);
       const poll = await fetch(`/api/job-status?taskId=${taskId}`);
       const result = await poll.json() as { status: string; error?: string };
       if (result.status === "done") return;
@@ -1838,9 +1900,11 @@ function GalleryInner() {
     setTaggedImages(prev => prev.filter(t => prompt.includes(`@${t.label}`)));
     if (inputRef.current) {
       resizeTextarea(inputRef.current);
-      inputRef.current.scrollTop = 0;
     }
-    if (overlayInnerRef.current) overlayInnerRef.current.style.transform = "";
+    if (overlayInnerRef.current) {
+      const st = inputRef.current?.scrollTop ?? 0;
+      overlayInnerRef.current.style.transform = st > 0 ? `translateY(-${st}px)` : "";
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt]);
 
@@ -3095,9 +3159,9 @@ function GalleryInner() {
                   color: "transparent",
                   caretColor: "#2DD4BF",
                   fontSize: "14.5px",
-                  fontFamily: promptTextMode === "json" ? "monospace" : "inherit",
+                  fontFamily: promptTextMode !== "text" ? "monospace" : "inherit",
                   lineHeight: "22px",
-                  letterSpacing: promptTextMode === "json" ? "normal" : "-0.01em",
+                  letterSpacing: promptTextMode !== "text" ? "normal" : "-0.01em",
                   padding: 0,
                   resize: "none",
                   maxHeight: "264px",
@@ -3129,7 +3193,9 @@ function GalleryInner() {
                   }}
                 >
                   {promptTextMode !== "text" ? (
-                    promptTextMode === "yaml" ? syntaxHighlightYaml(prompt) : syntaxHighlightJson(prompt)
+                    promptTextMode === "yaml"
+                      ? syntaxHighlightYaml(prompt, taggedImages, (tag, rect) => setChipPreview({ tag, rect }), () => setChipPreview(null), tag => { const idx = prompt.indexOf(`@${tag.label}`); const pos = idx >= 0 ? idx + tag.label.length + 1 : prompt.length; inputRef.current?.focus(); inputRef.current?.setSelectionRange(pos, pos); })
+                      : syntaxHighlightJson(prompt, taggedImages, (tag, rect) => setChipPreview({ tag, rect }), () => setChipPreview(null), tag => { const idx = prompt.indexOf(`@${tag.label}`); const pos = idx >= 0 ? idx + tag.label.length + 1 : prompt.length; inputRef.current?.focus(); inputRef.current?.setSelectionRange(pos, pos); })
                   ) : promptMaxLength !== null && prompt.length > promptMaxLength ? (
                     <>
                       {renderGalleryMentions(
@@ -3381,7 +3447,9 @@ function GalleryInner() {
                                 wordBreak: "break-word",
                               }}
                             >
-                              {promptTextMode === "yaml" ? syntaxHighlightYaml(block) : syntaxHighlightJson(block)}
+                              {promptTextMode === "yaml"
+                                ? syntaxHighlightYaml(block, taggedImages, (tag, rect) => setChipPreview({ tag, rect }), () => setChipPreview(null), tag => { const stack = document.querySelector('[data-prompt-stack]'); const ta = stack?.querySelectorAll<HTMLTextAreaElement>('textarea')[blockIdx]; if (!ta) return; activeBlockRef.current = ta; activeBlockIdxRef.current = blockIdx; const pos = block.indexOf(`@${tag.label}`); ta.focus(); ta.setSelectionRange(pos >= 0 ? pos + tag.label.length + 1 : block.length, pos >= 0 ? pos + tag.label.length + 1 : block.length); })
+                                : syntaxHighlightJson(block, taggedImages, (tag, rect) => setChipPreview({ tag, rect }), () => setChipPreview(null), tag => { const stack = document.querySelector('[data-prompt-stack]'); const ta = stack?.querySelectorAll<HTMLTextAreaElement>('textarea')[blockIdx]; if (!ta) return; activeBlockRef.current = ta; activeBlockIdxRef.current = blockIdx; const pos = block.indexOf(`@${tag.label}`); ta.focus(); ta.setSelectionRange(pos >= 0 ? pos + tag.label.length + 1 : block.length, pos >= 0 ? pos + tag.label.length + 1 : block.length); })}
                             </div>
                           </div>
                         ) : (
@@ -5253,12 +5321,25 @@ function DownloadToast({ downloads, onClear }: { downloads: DownloadTask[]; onCl
 
 // ── Lightbox helpers ──────────────────────────────────────────────────────────
 
-function syntaxHighlightJson(json: string): React.ReactNode {
+function syntaxHighlightJson(
+  json: string,
+  tagged?: TaggedImage[],
+  onEnter?: (tag: TaggedImage, rect: DOMRect) => void,
+  onLeave?: () => void,
+  onMD?: (tag: TaggedImage) => void,
+): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let k = 0;
   const push = (from: number, to: number, color?: string) => {
     if (from >= to) return;
-    parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(from, to)}</span>);
+    const text = json.slice(from, to);
+    if (tagged?.length && onEnter && onLeave && onMD) {
+      const { nodes, nextKey } = splitByMentions(text, color, tagged, k, onEnter, onLeave, onMD);
+      parts.push(...nodes);
+      k = nextKey;
+    } else {
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{text}</span>);
+    }
   };
   const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(true|false|null)|([{}\[\],])/g;
   let last = 0;
@@ -5285,7 +5366,13 @@ function syntaxHighlightJson(json: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-function syntaxHighlightYaml(yaml: string): React.ReactNode {
+function syntaxHighlightYaml(
+  yaml: string,
+  tagged?: TaggedImage[],
+  onEnter?: (tag: TaggedImage, rect: DOMRect) => void,
+  onLeave?: () => void,
+  onMD?: (tag: TaggedImage) => void,
+): React.ReactNode {
   const lines = yaml.split("\n");
   const parts: React.ReactNode[] = [];
   let k = 0;
@@ -5301,15 +5388,14 @@ function syntaxHighlightYaml(yaml: string): React.ReactNode {
         parts.push(<span key={k++}>{indent}</span>);
         parts.push(<span key={k++} style={{ color: "#06b6d4" }}>{key}</span>);
         parts.push(<span key={k++} style={{ color: "#6b7280" }}>{colon}</span>);
-        // Color the value portion
-        parts.push(<span key={k++}>{colorYamlValue(rest, k)}</span>);
+        parts.push(<span key={k++}>{colorYamlValue(rest, k, tagged, onEnter, onLeave, onMD)}</span>);
         k++;
       } else {
         // List item or plain value
         const listMatch = line.match(/^(\s*-\s+)(.*)/);
         if (listMatch) {
           parts.push(<span key={k++} style={{ color: "#6b7280" }}>{listMatch[1]}</span>);
-          parts.push(<span key={k++}>{colorYamlValue(listMatch[2], k)}</span>);
+          parts.push(<span key={k++}>{colorYamlValue(listMatch[2], k, tagged, onEnter, onLeave, onMD)}</span>);
           k++;
         } else {
           parts.push(<span key={k++}>{line}</span>);
@@ -5321,7 +5407,14 @@ function syntaxHighlightYaml(yaml: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-function colorYamlValue(value: string, baseKey: number): React.ReactNode {
+function colorYamlValue(
+  value: string,
+  baseKey: number,
+  tagged?: TaggedImage[],
+  onEnter?: (tag: TaggedImage, rect: DOMRect) => void,
+  onLeave?: () => void,
+  onMD?: (tag: TaggedImage) => void,
+): React.ReactNode {
   // Inline comment
   const commentIdx = value.search(/#/);
   const main = commentIdx >= 0 ? value.slice(0, commentIdx) : value;
@@ -5329,18 +5422,29 @@ function colorYamlValue(value: string, baseKey: number): React.ReactNode {
   let k = baseKey * 100;
   const out: React.ReactNode[] = [];
   const trimmed = main.trim();
+
+  const pushValue = (text: string, color?: string) => {
+    if (tagged?.length && onEnter && onLeave && onMD) {
+      const { nodes, nextKey } = splitByMentions(text, color, tagged, k, onEnter, onLeave, onMD);
+      out.push(...nodes);
+      k = nextKey;
+    } else {
+      out.push(<span key={k++} style={color ? { color } : undefined}>{text}</span>);
+    }
+  };
+
   if (/^(true|false|yes|no|on|off)$/i.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#a78bfa" }}>{main}</span>);
+    pushValue(main, "#a78bfa");
   } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed) || /^0x[\da-fA-F]+$/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#fb923c" }}>{main}</span>);
+    pushValue(main, "#fb923c");
   } else if (/^(null|~)$/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#a78bfa" }}>{main}</span>);
+    pushValue(main, "#a78bfa");
   } else if (/^['"]/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#86efac" }}>{main}</span>);
+    pushValue(main, "#86efac");
   } else if (trimmed !== "") {
-    out.push(<span key={k++} style={{ color: "rgba(255,255,255,0.82)" }}>{main}</span>);
+    pushValue(main, "rgba(255,255,255,0.82)");
   } else {
-    out.push(<span key={k++}>{main}</span>);
+    pushValue(main);
   }
   if (comment) out.push(<span key={k++} style={{ color: "#4b5563" }}>{comment}</span>);
   return <>{out}</>;

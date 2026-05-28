@@ -490,7 +490,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
 
     let cancelled = false;
 
-    const interval = setInterval(async () => {
+    const doPoll = async () => {
       try {
         const res = await fetch(`/api/job-status?taskId=${taskId}`);
         const json = await res.json();
@@ -503,6 +503,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           gens[slot] = json.imageUrl as string;
           updateNodeData(id, { status: "done", imageUrl: json.imageUrl, taskId: undefined, generations: gens, currentGenIdx: slot });
           clearInterval(interval);
+          document.removeEventListener("visibilitychange", onVisible);
           browserNotify("Node complete", (data.label as string | undefined) ?? "Image generated");
         } else if (json.status === "error") {
           const storeNode = useWorkflowStore.getState().nodes.find(n => n.id === id);
@@ -511,6 +512,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           gens[slot] = { error: json.error ?? "Generation failed" };
           updateNodeData(id, { status: "error", errorMsg: json.error, taskId: undefined, generations: gens, currentGenIdx: slot });
           clearInterval(interval);
+          document.removeEventListener("visibilitychange", onVisible);
           browserNotify("Node failed", json.error ?? "Generation failed");
         } else if (json.status === "not_found") {
           const storeNode = useWorkflowStore.getState().nodes.find(n => n.id === id);
@@ -519,15 +521,22 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           gens[slot] = { error: "Job expired or unknown" };
           updateNodeData(id, { status: "error", errorMsg: "Job expired or unknown", taskId: undefined, generations: gens, currentGenIdx: slot });
           clearInterval(interval);
+          document.removeEventListener("visibilitychange", onVisible);
           browserNotify("Node failed", "Job expired or unknown");
         }
         // "pending" → keep polling
       } catch {
         // network hiccup — keep polling
       }
-    }, 3000);
+    };
 
-    return () => { cancelled = true; clearInterval(interval); };
+    const interval = setInterval(doPoll, 3000);
+
+    // When tab becomes visible again, poll immediately instead of waiting for the throttled interval
+    const onVisible = () => { if (!document.hidden) doPoll(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => { cancelled = true; clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [data.taskId, status, id, updateNodeData]);
 
   const promptConnected = edges.some((e) => e.target === id && e.targetHandle === "prompt");
