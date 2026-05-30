@@ -198,6 +198,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   }, [selected]);
 
   const [loading, setLoading] = useState(false);
+  const [genCount, setGenCount] = useState(1);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const [hoveredSourceHandle, setHoveredSourceHandle] = useState<string | null>(null);
   const [errorHandles, setErrorHandles] = useState<Set<string>>(new Set());
@@ -1065,6 +1066,60 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   }, [id, nodes, edges, prompt, sound, seed, duration, aspectRatio, videoModelId, veoMode, isVeo,
     mode, resolution, cfg, debugMode, textEdge, updateNodeData, setAuthModalOpen, flashEdgeError, kieKeySet, addToast]);
 
+  const handleGenerateBatch = useCallback(() => {
+    generate();
+    if (genCount <= 1) return;
+
+    const state = useWorkflowStore.getState();
+    const src = state.nodes.find((n) => n.id === id);
+    if (!src) return;
+
+    const nodeW = cardRef.current?.offsetWidth ?? 320;
+    const nodeH = cardRef.current?.offsetHeight ?? 320;
+    const { x, y } = src.position;
+    const GAP = 24;
+    const POSITIONS = [
+      { col: 1, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+    ];
+
+    const newIds: string[] = [];
+    for (let i = 0; i < genCount - 1; i++) {
+      const pos = POSITIONS[i];
+      const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      newIds.push(newId);
+      addNode({
+        ...src,
+        id: newId,
+        position: { x: x + pos.col * (nodeW + GAP), y: y + pos.row * (nodeH + GAP) },
+        selected: false,
+        data: {
+          ...src.data,
+          status: "idle",
+          videoUrl: undefined,
+          generations: [],
+          generationsMeta: [],
+          currentGenIdx: 0,
+          imageNaturalRatio: undefined,
+          taskId: undefined,
+          hasError: false,
+          pendingGenerate: true,
+        },
+      });
+      state.edges
+        .filter((e) => e.target === id && e.deletable !== false)
+        .forEach((e) => insertEdge({
+          ...e,
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+          target: newId,
+        }));
+    }
+
+    // Select the original node and all spawned siblings
+    onNodesChange([id, ...newIds].map((nid) => ({ type: "select" as const, id: nid, selected: true })));
+  }, [generate, genCount, id, addNode, insertEdge, onNodesChange]);
+
   // Pipeline runner trigger — called by Run Pipeline button
   const generateRef = useRef(generate);
   useEffect(() => { generateRef.current = generate; }, [generate]);
@@ -1882,8 +1937,31 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
               </div>{/* end pills wrapper */}
 
+              {/* Batch count selector */}
+              {!readOnly && (
+                <div
+                  className="flex items-center shrink-0"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  style={{ height: 26, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", overflow: "hidden" }}
+                >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setGenCount(c => Math.max(1, c - 1)); }}
+                    disabled={busy || genCount <= 1}
+                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount <= 1 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)", cursor: busy || genCount <= 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
+                  >−</button>
+                  <span style={{ fontSize: 11, color: "#fff", minWidth: 28, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+                    {genCount}/4
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setGenCount(c => Math.min(4, c + 1)); }}
+                    disabled={busy || genCount >= 4}
+                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount >= 4 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)", cursor: busy || genCount >= 4 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
+                  >+</button>
+                </div>
+              )}
+
               {/* Generate button — always right */}
-              {!readOnly && <GenerateButton onClick={generate} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || kieKeySet === false || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
+              {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || kieKeySet === false || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
             </div>
           );
         })()}
