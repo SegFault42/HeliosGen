@@ -301,7 +301,10 @@ export async function POST(req: NextRequest) {
           try {
             const parsed = JSON.parse(txt);
             const code   = parsed?.error?.code ?? parsed?.error?.type;
-            displayError  = code ? code : displayError;
+            const friendlyErrors: Record<string, string> = {
+              EngineOverloaded: "Model is overloaded right now. Please try again.",
+            };
+            displayError = code ? (friendlyErrors[code] ?? code) : displayError;
           } catch { /* not JSON */ }
           jobStore.set(azureTaskId, { status: "error", error: displayError });
           return;
