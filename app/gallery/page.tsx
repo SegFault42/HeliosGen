@@ -1442,7 +1442,7 @@ function GalleryInner() {
     checkAndLoad();
     return () => container.removeEventListener("scroll", checkAndLoad);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMore, loadItems, loading, loadingMore]);
+  }, [hasMore, loadItems, loading, loadingMore, authLoaded]);
 
   // Persist settings
   useEffect(() => {
