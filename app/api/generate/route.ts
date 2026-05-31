@@ -139,7 +139,7 @@ async function curlMultipartPost(
       proc.on("error",  (e) => reject(new Error(`curl spawn failed: ${e.message}`)));
     });
 
-    let statusStr: string, stderr: string, exitCode: number;
+    let statusStr: string = "", stderr: string = "", exitCode: number = -1;
     for (let attempt = 1; attempt <= 3; attempt++) {
       ({ statusStr, stderr, exitCode } = await runCurl());
       console.log(`[azure/edits/curl] attempt ${attempt} exit code:`, exitCode);
