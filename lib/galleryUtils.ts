@@ -9,6 +9,7 @@ export interface GalleryItem {
   model?: string;
   aspect_ratio?: string;
   quality?: string;
+  azure_resolution?: string;
   source: "generation" | "upload";
   created_at: string;
   referenceImageUrls?: string[];

@@ -2375,7 +2375,7 @@ function GalleryInner() {
     setPrompt(newPrompt);
   };
 
-  const handleCopyPrompt = useCallback((text: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string }) => {
+  const handleCopyPrompt = useCallback((text: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string; azureResolution?: string }) => {
     const newRefs = (refUrls ?? []).map(url => ({
       id: randomUUID(), objectUrl: url, cdnUrl: url, uploading: false, error: false,
     }));
@@ -2437,6 +2437,7 @@ function GalleryInner() {
     if (meta?.model) setModelId(meta.model);
     if (meta?.aspectRatio) setAspectRatio(meta.aspectRatio);
     if (meta?.quality) setQuality(meta.quality);
+    if (meta?.azureResolution) setAzureResolution(meta.azureResolution);
     requestAnimationFrame(() => {
       if (inputRef.current) resizeTextarea(inputRef.current);
     });
@@ -5295,7 +5296,7 @@ function GalleryCard({
   item: GalleryItem;
   onOpen?: () => void;
   onAddReference?: (url: string) => void;
-  onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string }) => void;
+  onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string; azureResolution?: string }) => void;
   onDownload?: (url: string, isVideo: boolean) => Promise<void>;
   onDelete?: (id: string, source: "generation" | "upload") => Promise<void>;
   videoMuted?: boolean;
@@ -5383,7 +5384,7 @@ function GalleryCard({
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.prompt) return;
-    onCopyPrompt?.(item.prompt, item.referenceImageUrls, { model: item.model, aspectRatio: item.aspect_ratio, quality: item.quality });
+    onCopyPrompt?.(item.prompt, item.referenceImageUrls, { model: item.model, aspectRatio: item.aspect_ratio, quality: item.quality, azureResolution: item.azure_resolution });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -5908,7 +5909,7 @@ function renderLightboxPrompt(
 
 // ── Lightbox ──────────────────────────────────────────────────────────────────
 
-function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: GalleryItem; onClose: () => void; onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string }) => void; onPrev?: () => void; onNext?: () => void }) {
+function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: GalleryItem; onClose: () => void; onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string; azureResolution?: string }) => void; onPrev?: () => void; onNext?: () => void }) {
   const [visible, setVisible] = useState(false);
   const [fullLoaded, setFullLoaded] = useState(false);
   const [imgIdx, setImgIdx] = useState(0);
@@ -5945,7 +5946,7 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
   const copyPrompt = () => {
     if (!item.prompt) return;
     navigator.clipboard.writeText(item.prompt).catch(() => { });
-    onCopyPrompt?.(item.prompt, item.referenceImageUrls, { model: item.model, aspectRatio: item.aspect_ratio, quality: item.quality });
+    onCopyPrompt?.(item.prompt, item.referenceImageUrls, { model: item.model, aspectRatio: item.aspect_ratio, quality: item.quality, azureResolution: item.azure_resolution });
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
@@ -6153,8 +6154,6 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
           borderRadius: "20px",
           border: "1px solid rgba(255,255,255,0.07)",
           padding: "12px",
-          overflowY: "auto",
-          maxHeight: "calc(100vh - 48px)",
         }}
       >
         {/* Prompt section */}
@@ -6202,7 +6201,7 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
                 {copied ? "Copied!" : "Copy"}
               </button>
             </div>
-            <div style={{ padding: "0 16px 16px", fontSize: "13px", lineHeight: 1.65, maxHeight: "220px", overflowY: "auto" }}>
+            <div style={{ padding: "0 16px 16px", fontSize: "13px", lineHeight: 1.65, maxHeight: "40vh", overflowY: "auto" }}>
               {renderLightboxPrompt(item.prompt, item.referenceImageUrls)}
             </div>
           </div>

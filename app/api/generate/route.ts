@@ -326,6 +326,7 @@ export async function POST(req: NextRequest) {
             task_id: azureTaskId, user_id: azureUserId, generation_type: "image",
             status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
             model, aspect_ratio: aspectRatio, quality,
+            azure_resolution: azureResolution,
             reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
           });
         } else {
@@ -339,6 +340,7 @@ export async function POST(req: NextRequest) {
             model,
             aspect_ratio:         aspectRatio,
             quality,
+            azure_resolution:     azureResolution,
             reference_image_urls: hasRefImages ? r2ImageUrls : undefined,
           }).then(({ error }) => {
             if (error) console.error("[azure] supabase insert error:", error.message);

@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     model?: string;
     aspect_ratio?: string;
     quality?: string;
+    azure_resolution?: string;
     source: "generation" | "upload";
     created_at: string;
     referenceImageUrls?: string[];
@@ -36,9 +37,10 @@ export async function GET(req: NextRequest) {
       imageUrls:          g.image_urls?.length ? g.image_urls : undefined,
       mediaType:          mediaType as "image" | "video",
       prompt:             g.prompt       ?? undefined,
-      model:              g.model        ?? undefined,
-      aspect_ratio:       g.aspect_ratio ?? undefined,
-      quality:            g.quality      ?? undefined,
+      model:              g.model            ?? undefined,
+      aspect_ratio:       g.aspect_ratio     ?? undefined,
+      quality:            g.quality          ?? undefined,
+      azure_resolution:   g.azure_resolution ?? undefined,
       source:             "generation",
       created_at:         g.created_at,
       referenceImageUrls: g.reference_image_urls?.length ? g.reference_image_urls : undefined,
@@ -85,7 +87,7 @@ export async function GET(req: NextRequest) {
 
   const { data: gens, error: genError } = await supabaseAdmin
     .from("generations")
-    .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, created_at, reference_image_urls")
+    .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, azure_resolution, created_at, reference_image_urls")
     .eq("user_id", userId)
     .eq("generation_type", mediaType)
     .eq("status", "done")
@@ -111,9 +113,10 @@ export async function GET(req: NextRequest) {
     imageUrls:           (g.image_urls as string[] | null)?.length ? (g.image_urls as string[]) : undefined,
     mediaType:           mediaType as "image" | "video",
     prompt:              g.prompt        ?? undefined,
-    model:               g.model         ?? undefined,
-    aspect_ratio:        g.aspect_ratio  ?? undefined,
-    quality:             g.quality       ?? undefined,
+    model:               g.model           ?? undefined,
+    aspect_ratio:        g.aspect_ratio    ?? undefined,
+    quality:             g.quality         ?? undefined,
+    azure_resolution:    (g as { azure_resolution?: string }).azure_resolution ?? undefined,
     source:              "generation",
     created_at:          g.created_at,
     referenceImageUrls:  (g.reference_image_urls as string[] | null)?.length

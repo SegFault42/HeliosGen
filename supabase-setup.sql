@@ -70,6 +70,7 @@ create table public.generations (
   model                text,
   aspect_ratio         text,
   quality              text,
+  azure_resolution     text,
   duration             int,
   kling_mode           text,
   sound                boolean,

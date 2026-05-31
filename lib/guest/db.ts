@@ -15,6 +15,7 @@ interface Generation {
   model?: string;
   aspect_ratio?: string;
   quality?: string;
+  azure_resolution?: string;
   duration?: number;
   kling_mode?: string;
   sound?: boolean;
