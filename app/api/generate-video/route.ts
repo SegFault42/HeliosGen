@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
     if (apiInput.extra) Object.assign(input, apiInput.extra);
 
   } else if (apiInput.referenceImagesKey) {
-    // ── Reference-image-based models (Grok Imagine) ───────────────────────────
+    // ── Reference-image-based models (Grok Imagine, Grok Imagine 1.5) ─────────
     const refImageUrls = (
       await Promise.all(
         (rawRefImages as string[]).map((u) => ensureR2(u, "references").catch(() => null))
@@ -205,12 +205,14 @@ export async function POST(req: NextRequest) {
     ).filter((u): u is string => u !== null);
 
     const hasImages = refImageUrls.length > 0;
-    effectiveApiId = hasImages ? "grok-imagine/image-to-video" : "grok-imagine/text-to-video";
+    effectiveApiId = hasImages && cfg.imageApiId ? cfg.imageApiId : cfg.apiId;
+
+    const durationValue = apiInput.durationAsString ? String(clampedDuration) : clampedDuration;
 
     input = {
       prompt:                     prompt ?? "",
       [apiInput.aspectRatioKey!]: aspectRatio,
-      [apiInput.durationKey!]:    String(clampedDuration),
+      [apiInput.durationKey!]:    durationValue,
     };
 
     if (apiInput.modeKey)       input[apiInput.modeKey]       = mode;

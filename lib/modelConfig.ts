@@ -286,6 +286,11 @@ export interface VideoModelMode {
 export interface VideoModel {
   id: string;
   apiId: string;
+  /**
+   * When set, this apiId is used instead of apiId when reference images ARE provided.
+   * Mirrors the textOnlyApiId pattern from ImageModel.
+   */
+  imageApiId?: string;
   name: string;
   provider: string;
   ratios: string[];
@@ -489,6 +494,7 @@ export const VIDEO_MODELS: VideoModel[] = [
   {
     id: "grok-imagine",
     apiId: "grok-imagine/text-to-video",
+    imageApiId: "grok-imagine/image-to-video",
     name: "Grok Imagine",
     provider: "X",
     ratios: ["16:9", "9:16", "1:1", "2:3", "3:2"],
@@ -510,9 +516,36 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       durationKey: "duration",
+      durationAsString: true,
       durationMin: 6,
       durationMax: 30,
       modeKey: "mode",
+      resolutionKey: "resolution",
+      referenceImagesKey: "image_urls",
+      promptMaxLength: 5000,
+    },
+  },
+  {
+    id: "grok-imagine-1-5-preview",
+    apiId: "grok-imagine-video-1-5-preview",
+    name: "Grok Imagine 1.5 preview",
+    provider: "X",
+    ratios: ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+    durations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    defaultDuration: 8,
+    defaultRatio: "auto",
+    handles: ["prompt", "resource"],
+    sound: false,
+    promptOptional: true,
+    maxResources: 1,
+    resourceTagFormat: "grok",
+    resolutions: ["480p", "720p"],
+    defaultResolution: "480p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      durationKey: "duration",
+      durationMin: 1,
+      durationMax: 15,
       resolutionKey: "resolution",
       referenceImagesKey: "image_urls",
       promptMaxLength: 5000,
