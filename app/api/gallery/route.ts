@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { GUEST_MODE, GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
-const LIMIT     = 40;
+const LIMIT     = 20;
 const TABLE_CAP = 1000;
 
 export async function GET(req: NextRequest) {

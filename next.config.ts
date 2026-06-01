@@ -7,9 +7,12 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["undici"],
   images: {
-    // Allow optimization for all HTTPS origins (R2, Replicate, etc.)
     remotePatterns: [
-      { protocol: "https", hostname: "**" },
+      { protocol: "https", hostname: "*.r2.dev" },
+      { protocol: "https", hostname: "**.r2.dev" },
+      { protocol: "https", hostname: "*.replicate.delivery" },
+      { protocol: "https", hostname: "pbxt.replicate.delivery" },
+      { protocol: "https", hostname: "*.replicate.com" },
     ],
   },
 };

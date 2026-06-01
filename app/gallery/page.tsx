@@ -397,8 +397,14 @@ function randomUUID(): string {
   });
 }
 
-function thumbSrc(url: string, _w = 128): string {
-  return url;
+const NEXT_IMG_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840];
+
+function thumbSrc(url: string, w = 128): string {
+  if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("/_next/")) return url;
+  // Target 2× the CSS pixel width for HiDPI displays; snap up to the nearest allowed size.
+  const target = w * 2;
+  const snapped = NEXT_IMG_WIDTHS.find(s => s >= target) ?? NEXT_IMG_WIDTHS[NEXT_IMG_WIDTHS.length - 1];
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${snapped}&q=75`;
 }
 
 interface RefImage {
@@ -600,6 +606,21 @@ function resizeTextarea(el: HTMLTextAreaElement, maxH = 264) {
 
 const loadedImageUrls = new Set<string>();
 const naturalRatioCache = new Map<string, string>(); // url → "w / h"
+
+// Concurrency limiter: at most 4 gallery images load simultaneously.
+const _imgQueue: Array<() => void> = [];
+let _imgActive = 0;
+const IMG_CONCURRENCY = 4;
+function requestImageSlot(fn: () => void): () => void {
+  if (_imgActive < IMG_CONCURRENCY) { _imgActive++; fn(); return () => {}; }
+  _imgQueue.push(fn);
+  return () => { const i = _imgQueue.indexOf(fn); if (i !== -1) _imgQueue.splice(i, 1); };
+}
+function releaseImageSlot() {
+  _imgActive = Math.max(0, _imgActive - 1);
+  const next = _imgQueue.shift();
+  if (next) { _imgActive++; next(); }
+}
 
 // Module-level store for gallery drag — avoids dataTransfer.getData() browser quirks
 let _galleryDragItem: { url: string; mediaType: string } | null = null;
@@ -2972,6 +2993,7 @@ function GalleryInner() {
                     <div key={layoutItem.item.id} style={{ width: layoutItem.width, flex: "0 0 auto", height: "100%", overflow: "hidden", background: selectedIds.has(layoutItem.item.id) ? "#ffffff" : "transparent", transition: "background 180ms ease" }}>
                       <GalleryCard
                         item={layoutItem.item}
+                        displayWidth={layoutItem.width}
                         onOpen={() => setLightboxItem(layoutItem.item)}
                         onAddReference={layoutItem.item.mediaType === "image" && canAddImgs ? handleAddReference : undefined}
                         onCopyPrompt={handleCopyPrompt}
@@ -5291,6 +5313,7 @@ function AspectIcon() {
 
 function GalleryCard({
   item,
+  displayWidth,
   onOpen,
   onAddReference,
   onCopyPrompt,
@@ -5306,6 +5329,7 @@ function GalleryCard({
   isTagged,
 }: {
   item: GalleryItem;
+  displayWidth?: number;
   onOpen?: () => void;
   onAddReference?: (url: string) => void;
   onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string; azureResolution?: string }) => void;
@@ -5322,6 +5346,8 @@ function GalleryCard({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const cancelSlotRef = useRef<(() => void) | null>(null);
+  const slotReleasedRef = useRef(false);
   const preloaded = loadedImageUrls.has(item.url);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -5337,16 +5363,25 @@ function GalleryCard({
   const allUrls = item.imageUrls ?? [item.url];
   const displayUrl = allUrls[cardImgIdx] ?? item.url;
 
-  // Lazy-load observer: pre-load content before it scrolls into view
+  // Lazy-load observer: request a concurrency slot when the card nears the viewport.
   useEffect(() => {
+    if (preloaded || isVideo) return; // already loaded or video — skip queue
     const el = cardRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setShouldLoad(true); },
-      { root: scrollContainer?.current ?? null, rootMargin: "1000px", threshold: 0 },
+      ([entry]) => {
+        if (entry.isIntersecting && !cancelSlotRef.current) {
+          cancelSlotRef.current = requestImageSlot(() => setShouldLoad(true));
+        }
+      },
+      { root: scrollContainer?.current ?? null, rootMargin: "200px", threshold: 0 },
     );
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      cancelSlotRef.current?.();
+      cancelSlotRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -5479,11 +5514,12 @@ function GalleryCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             key={displayUrl}
-            src={shouldLoad ? displayUrl : undefined}
+            src={shouldLoad ? thumbSrc(displayUrl, displayWidth ?? 400) : undefined}
             alt={item.prompt ?? ""}
             draggable={false}
             decoding="async"
             onLoad={(e) => {
+              if (!slotReleasedRef.current) { slotReleasedRef.current = true; releaseImageSlot(); }
               const img = e.currentTarget;
               if (!storedRatio && item.source === "upload" && img.naturalWidth && img.naturalHeight) {
                 const r = `${img.naturalWidth} / ${img.naturalHeight}`;
@@ -5497,6 +5533,7 @@ function GalleryCard({
               loadedImageUrls.add(item.url);
             }}
             onError={() => {
+              if (!slotReleasedRef.current) { slotReleasedRef.current = true; releaseImageSlot(); }
               setFailed(true);
               loadedImageUrls.delete(item.url);
               try { sessionStorage.setItem("hg-loaded", JSON.stringify([...loadedImageUrls])); } catch {}
