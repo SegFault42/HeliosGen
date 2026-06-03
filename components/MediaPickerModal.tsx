@@ -15,10 +15,14 @@ const SHIMMER_CSS = `
   100% { opacity: 1; transform: translateY(0); }
 }`;
 
-const NEXT_IMG_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840];
+const NEXT_IMG_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1920, 3840];
 
-function thumbSrc(url: string, w = 128): string {
-  if (!url || url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("/_next/")) return url;
+// R2 images are served from our own CDN — load directly to avoid the Next.js
+// image proxy timeout under high concurrency. Everything else (Replicate, etc.)
+// goes through the proxy which handles CORS server-side.
+function pickerThumbSrc(url: string, w = 96): string {
+  if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  if (url.includes(".r2.dev/")) return url;
   const target = w * 2;
   const snapped = NEXT_IMG_WIDTHS.find(s => s >= target) ?? NEXT_IMG_WIDTHS[NEXT_IMG_WIDTHS.length - 1];
   return `/_next/image?url=${encodeURIComponent(url)}&w=${snapped}&q=75`;
@@ -26,7 +30,7 @@ function thumbSrc(url: string, w = 128): string {
 
 function PickerImage({ src }: { src: string }) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const optimizedSrc = thumbSrc(src);
+  const thumbUrl = pickerThumbSrc(src);
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {status === "loading" && (
@@ -40,8 +44,8 @@ function PickerImage({ src }: { src: string }) {
       {status !== "error" && (
         <img
           alt=""
-          src={optimizedSrc}
-          loading="eager"
+          src={thumbUrl}
+          loading="lazy"
           decoding="async"
           onLoad={() => setStatus("loaded")}
           onError={() => setStatus("error")}
@@ -233,12 +237,19 @@ export function MediaPickerModal({
 
     if (mediaKind === "any") {
       const cached = [
-        ...(galleryCache.get("images")?.items ?? []),
-        ...(galleryCache.get("videos")?.items ?? []),
+        ...(galleryCache.get("images-generation")?.items ?? []),
+        ...(galleryCache.get("images-upload")?.items ?? []),
+        ...(galleryCache.get("videos-generation")?.items ?? []),
+        ...(galleryCache.get("videos-upload")?.items ?? []),
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setSourceItems(cached);
     } else {
-      setSourceItems(galleryCache.get(mediaKind === "image" ? "images" : "videos")?.items ?? []);
+      const tab = mediaKind === "image" ? "images" : "videos";
+      const cached = [
+        ...(galleryCache.get(`${tab}-generation`)?.items ?? []),
+        ...(galleryCache.get(`${tab}-upload`)?.items ?? []),
+      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setSourceItems(cached);
     }
 
     setFetching(true);

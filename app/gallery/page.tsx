@@ -666,15 +666,19 @@ interface SavedSettings {
   taggedImages?: TaggedImage[];
 }
 
-function loadSettings(tab: Tab): Partial<SavedSettings> | null {
+function settingsKey(tab: Tab, folderId: string | null): string {
+  return folderId ? `nf-gallery-${tab}-folder-${folderId}` : `nf-gallery-${tab}`;
+}
+
+function loadSettings(tab: Tab, folderId: string | null): Partial<SavedSettings> | null {
   if (typeof window === "undefined") return null;
-  try { const r = localStorage.getItem(`nf-gallery-${tab}`); return r ? JSON.parse(r) : null; }
+  try { const r = localStorage.getItem(settingsKey(tab, folderId)); return r ? JSON.parse(r) : null; }
   catch { return null; }
 }
 
-function saveSettings(tab: Tab, s: SavedSettings) {
+function saveSettings(tab: Tab, folderId: string | null, s: SavedSettings) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(`nf-gallery-${tab}`, JSON.stringify(s)); } catch { }
+  try { localStorage.setItem(settingsKey(tab, folderId), JSON.stringify(s)); } catch {}
 }
 
 function loadKlingElements(): KlingElement[] {
@@ -933,20 +937,22 @@ function GalleryInner() {
   const rawSource = searchParams.get("source");
   const initialSource = (rawSource === "uploaded" ? "uploaded" : "generated") as "generated" | "uploaded";
 
-  const { selectedFolderId, itemFolderMap, assignItemsToFolder, removeItemsFromFolder, folders } = useFolderStore();
+  const { selectedFolderId, itemFolderMap, assignItemsToFolder, removeItemsFromFolder, folders, addUnseenFolder } = useFolderStore();
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
 
   const [items, setItems] = useState<GalleryItem[]>(() => {
     if (DEMO_MODE) return tab === "images" ? DEMO_GALLERY_ITEMS : DEMO_VIDEO_ITEMS;
-    return galleryCache.get(tab)?.items ?? [];
+    const initSrc = initialSource === "uploaded" ? "upload" : "generation";
+    return galleryCache.get(`${tab}-${initSrc}`)?.items ?? [];
   });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => {
     if (DEMO_MODE) return false;
-    return galleryCache.get(tab)?.hasMore ?? true;
+    const initSrc = initialSource === "uploaded" ? "upload" : "generation";
+    return galleryCache.get(`${tab}-${initSrc}`)?.hasMore ?? true;
   });
   const [lightboxItem, setLightboxItem] = useState<GalleryItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -959,26 +965,28 @@ function GalleryInner() {
 
   const skipNextModelEffect = useRef(false);
 
-  const [prompt, setPrompt] = useState<string>(() => loadSettings(tab)?.prompt ?? "");
+  const [prompt, setPrompt] = useState<string>(() => loadSettings(tab, selectedFolderId)?.prompt ?? "");
+  const prevFolderIdRef = useRef<string | null>(selectedFolderId);
+  const settingsSnapshotRef = useRef<SavedSettings | null>(null);
   const [modelId, setModelId] = useState<string>(() => {
-    const s = loadSettings(tab);
+    const s = loadSettings(tab, selectedFolderId);
     return (s?.modelId && models.find(m => m.id === s.modelId)) ? s.modelId : models[0].id;
   });
   const [aspectRatio, setAspectRatio] = useState<string>(() => {
-    const s = loadSettings(tab);
+    const s = loadSettings(tab, selectedFolderId);
     const mId = (s?.modelId && models.find(m => m.id === s.modelId)) ? s.modelId : models[0].id;
     const mdl = models.find(m => m.id === mId) ?? models[0];
     if (s?.aspectRatio && mdl.ratios.includes(s.aspectRatio)) return s.aspectRatio;
     return ("defaultRatio" in mdl ? (mdl as { defaultRatio: string }).defaultRatio : null) ?? mdl.ratios[0] ?? "1:1";
   });
-  const [quality, setQuality] = useState<string>(() => loadSettings(tab)?.quality ?? "2k");
+  const [quality, setQuality] = useState<string>(() => loadSettings(tab, selectedFolderId)?.quality ?? "2k");
   const [isAzureProvider, setIsAzureProvider] = useState<boolean>(false);
-  const [count, setCount] = useState<number>(() => loadSettings(tab)?.count ?? 1);
-  const [duration, setDuration] = useState<number>(() => loadSettings(tab)?.duration ?? 5);
-  const [mode, setMode] = useState<string>(() => loadSettings(tab)?.mode ?? "");
+  const [count, setCount] = useState<number>(() => loadSettings(tab, selectedFolderId)?.count ?? 1);
+  const [duration, setDuration] = useState<number>(() => loadSettings(tab, selectedFolderId)?.duration ?? 5);
+  const [mode, setMode] = useState<string>(() => loadSettings(tab, selectedFolderId)?.mode ?? "");
   const [resolution, setResolution] = useState<string>("");
-  const [azureResolution, setAzureResolution] = useState<string>(() => loadSettings(tab)?.azureResolution ?? "1k");
-  const [sound, setSound] = useState<boolean>(() => loadSettings(tab)?.sound ?? false);
+  const [azureResolution, setAzureResolution] = useState<string>(() => loadSettings(tab, selectedFolderId)?.azureResolution ?? "1k");
+  const [sound, setSound] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.sound ?? false);
   const [seed, setSeed] = useState<number | undefined>(0);
   const [durPickerOpen, setDurPickerOpen] = useState(false);
   const [durPickerClosing, setDurPickerClosing] = useState(false);
@@ -1012,10 +1020,28 @@ function GalleryInner() {
   }, []);
 
   useEffect(() => { pendingGensRef.current = pendingGens; }, [pendingGens]);
+
+  // Sync active-generation folders to the sidebar
+  useEffect(() => {
+    const ids = [...new Set(
+      pendingGens.filter(pg => !pg.error && pg.folderId).map(pg => pg.folderId!)
+    )];
+    useFolderStore.getState().setGeneratingFolderIds(ids);
+  }, [pendingGens]);
+
+  const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
+  const onGenComplete = React.useCallback((folderId: string | null | undefined, freshIds: string[]) => {
+    if (folderId && folderId !== useFolderStore.getState().selectedFolderId) {
+      useFolderStore.getState().addUnseenFolder(folderId);
+    }
+    if (freshIds.length > 0) {
+      setNewItemIds(prev => { const n = new Set(prev); freshIds.forEach(id => n.add(id)); return n; });
+    }
+  }, []);
   const [submitting, setSubmitting] = useState(false);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
-  const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab)?.promptTextMode ?? "text");
-  const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab)?.multiPromptMode ?? false);
+  const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab, selectedFolderId)?.promptTextMode ?? "text");
+  const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.multiPromptMode ?? false);
   const [expandedPromptIdx, setExpandedPromptIdx] = useState<number | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [genError, setGenError] = useState<string>("");
@@ -1078,7 +1104,7 @@ function GalleryInner() {
 
   // Reference images — restored from localStorage on mount
   const [refImages, setRefImages] = useState<RefImage[]>(() => {
-    const s = loadSettings(tab);
+    const s = loadSettings(tab, selectedFolderId);
     return (s?.refImageUrls ?? []).map(url => ({
       id: url, objectUrl: url, cdnUrl: url, uploading: false, error: false,
     }));
@@ -1087,13 +1113,13 @@ function GalleryInner() {
 
   // Video reference state
   const urlToRef = (url: string): RefImage => ({ id: url, objectUrl: url, cdnUrl: url, uploading: false, error: false });
-  const [vidStartFrame, setVidStartFrame] = useState<RefImage | null>(() => { const u = loadSettings(tab)?.vidStartFrameUrl; return u ? urlToRef(u) : null; });
-  const [vidEndFrame, setVidEndFrame]     = useState<RefImage | null>(() => { const u = loadSettings(tab)?.vidEndFrameUrl;   return u ? urlToRef(u) : null; });
-  const [vidResources, setVidResources]   = useState<RefImage[]>(() => (loadSettings(tab)?.vidResourceUrls ?? []).map(urlToRef));
-  const [vidVideoRef, setVidVideoRef]     = useState<RefImage | null>(() => { const u = loadSettings(tab)?.vidVideoRefUrl;   return u ? urlToRef(u) : null; });
-  const [vidRefVideos, setVidRefVideos]   = useState<RefImage[]>(() => (loadSettings(tab)?.vidRefVideoUrls ?? []).map(urlToRef));
-  const [vidRefAudios, setVidRefAudios]   = useState<RefImage[]>(() => (loadSettings(tab)?.vidRefAudioUrls ?? []).map(urlToRef));
-  const [vidElements, setVidElements]     = useState<KlingElement[]>(() => loadSettings(tab)?.vidElements ?? []);
+  const [vidStartFrame, setVidStartFrame] = useState<RefImage | null>(() => { const u = loadSettings(tab, selectedFolderId)?.vidStartFrameUrl; return u ? urlToRef(u) : null; });
+  const [vidEndFrame, setVidEndFrame]     = useState<RefImage | null>(() => { const u = loadSettings(tab, selectedFolderId)?.vidEndFrameUrl;   return u ? urlToRef(u) : null; });
+  const [vidResources, setVidResources]   = useState<RefImage[]>(() => (loadSettings(tab, selectedFolderId)?.vidResourceUrls ?? []).map(urlToRef));
+  const [vidVideoRef, setVidVideoRef]     = useState<RefImage | null>(() => { const u = loadSettings(tab, selectedFolderId)?.vidVideoRefUrl;   return u ? urlToRef(u) : null; });
+  const [vidRefVideos, setVidRefVideos]   = useState<RefImage[]>(() => (loadSettings(tab, selectedFolderId)?.vidRefVideoUrls ?? []).map(urlToRef));
+  const [vidRefAudios, setVidRefAudios]   = useState<RefImage[]>(() => (loadSettings(tab, selectedFolderId)?.vidRefAudioUrls ?? []).map(urlToRef));
+  const [vidElements, setVidElements]     = useState<KlingElement[]>(() => loadSettings(tab, selectedFolderId)?.vidElements ?? []);
   const [elementPickerOpen, setElementPickerOpen] = useState(false);
   const vidImgInputRef   = useRef<HTMLInputElement>(null);
   const vidVideoInputRef = useRef<HTMLInputElement>(null);
@@ -1104,7 +1130,7 @@ function GalleryInner() {
 
   // @ mention state — tagged images also restored from localStorage
   const [taggedImages, setTaggedImages] = useState<TaggedImage[]>(() => {
-    const s = loadSettings(tab);
+    const s = loadSettings(tab, selectedFolderId);
     if (s?.taggedImages?.length) return s.taggedImages;
     // fallback: reconstruct from refImageUrls for backwards compat
     const urls = s?.refImageUrls ?? [];
@@ -1125,6 +1151,7 @@ function GalleryInner() {
 
   const pageRef = useRef(0);
   const tabRef = useRef<Tab>(tab);
+  const sourceFilterRef = useRef<"generated" | "uploaded">(initialSource);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const loadingMoreRef = useRef(false);
@@ -1193,13 +1220,15 @@ function GalleryInner() {
             const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
             if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
           }
+          const genCacheKey = `${tabRef.current}-generation`;
           setItems(prev => {
-            const merged = mergeByNewest(prev, fresh);
-            if (merged === prev) return prev;
-            galleryCache.set(tabRef.current, { items: merged, hasMore: true });
-            return merged;
+            const base = sourceFilterRef.current === "generated" ? prev : (galleryCache.get(genCacheKey)?.items ?? []);
+            const merged = mergeByNewest(base, fresh);
+            galleryCache.set(genCacheKey, { items: merged, hasMore: true });
+            return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
           });
         }
+        onGenComplete(pending.folderId, fresh.map(i => i.id));
         window.dispatchEvent(new Event("credits-refresh"));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1256,8 +1285,10 @@ function GalleryInner() {
     }
     // Apply cache / loading state synchronously before any await so the UI
     // updates in the very next render rather than after the token promise.
+    const apiSource = sourceFilterRef.current === "uploaded" ? "upload" : "generation";
+    const cacheKey = `${currentTab}-${apiSource}`;
     if (replace) {
-      const cached = galleryCache.get(currentTab);
+      const cached = galleryCache.get(cacheKey);
       if (cached) { setItems(cached.items); setHasMore(cached.hasMore); }
       else setLoading(true);
     } else {
@@ -1268,18 +1299,18 @@ function GalleryInner() {
     if (!token) { setLoading(false); setLoadingMore(false); return; }
     try {
       const genType = currentTab === "videos" ? "video" : "image";
-      const res = await fetch(`/api/gallery?type=${genType}&page=${page}`, {
+      const res = await fetch(`/api/gallery?type=${genType}&page=${page}&source=${apiSource}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
       const { items: newItems, hasMore: more, total } = await res.json() as { items: GalleryItem[]; hasMore: boolean; total?: number };
       if (replace) {
         setItems(newItems);
-        galleryCache.set(currentTab, { items: newItems, hasMore: more });
+        galleryCache.set(cacheKey, { items: newItems, hasMore: more });
       } else {
         setItems(prev => {
           const merged = mergeByNewest(prev, newItems);
-          galleryCache.set(currentTab, { items: merged, hasMore: more });
+          galleryCache.set(cacheKey, { items: merged, hasMore: more });
           return merged;
         });
       }
@@ -1313,7 +1344,7 @@ function GalleryInner() {
     if (!token) return [];
     try {
       const genType = currentTab === "videos" ? "video" : "image";
-      const res = await fetch(`/api/gallery?type=${genType}&page=0`, {
+      const res = await fetch(`/api/gallery?type=${genType}&page=0&source=generation`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return [];
@@ -1340,17 +1371,19 @@ function GalleryInner() {
       setItems(tab === "images" ? DEMO_GALLERY_ITEMS : DEMO_VIDEO_ITEMS);
       setHasMore(false);
     } else {
-      const cached = galleryCache.get(tab);
+      const src = sourceFilterRef.current === "uploaded" ? "upload" : "generation";
+      const cached = galleryCache.get(`${tab}-${src}`);
       if (cached) { setItems(cached.items); setHasMore(cached.hasMore); } else setItems([]);
       if (user) loadItems(tab, 0, true);
     }
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
-    const saved = loadSettings(tab);
+    const saved = loadSettings(tab, prevFolderIdRef.current);
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
     const savedAR = saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null;
     skipNextModelEffect.current = true;
     setModelId(model.id);
-    setPrompt(saved?.prompt ?? "");
+    const resolvedPrompt = saved?.prompt ?? "";
+    setPrompt(resolvedPrompt);
     setAspectRatio(savedAR ?? ("defaultRatio" in model ? (model as { defaultRatio: string }).defaultRatio : null) ?? model.ratios[0] ?? "16:9");
     setQuality(saved?.quality ?? "2k");
     setCount(saved?.count ?? 1);
@@ -1359,7 +1392,7 @@ function GalleryInner() {
     if ("defaultResolution" in model) setResolution((model as { defaultResolution: string }).defaultResolution);
     setSound(saved?.sound ?? false);
     const savedUrls = saved?.refImageUrls ?? [];
-    const savedPrompt = saved?.prompt ?? "";
+    const savedPrompt = resolvedPrompt;
     setRefImages(prev => {
       prev.forEach(r => URL.revokeObjectURL(r.objectUrl));
       return savedUrls.map(url => ({ id: url, objectUrl: url, cdnUrl: url, uploading: false, error: false }));
@@ -1380,7 +1413,7 @@ function GalleryInner() {
     setVidRefVideos((saved?.vidRefVideoUrls ?? []).map(toRef));
     setVidRefAudios((saved?.vidRefAudioUrls ?? []).map(toRef));
     setVidElements(saved?.vidElements ?? []);
-    const restoredPrompt = saved?.prompt ?? "";
+    const restoredPrompt = resolvedPrompt;
     if (restoredPrompt && inputRef.current) {
       const el = inputRef.current;
       requestAnimationFrame(() => requestAnimationFrame(() => resizeTextarea(el)));
@@ -1485,13 +1518,26 @@ function GalleryInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMore, loadItems, authLoaded]);
 
+  // When sourceFilter changes, reset to page 0 and fetch only the relevant source.
+  useEffect(() => {
+    sourceFilterRef.current = sourceFilter;
+    if (DEMO_MODE) return;
+    pageRef.current = 0;
+    setHasMore(true);
+    const src = sourceFilter === "uploaded" ? "upload" : "generation";
+    const cached = galleryCache.get(`${tabRef.current}-${src}`);
+    if (cached) { setItems(cached.items); setHasMore(cached.hasMore); } else setItems([]);
+    loadItems(tabRef.current, 0, true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceFilter]);
+
   // Persist settings
   useEffect(() => {
     const refImageUrls = [...new Set(refImages
       .filter(r => r.cdnUrl && !r.uploading && !r.error)
       .map(r => r.cdnUrl!))];
     const readyCdnUrl = (r: RefImage) => !r.uploading && !r.error && !!r.cdnUrl;
-    saveSettings(tab, {
+    const s: SavedSettings = {
       prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, promptTextMode, multiPromptMode,
       vidStartFrameUrl: vidStartFrame?.cdnUrl ?? null,
       vidEndFrameUrl: vidEndFrame?.cdnUrl ?? null,
@@ -1501,8 +1547,55 @@ function GalleryInner() {
       vidRefAudioUrls: vidRefAudios.filter(readyCdnUrl).map(r => r.cdnUrl!),
       vidElements,
       taggedImages,
-    });
+    };
+    settingsSnapshotRef.current = s;
+    saveSettings(tab, prevFolderIdRef.current, s);
   }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, promptTextMode, multiPromptMode, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
+
+  // Save/restore all settings when switching folders
+  useEffect(() => {
+    if (prevFolderIdRef.current === selectedFolderId) return;
+    // Save current state to previous folder before switching
+    if (settingsSnapshotRef.current) saveSettings(tab, prevFolderIdRef.current, settingsSnapshotRef.current);
+    prevFolderIdRef.current = selectedFolderId;
+    // Load settings for the new folder
+    const saved = loadSettings(tab, selectedFolderId);
+    const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
+    const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
+    const savedAR = saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null;
+    const savedUrls = saved?.refImageUrls ?? [];
+    const savedPrompt = saved?.prompt ?? "";
+    const toRef = (url: string): RefImage => ({ id: url, objectUrl: url, cdnUrl: url, uploading: false, error: false });
+    skipNextModelEffect.current = true;
+    setPrompt(savedPrompt);
+    setModelId(model.id);
+    setAspectRatio(savedAR ?? ("defaultRatio" in model ? (model as { defaultRatio: string }).defaultRatio : null) ?? model.ratios[0] ?? "1:1");
+    setQuality(saved?.quality ?? "2k");
+    setCount(saved?.count ?? 1);
+    if ("defaultDuration" in model) setDuration(saved?.duration ?? (model as { defaultDuration: number }).defaultDuration ?? 5);
+    if ("defaultMode" in model) setMode(saved?.mode ?? (model as { defaultMode: string }).defaultMode ?? "");
+    setSound(saved?.sound ?? false);
+    setAzureResolution(saved?.azureResolution ?? "1k");
+    setPromptTextMode(saved?.promptTextMode ?? "text");
+    setMultiPromptMode(saved?.multiPromptMode ?? false);
+    setRefImages(prev => { prev.forEach(r => URL.revokeObjectURL(r.objectUrl)); return savedUrls.map(toRef); });
+    setTaggedImages(
+      saved?.taggedImages?.length
+        ? saved.taggedImages
+        : savedUrls.flatMap((url, idx) => {
+            const label = `image${idx + 1}`;
+            return savedPrompt.includes(`@${label}`) ? [{ label, refId: url, url }] : [];
+          })
+    );
+    setVidStartFrame(saved?.vidStartFrameUrl ? toRef(saved.vidStartFrameUrl) : null);
+    setVidEndFrame(saved?.vidEndFrameUrl ? toRef(saved.vidEndFrameUrl) : null);
+    setVidResources((saved?.vidResourceUrls ?? []).map(toRef));
+    setVidVideoRef(saved?.vidVideoRefUrl ? toRef(saved.vidVideoRefUrl) : null);
+    setVidRefVideos((saved?.vidRefVideoUrls ?? []).map(toRef));
+    setVidRefAudios((saved?.vidRefAudioUrls ?? []).map(toRef));
+    setVidElements(saved?.vidElements ?? []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFolderId]);
 
   // Track window width; set initial zoom from breakpoints only if NOT saved
   useEffect(() => {
@@ -2129,13 +2222,15 @@ function GalleryInner() {
               const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
               if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
             }
+            const genCacheKey = `${tabRef.current}-generation`;
             setItems(prev => {
-              const merged = mergeByNewest(prev, fresh);
-              if (merged === prev) return prev;
-              galleryCache.set(tabRef.current, { items: merged, hasMore: true });
-              return merged;
+              const base = sourceFilterRef.current === "generated" ? prev : (galleryCache.get(genCacheKey)?.items ?? []);
+              const merged = mergeByNewest(base, fresh);
+              galleryCache.set(genCacheKey, { items: merged, hasMore: true });
+              return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
             });
           }
+          onGenComplete(pending.folderId, fresh.map(i => i.id));
           window.dispatchEvent(new Event("credits-refresh"));
           browserNotify(
             isVideo ? "Video ready" : "Image ready",
@@ -2557,7 +2652,8 @@ function GalleryInner() {
     if (item) clearDeletedFromNodes(new Set([item.url, ...(item.imageUrls ?? [])]));
     setItems(prev => {
       const updated = prev.filter(i => i.id !== id);
-      galleryCache.set(tabRef.current, { items: updated, hasMore });
+      const src = sourceFilterRef.current === "uploaded" ? "upload" : "generation";
+      galleryCache.set(`${tabRef.current}-${src}`, { items: updated, hasMore });
       return updated;
     });
   }, [hasMore, items, clearDeletedFromNodes]);
@@ -2619,7 +2715,8 @@ function GalleryInner() {
     setItems(prev => {
       const ids = new Set(toDelete.map(i => i.id));
       const updated = prev.filter(i => !ids.has(i.id));
-      galleryCache.set(tabRef.current, { items: updated, hasMore });
+      const src = sourceFilterRef.current === "uploaded" ? "upload" : "generation";
+      galleryCache.set(`${tabRef.current}-${src}`, { items: updated, hasMore });
       return updated;
     });
   }, [items, selectedIds, hasMore, clearDeletedFromNodes]);
@@ -3008,13 +3105,15 @@ function GalleryInner() {
                                       const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
                                       if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, newPending.folderId);
                                     }
+                                    const genCacheKey = `${tabRef.current}-generation`;
                                     setItems(prev => {
-                                      const merged = mergeByNewest(prev, fresh);
-                                      if (merged === prev) return prev;
-                                      galleryCache.set(tabRef.current, { items: merged, hasMore: true });
-                                      return merged;
+                                      const base = sourceFilterRef.current === "generated" ? prev : (galleryCache.get(genCacheKey)?.items ?? []);
+                                      const merged = mergeByNewest(base, fresh);
+                                      galleryCache.set(genCacheKey, { items: merged, hasMore: true });
+                                      return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
                                     });
                                   }
+                                  onGenComplete(newPending.folderId, fresh.map(i => i.id));
                                   window.dispatchEvent(new Event("credits-refresh"));
                                 } catch (e: unknown) {
                                   setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
@@ -3058,6 +3157,8 @@ function GalleryInner() {
                         onSelect={() => toggleSelect(layoutItem.item.id)}
                         scrollContainer={gridOuterRef}
                         isTagged={taggedImages.some(t => t.refId === layoutItem.item.id)}
+                        isNew={newItemIds.has(layoutItem.item.id)}
+                        onMarkSeen={() => setNewItemIds(prev => { const n = new Set(prev); n.delete(layoutItem.item.id); return n; })}
                       />
                     </div>
                   );
@@ -5378,6 +5479,8 @@ function GalleryCard({
   onSelect,
   scrollContainer,
   isTagged,
+  isNew,
+  onMarkSeen,
 }: {
   item: GalleryItem;
   displayWidth?: number;
@@ -5394,6 +5497,8 @@ function GalleryCard({
   onSelect?: () => void;
   scrollContainer?: React.RefObject<HTMLDivElement | null>;
   isTagged?: boolean;
+  isNew?: boolean;
+  onMarkSeen?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -5524,10 +5629,25 @@ function GalleryCard({
         e.dataTransfer.effectAllowed = "copy";
       }}
       onDragEnd={() => { _galleryDragItem = null; }}
-      onMouseEnter={() => setIsHovered(true)}
+      onMouseEnter={() => { setIsHovered(true); onMarkSeen?.(); }}
       onMouseLeave={() => setIsHovered(false)}
       onClick={anySelected ? onSelect : onOpen}
     >
+      {/* ── NEW badge (top-right) ── */}
+      {isNew && (
+        <div style={{
+          position: "absolute", top: 7, right: 7, zIndex: 10,
+          padding: "2px 6px", borderRadius: 999,
+          background: "linear-gradient(135deg, rgba(30,100,200,0.85) 0%, rgba(20,160,140,0.85) 100%)",
+          backdropFilter: "blur(6px)",
+          border: "1px solid rgba(45,212,191,0.35)",
+          fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
+          color: "#fff", pointerEvents: "none", lineHeight: 1.4,
+          textTransform: "uppercase",
+        }}>
+          NEW
+        </div>
+      )}
       {/* ── Checkbox (top-left) ── */}
       <div className="gallery-checkbox" onClick={e => { e.stopPropagation(); onSelect?.(); }}>
         {selected && (

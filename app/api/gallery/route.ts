@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const mediaType = searchParams.get("type") === "video" ? "video" : "image";
   const page      = Math.max(0, Number(searchParams.get("page") ?? 0));
+  const source    = searchParams.get("source") as "generation" | "upload" | null;
 
   type Item = {
     id: string;
@@ -28,46 +29,52 @@ export async function GET(req: NextRequest) {
 
   // ── Guest mode: read from JSON db ─────────────────────────────────────────
   if (GUEST_MODE) {
-    const gens    = guestDb.getGenerations(GUEST_USER_ID, mediaType);
-    const uploads = guestDb.getUploads(GUEST_USER_ID, mediaType);
+    const genItems: Item[] = (!source || source === "generation")
+      ? guestDb.getGenerations(GUEST_USER_ID, mediaType).map((g) => ({
+          id:                 g.id,
+          url:                (mediaType === "video" ? g.video_url : g.image_url) as string,
+          imageUrls:          g.image_urls?.length ? g.image_urls : undefined,
+          mediaType:          mediaType as "image" | "video",
+          prompt:             g.prompt       ?? undefined,
+          model:              g.model            ?? undefined,
+          aspect_ratio:       g.aspect_ratio     ?? undefined,
+          quality:            g.quality          ?? undefined,
+          azure_resolution:   g.azure_resolution ?? undefined,
+          source:             "generation" as const,
+          created_at:         g.created_at,
+          referenceImageUrls: g.reference_image_urls?.length ? g.reference_image_urls : undefined,
+        }))
+      : [];
 
-    const genItems: Item[] = gens.map((g) => ({
-      id:                 g.id,
-      url:                (mediaType === "video" ? g.video_url : g.image_url) as string,
-      imageUrls:          g.image_urls?.length ? g.image_urls : undefined,
-      mediaType:          mediaType as "image" | "video",
-      prompt:             g.prompt       ?? undefined,
-      model:              g.model            ?? undefined,
-      aspect_ratio:       g.aspect_ratio     ?? undefined,
-      quality:            g.quality          ?? undefined,
-      azure_resolution:   g.azure_resolution ?? undefined,
-      source:             "generation",
-      created_at:         g.created_at,
-      referenceImageUrls: g.reference_image_urls?.length ? g.reference_image_urls : undefined,
-    }));
+    const uploadItems: Item[] = (!source || source === "upload")
+      ? guestDb.getUploads(GUEST_USER_ID, mediaType).map((u) => ({
+          id:        u.id,
+          url:       u.r2_url,
+          mediaType: (u.mime_type?.startsWith("video/") ? "video" : "image") as "image" | "video",
+          source:    "upload" as const,
+          created_at: u.created_at,
+        }))
+      : [];
 
-    const uploadItems: Item[] = uploads.map((u) => ({
-      id:        u.id,
-      url:       u.r2_url,
-      mediaType: (u.mime_type?.startsWith("video/") ? "video" : "image") as "image" | "video",
-      source:    "upload",
-      created_at: u.created_at,
-    }));
+    const allItems: Item[] = source
+      ? [...genItems, ...uploadItems]
+      : (() => {
+          const seen = new Set<string>();
+          const merged: Item[] = [];
+          for (const item of [...genItems, ...uploadItems]) {
+            if (!item.url || seen.has(item.url)) continue;
+            seen.add(item.url);
+            merged.push(item);
+          }
+          return merged;
+        })();
 
-    const seen   = new Set<string>();
-    const merged: Item[] = [];
-    for (const item of [...genItems, ...uploadItems]) {
-      if (!item.url || seen.has(item.url)) continue;
-      seen.add(item.url);
-      merged.push(item);
-    }
-    merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
+    allItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const offset = page * LIMIT;
     return NextResponse.json({
-      items:   merged.slice(offset, offset + LIMIT),
-      hasMore: merged.length > offset + LIMIT,
-      total:   merged.length,
+      items:   allItems.slice(offset, offset + LIMIT),
+      hasMore: allItems.length > offset + LIMIT,
+      total:   allItems.length,
     });
   }
 
@@ -85,71 +92,82 @@ export async function GET(req: NextRequest) {
 
   const genUrlCol = mediaType === "video" ? "video_url" : "image_url";
 
-  const { data: gens, error: genError } = await supabaseAdmin
-    .from("generations")
-    .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, azure_resolution, created_at, reference_image_urls")
-    .eq("user_id", userId)
-    .eq("generation_type", mediaType)
-    .eq("status", "done")
-    .not(genUrlCol, "is", null)
-    .order("created_at", { ascending: false })
-    .limit(TABLE_CAP);
+  let genItems: Item[] = [];
+  let genError: { message: string } | null = null;
+  if (!source || source === "generation") {
+    const { data: gens, error } = await supabaseAdmin
+      .from("generations")
+      .select("id, generation_type, prompt, model, aspect_ratio, image_url, image_urls, video_url, quality, azure_resolution, created_at, reference_image_urls")
+      .eq("user_id", userId)
+      .eq("generation_type", mediaType)
+      .eq("status", "done")
+      .not(genUrlCol, "is", null)
+      .order("created_at", { ascending: false })
+      .limit(TABLE_CAP);
 
-  if (genError) console.error("[gallery] generations query error:", genError.message);
-
-  const { data: uploads, error: uploadError } = await supabaseAdmin
-    .from("user_uploads")
-    .select("id, r2_url, mime_type, created_at")
-    .eq("user_id", userId)
-    .like("mime_type", `${mediaType}/%`)
-    .order("created_at", { ascending: false })
-    .limit(TABLE_CAP);
-
-  if (uploadError) console.error("[gallery] user_uploads query error:", uploadError.message);
-
-  const genItems: Item[] = (gens ?? []).map((g) => ({
-    id:                  g.id,
-    url:                 (mediaType === "video" ? g.video_url : g.image_url) as string,
-    imageUrls:           (g.image_urls as string[] | null)?.length ? (g.image_urls as string[]) : undefined,
-    mediaType:           mediaType as "image" | "video",
-    prompt:              g.prompt        ?? undefined,
-    model:               g.model           ?? undefined,
-    aspect_ratio:        g.aspect_ratio    ?? undefined,
-    quality:             g.quality         ?? undefined,
-    azure_resolution:    (g as { azure_resolution?: string }).azure_resolution ?? undefined,
-    source:              "generation",
-    created_at:          g.created_at,
-    referenceImageUrls:  (g.reference_image_urls as string[] | null)?.length
-                           ? (g.reference_image_urls as string[])
-                           : undefined,
-  }));
-
-  const uploadItems: Item[] = (uploads ?? []).map((u) => ({
-    id:         u.id,
-    url:        u.r2_url,
-    mediaType:  (u.mime_type?.startsWith("video/") ? "video" : "image") as "image" | "video",
-    source:     "upload",
-    created_at: u.created_at,
-  }));
-
-  const seen = new Set<string>();
-  const merged: Item[] = [];
-  for (const item of [...genItems, ...uploadItems]) {
-    if (!item.url || seen.has(item.url)) continue;
-    seen.add(item.url);
-    merged.push(item);
+    if (error) { console.error("[gallery] generations query error:", error.message); genError = error; }
+    genItems = (gens ?? []).map((g) => ({
+      id:                  g.id,
+      url:                 (mediaType === "video" ? g.video_url : g.image_url) as string,
+      imageUrls:           (g.image_urls as string[] | null)?.length ? (g.image_urls as string[]) : undefined,
+      mediaType:           mediaType as "image" | "video",
+      prompt:              g.prompt        ?? undefined,
+      model:               g.model           ?? undefined,
+      aspect_ratio:        g.aspect_ratio    ?? undefined,
+      quality:             g.quality         ?? undefined,
+      azure_resolution:    (g as { azure_resolution?: string }).azure_resolution ?? undefined,
+      source:              "generation" as const,
+      created_at:          g.created_at,
+      referenceImageUrls:  (g.reference_image_urls as string[] | null)?.length
+                             ? (g.reference_image_urls as string[])
+                             : undefined,
+    }));
   }
-  merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  let uploadItems: Item[] = [];
+  let uploadError: { message: string } | null = null;
+  if (!source || source === "upload") {
+    const { data: uploads, error } = await supabaseAdmin
+      .from("user_uploads")
+      .select("id, r2_url, mime_type, created_at")
+      .eq("user_id", userId)
+      .like("mime_type", `${mediaType}/%`)
+      .order("created_at", { ascending: false })
+      .limit(TABLE_CAP);
+
+    if (error) { console.error("[gallery] user_uploads query error:", error.message); uploadError = error; }
+    uploadItems = (uploads ?? []).map((u) => ({
+      id:         u.id,
+      url:        u.r2_url,
+      mediaType:  (u.mime_type?.startsWith("video/") ? "video" : "image") as "image" | "video",
+      source:     "upload" as const,
+      created_at: u.created_at,
+    }));
+  }
+
+  const allItems: Item[] = source
+    ? [...genItems, ...uploadItems]
+    : (() => {
+        const seen = new Set<string>();
+        const merged: Item[] = [];
+        for (const item of [...genItems, ...uploadItems]) {
+          if (!item.url || seen.has(item.url)) continue;
+          seen.add(item.url);
+          merged.push(item);
+        }
+        return merged;
+      })();
+
+  allItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const offset = page * LIMIT;
 
   return NextResponse.json({
-    items:   merged.slice(offset, offset + LIMIT),
-    hasMore: merged.length > offset + LIMIT,
-    total:   merged.length,
+    items:   allItems.slice(offset, offset + LIMIT),
+    hasMore: allItems.length > offset + LIMIT,
+    total:   allItems.length,
     debug: {
-      generationsFound: gens?.length ?? 0,
-      uploadsFound:     uploads?.length ?? 0,
+      generationsFound: genItems.length,
+      uploadsFound:     uploadItems.length,
       genError:         genError?.message ?? null,
       uploadError:      uploadError?.message ?? null,
     },

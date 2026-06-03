@@ -13,6 +13,8 @@ interface FolderState {
   folders: Folder[];
   selectedFolderId: string | null;
   itemFolderMap: Record<string, string[]>;
+  generatingFolderIds: string[];
+  unseenFolderIds: string[];
 
   loadFromServer: () => Promise<void>;
   createFolder: (name: string, parentId?: string | null) => Promise<Folder>;
@@ -27,6 +29,8 @@ interface FolderState {
   galleryImageCount: number;
   galleryVideoCount: number;
   setGalleryCount: (tab: "images" | "videos", count: number) => void;
+  setGeneratingFolderIds: (ids: string[]) => void;
+  addUnseenFolder: (id: string) => void;
 }
 
 async function getAuthToken(): Promise<string | null> {
@@ -53,6 +57,8 @@ export const useFolderStore = create<FolderState>()(
       folders: [],
       selectedFolderId: null,
       itemFolderMap: {},
+      generatingFolderIds: [],
+      unseenFolderIds: [],
 
       loadFromServer: async () => {
         try {
@@ -219,7 +225,16 @@ export const useFolderStore = create<FolderState>()(
         });
       },
 
-      selectFolder: (id) => set({ selectedFolderId: id }),
+      selectFolder: (id) => set(s => ({
+        selectedFolderId: id,
+        unseenFolderIds: id ? s.unseenFolderIds.filter(fid => fid !== id) : s.unseenFolderIds,
+      })),
+
+      setGeneratingFolderIds: (ids) => set({ generatingFolderIds: ids }),
+
+      addUnseenFolder: (id) => set(s => ({
+        unseenFolderIds: s.unseenFolderIds.includes(id) ? s.unseenFolderIds : [...s.unseenFolderIds, id],
+      })),
 
       assignItemsToFolder: async (itemIds, folderId) => {
         // Optimistic
@@ -286,6 +301,7 @@ export const useFolderStore = create<FolderState>()(
         folders: state.folders,
         selectedFolderId: state.selectedFolderId,
         itemFolderMap: state.itemFolderMap,
+        unseenFolderIds: state.unseenFolderIds,
       }),
     },
   ),

@@ -197,13 +197,15 @@ interface FolderRowProps {
   onNameBlur: () => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
   getCount: (id: string) => number;
+  generatingFolderIds: string[];
+  unseenFolderIds: string[];
 }
 
 const FolderRow = React.memo(function FolderRow({
   folder, allFolders, depth, expandedIds, selectedFolderId,
   onToggleExpand, onSelect, onDelete, onRename, onMove,
   creatingInFolderId, newFolderName, onNameChange, onNameKeyDown, onNameBlur, inputRef,
-  getCount,
+  getCount, generatingFolderIds, unseenFolderIds,
 }: FolderRowProps) {
   const [drop, setDrop] = React.useState<"before" | "after" | "inside" | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -264,11 +266,14 @@ const FolderRow = React.memo(function FolderRow({
     return pct < 0.3 ? "before" : pct > 0.7 ? "after" : "inside";
   }
 
+  const isGenerating = generatingFolderIds.includes(folder.id);
+  const hasUnseen = unseenFolderIds.includes(folder.id);
+
   const sharedChildProps = {
     allFolders, expandedIds, selectedFolderId,
     onToggleExpand, onSelect, onDelete, onRename, onMove,
     creatingInFolderId, newFolderName, onNameChange, onNameKeyDown, onNameBlur, inputRef,
-    getCount,
+    getCount, generatingFolderIds, unseenFolderIds,
   };
 
   return (
@@ -366,6 +371,25 @@ const FolderRow = React.memo(function FolderRow({
             {c}
           </span>
         ) : null; })()}
+        {!isRenaming && isGenerating && (
+          <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0, animation: "spin 0.9s linear infinite" }}>
+            <circle cx="5" cy="5" r="3.5" fill="none" stroke="rgba(45,212,191,0.2)" strokeWidth="1.5" />
+            <path d="M5 1.5A3.5 3.5 0 0 1 8.5 5" fill="none" stroke="url(#fg-spin)" strokeWidth="1.5" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="fg-spin" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#3B82F6" />
+                <stop offset="100%" stopColor="#2DD4BF" />
+              </linearGradient>
+            </defs>
+          </svg>
+        )}
+        {!isRenaming && !isGenerating && hasUnseen && (
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(135deg, #3B82F6 0%, #2DD4BF 100%)",
+            boxShadow: "0 0 5px rgba(45,212,191,0.6)",
+          }} />
+        )}
 
         {/* ⋯ context menu button */}
         <button
@@ -674,7 +698,7 @@ export function AppSidebar() {
     createFolder, deleteFolder, selectFolder,
     updateFolder, moveFolder, folderItemCount,
     galleryImageCount, galleryVideoCount,
-    loadFromServer,
+    loadFromServer, generatingFolderIds, unseenFolderIds,
   } = useFolderStore();
   const [creatingFolder, setCreatingFolder] = React.useState(false);
   const [newFolderName, setNewFolderName] = React.useState("");
@@ -789,7 +813,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       {/* ── Nav + Chat history ── */}
-      <SidebarContent className="overflow-hidden flex flex-col">
+      <SidebarContent className="overflow-y-auto flex flex-col">
         {/* Nav items */}
         <div className="px-2 py-3 flex flex-col gap-0.5 shrink-0">
           {navItems.map((item) => {
@@ -859,6 +883,8 @@ export function AppSidebar() {
                 onNameBlur={confirmCreateFolder}
                 inputRef={newFolderInputRef}
                 getCount={folderItemCount}
+                generatingFolderIds={generatingFolderIds}
+                unseenFolderIds={unseenFolderIds}
               />
             ))}
 
