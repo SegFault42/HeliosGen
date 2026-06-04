@@ -495,9 +495,11 @@ interface AllAssetsRowProps {
   isActive: boolean;
   count: number;
   onSelect: () => void;
+  isGenerating?: boolean;
+  hasUnseen?: boolean;
 }
 
-const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelect }: AllAssetsRowProps) {
+const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelect, isGenerating, hasUnseen }: AllAssetsRowProps) {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [menuPos, setMenuPos] = React.useState<{ x: number; y: number } | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -541,6 +543,25 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
           <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
             {count}
           </span>
+        )}
+        {isGenerating && (
+          <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0, animation: "spin 0.9s linear infinite" }}>
+            <circle cx="5" cy="5" r="3.5" fill="none" stroke="rgba(45,212,191,0.2)" strokeWidth="1.5" />
+            <path d="M5 1.5A3.5 3.5 0 0 1 8.5 5" fill="none" stroke="url(#fg-spin-all)" strokeWidth="1.5" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="fg-spin-all" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#3B82F6" />
+                <stop offset="100%" stopColor="#2DD4BF" />
+              </linearGradient>
+            </defs>
+          </svg>
+        )}
+        {!isGenerating && hasUnseen && (
+          <span style={{
+            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(135deg, #3B82F6 0%, #2DD4BF 100%)",
+            boxShadow: "0 0 5px rgba(45,212,191,0.6)",
+          }} />
         )}
         <button
           ref={btnRef}
@@ -699,6 +720,7 @@ export function AppSidebar() {
     updateFolder, moveFolder, folderItemCount,
     galleryImageCount, galleryVideoCount,
     loadFromServer, generatingFolderIds, unseenFolderIds,
+    generatingAllAssets, unseenAllAssets,
   } = useFolderStore();
   const [creatingFolder, setCreatingFolder] = React.useState(false);
   const [newFolderName, setNewFolderName] = React.useState("");
@@ -860,6 +882,8 @@ export function AppSidebar() {
               isActive={selectedFolderId === null}
               count={pathname === "/gallery" ? (tab === "videos" ? galleryVideoCount : galleryImageCount) : 0}
               onSelect={() => selectFolder(null)}
+              isGenerating={generatingAllAssets}
+              hasUnseen={unseenAllAssets}
             />
 
             {/* Recursive folder tree — root folders only, children rendered inside FolderRow */}

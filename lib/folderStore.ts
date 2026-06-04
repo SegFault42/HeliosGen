@@ -15,6 +15,8 @@ interface FolderState {
   itemFolderMap: Record<string, string[]>;
   generatingFolderIds: string[];
   unseenFolderIds: string[];
+  generatingAllAssets: boolean;
+  unseenAllAssets: boolean;
 
   loadFromServer: () => Promise<void>;
   createFolder: (name: string, parentId?: string | null) => Promise<Folder>;
@@ -31,6 +33,8 @@ interface FolderState {
   setGalleryCount: (tab: "images" | "videos", count: number) => void;
   setGeneratingFolderIds: (ids: string[]) => void;
   addUnseenFolder: (id: string) => void;
+  setGeneratingAllAssets: (v: boolean) => void;
+  setUnseenAllAssets: (v: boolean) => void;
 }
 
 async function getAuthToken(): Promise<string | null> {
@@ -59,6 +63,8 @@ export const useFolderStore = create<FolderState>()(
       itemFolderMap: {},
       generatingFolderIds: [],
       unseenFolderIds: [],
+      generatingAllAssets: false,
+      unseenAllAssets: false,
 
       loadFromServer: async () => {
         try {
@@ -228,6 +234,7 @@ export const useFolderStore = create<FolderState>()(
       selectFolder: (id) => set(s => ({
         selectedFolderId: id,
         unseenFolderIds: id ? s.unseenFolderIds.filter(fid => fid !== id) : s.unseenFolderIds,
+        unseenAllAssets: id === null ? false : s.unseenAllAssets,
       })),
 
       setGeneratingFolderIds: (ids) => set({ generatingFolderIds: ids }),
@@ -235,6 +242,9 @@ export const useFolderStore = create<FolderState>()(
       addUnseenFolder: (id) => set(s => ({
         unseenFolderIds: s.unseenFolderIds.includes(id) ? s.unseenFolderIds : [...s.unseenFolderIds, id],
       })),
+
+      setGeneratingAllAssets: (v) => set({ generatingAllAssets: v }),
+      setUnseenAllAssets: (v) => set({ unseenAllAssets: v }),
 
       assignItemsToFolder: async (itemIds, folderId) => {
         // Optimistic
@@ -302,6 +312,7 @@ export const useFolderStore = create<FolderState>()(
         selectedFolderId: state.selectedFolderId,
         itemFolderMap: state.itemFolderMap,
         unseenFolderIds: state.unseenFolderIds,
+        unseenAllAssets: state.unseenAllAssets,
       }),
     },
   ),

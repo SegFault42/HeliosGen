@@ -1027,12 +1027,17 @@ function GalleryInner() {
       pendingGens.filter(pg => !pg.error && pg.folderId).map(pg => pg.folderId!)
     )];
     useFolderStore.getState().setGeneratingFolderIds(ids);
+    const hasNullFolderGen = pendingGens.some(pg => !pg.error && !pg.folderId);
+    useFolderStore.getState().setGeneratingAllAssets(hasNullFolderGen);
   }, [pendingGens]);
 
   const [newItemIds, setNewItemIds] = useState<Set<string>>(new Set());
   const onGenComplete = React.useCallback((folderId: string | null | undefined, freshIds: string[]) => {
     if (folderId && folderId !== useFolderStore.getState().selectedFolderId) {
       useFolderStore.getState().addUnseenFolder(folderId);
+    }
+    if (!folderId && useFolderStore.getState().selectedFolderId !== null) {
+      useFolderStore.getState().setUnseenAllAssets(true);
     }
     if (freshIds.length > 0) {
       setNewItemIds(prev => { const n = new Set(prev); freshIds.forEach(id => n.add(id)); return n; });
