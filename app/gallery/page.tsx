@@ -1217,6 +1217,7 @@ function GalleryInner() {
           // Still generating — enter the regular poll loop
           await pollTask(pending.taskId!);
         }
+        const existingIds = new Set((galleryCache.get(`${tabRef.current}-generation`)?.items ?? []).map((i: GalleryItem) => i.id));
         const fresh = await fetchNewItems(tabRef.current);
         setPendingGens(prev => prev.filter(p => p.id !== pending.id));
         if (fresh.length > 0) {
@@ -1233,7 +1234,7 @@ function GalleryInner() {
             return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
           });
         }
-        onGenComplete(pending.folderId, fresh.map(i => i.id));
+        onGenComplete(pending.folderId, fresh.filter(i => !existingIds.has(i.id)).map(i => i.id));
         window.dispatchEvent(new Event("credits-refresh"));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -2219,6 +2220,7 @@ function GalleryInner() {
         try {
           await pollTask(taskId);
           // Fetch fresh items before touching state so both updates land in one render.
+          const existingIds = new Set((galleryCache.get(`${tabRef.current}-generation`)?.items ?? []).map((i: GalleryItem) => i.id));
           const fresh = await fetchNewItems(tabRef.current);
           setPendingGens(prev => prev.filter(p => p.id !== pending.id));
           if (fresh.length > 0) {
@@ -2235,7 +2237,7 @@ function GalleryInner() {
               return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
             });
           }
-          onGenComplete(pending.folderId, fresh.map(i => i.id));
+          onGenComplete(pending.folderId, fresh.filter(i => !existingIds.has(i.id)).map(i => i.id));
           window.dispatchEvent(new Event("credits-refresh"));
           browserNotify(
             isVideo ? "Video ready" : "Image ready",
@@ -3102,6 +3104,7 @@ function GalleryInner() {
                                 }
                                 try {
                                   await pollTask(taskId);
+                                  const existingIds = new Set((galleryCache.get(`${tabRef.current}-generation`)?.items ?? []).map((i: GalleryItem) => i.id));
                                   const fresh = await fetchNewItems(tabRef.current);
                                   setPendingGens(prev => prev.filter(p => p.id !== newId));
                                   if (fresh.length > 0) {
@@ -3118,7 +3121,7 @@ function GalleryInner() {
                                       return sourceFilterRef.current === "generated" ? (merged === base ? prev : merged) : prev;
                                     });
                                   }
-                                  onGenComplete(newPending.folderId, fresh.map(i => i.id));
+                                  onGenComplete(newPending.folderId, fresh.filter(i => !existingIds.has(i.id)).map(i => i.id));
                                   window.dispatchEvent(new Event("credits-refresh"));
                                 } catch (e: unknown) {
                                   setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
