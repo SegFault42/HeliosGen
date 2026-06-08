@@ -1223,7 +1223,11 @@ function GalleryInner() {
         if (fresh.length > 0) {
           if (pending.folderId) {
             const existingMap = useFolderStore.getState().itemFolderMap;
-            const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+            const pendingTime = pending.createdAt ? new Date(pending.createdAt).getTime() - 30_000 : 0;
+            const untaggedIds = fresh
+              .filter(i => new Date(i.created_at).getTime() >= pendingTime)
+              .map(i => i.id)
+              .filter(id => !existingMap[id]);
             if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
           }
           const genCacheKey = `${tabRef.current}-generation`;
@@ -2226,7 +2230,11 @@ function GalleryInner() {
           if (fresh.length > 0) {
             if (pending.folderId) {
               const existingMap = useFolderStore.getState().itemFolderMap;
-              const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+              const pendingTime = pending.createdAt ? new Date(pending.createdAt).getTime() - 30_000 : 0;
+              const untaggedIds = fresh
+                .filter(i => new Date(i.created_at).getTime() >= pendingTime)
+                .map(i => i.id)
+                .filter(id => !existingMap[id]);
               if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, pending.folderId);
             }
             const genCacheKey = `${tabRef.current}-generation`;
@@ -3110,7 +3118,11 @@ function GalleryInner() {
                                   if (fresh.length > 0) {
                                     if (newPending.folderId) {
                                       const existingMap = useFolderStore.getState().itemFolderMap;
-                                      const untaggedIds = fresh.map(i => i.id).filter(id => !existingMap[id]);
+                                      const pendingTime = newPending.createdAt ? new Date(newPending.createdAt).getTime() - 30_000 : 0;
+                                      const untaggedIds = fresh
+                                        .filter(i => new Date(i.created_at).getTime() >= pendingTime)
+                                        .map(i => i.id)
+                                        .filter(id => !existingMap[id]);
                                       if (untaggedIds.length > 0) assignItemsToFolder(untaggedIds, newPending.folderId);
                                     }
                                     const genCacheKey = `${tabRef.current}-generation`;
@@ -5667,6 +5679,7 @@ function GalleryCard({
             ref={videoRef}
             src={shouldLoad ? item.url : undefined}
             muted={videoMuted || !isHovered}
+            autoPlay
             loop
             playsInline
             preload="metadata"
@@ -6273,7 +6286,7 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
 
         {/* Media wrapper — click to toggle zoom */}
         <div
-          onClick={e => { e.stopPropagation(); setZoomed(z => !z); }}
+          onClick={e => { e.stopPropagation(); if (!isVideo) setZoomed(z => !z); }}
           style={{
             position: "relative", flexShrink: 0,
             // Zoomed: fill the column (which is already inset:0) and center content
@@ -6284,9 +6297,10 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
             display: "flex", alignItems: "center", justifyContent: "center",
             transform: visible ? "scale(1)" : "scale(0.96)",
             transition: "transform 200ms ease, border-radius 280ms ease",
-            borderRadius: zoomed ? "0" : "12px",
-            overflow: "hidden", boxShadow: zoomed ? "none" : "0 32px 80px rgba(0,0,0,0.6)",
-            cursor: zoomed ? "zoom-out" : "zoom-in",
+            borderRadius: isVideo ? "0" : (zoomed ? "0" : "12px"),
+            overflow: isVideo ? "visible" : "hidden",
+            boxShadow: zoomed ? "none" : "0 32px 80px rgba(0,0,0,0.6)",
+            cursor: isVideo ? "default" : (zoomed ? "zoom-out" : "zoom-in"),
           }}
         >
           {isVideo ? (
@@ -6307,8 +6321,6 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
                 height: "auto",
                 objectFit: "contain",
                 borderRadius: zoomed ? "0" : "12px",
-                opacity: fullLoaded ? 1 : 0,
-                transition: "opacity 400ms ease",
                 cursor: "default",
               }}
             />

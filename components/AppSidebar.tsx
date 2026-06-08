@@ -37,7 +37,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import {
@@ -1088,7 +1087,6 @@ export function AppSidebar() {
         </DropdownMenu>
       </SidebarFooter>
 
-      <SidebarRail />
     </Sidebar>
   );
 }
