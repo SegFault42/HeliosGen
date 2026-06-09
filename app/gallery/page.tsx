@@ -2132,7 +2132,13 @@ function GalleryInner() {
 
     const multiPrompts = multiPromptMode ? prompt.split(/\n\n+/).map(p => p.trim()).filter(Boolean) : null;
     const n = multiPrompts ? multiPrompts.length : (isVideo ? 1 : count);
-    const snapshotRefUrls = [...new Set(refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!))];
+    const snapshotRefUrls = isVideo
+      ? [
+          ...(vidStartFrame?.cdnUrl && !vidStartFrame.error ? [vidStartFrame.cdnUrl] : []),
+          ...(vidEndFrame?.cdnUrl   && !vidEndFrame.error   ? [vidEndFrame.cdnUrl]   : []),
+          ...vidResources.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!),
+        ]
+      : [...new Set(refImages.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!))];
     const snapshotFolderId = selectedFolderId;
     const newPendings: PendingGen[] = Array.from({ length: n }, (_, i) => ({
       id: randomUUID(), aspectRatio, prompt: multiPrompts ? multiPrompts[i] : prompt, referenceImageUrls: snapshotRefUrls, createdAt: new Date().toISOString(), tab, prePending: true, folderId: snapshotFolderId,
@@ -2593,9 +2599,13 @@ function GalleryInner() {
     }
 
     if (tab === "videos") {
-      const vm = VIDEO_MODELS.find(m => m.id === modelId);
+      // Use the source model's handles (meta.model), not the currently-selected model.
+      // setModelId runs after this block so modelId is stale here.
+      const targetModelId = meta?.model ?? modelId;
+      const vm = VIDEO_MODELS.find(m => m.id === targetModelId) ?? VIDEO_MODELS.find(m => m.id === modelId);
       const handles = vm?.handles ?? [];
-      
+      const useElements = !!(vm?.apiInput.useKlingElements);
+
       // Clear existing video refs
       setVidStartFrame(null);
       setVidEndFrame(null);
@@ -2616,7 +2626,17 @@ function GalleryInner() {
         setVidVideoRef(remaining.shift()!);
       }
       if (handles.includes("resource") && remaining.length > 0) {
-        setVidResources(remaining);
+        if (useElements) {
+          // Kling-style: resource slot renders vidElements, not vidResources
+          setVidElements(remaining.map(r => ({
+            id: r.id,
+            name: "image",
+            description: "",
+            imageUrls: [r.cdnUrl!, r.cdnUrl!],
+          })));
+        } else {
+          setVidResources(remaining);
+        }
       }
     } else {
       setRefImages(prev => {
@@ -2627,7 +2647,10 @@ function GalleryInner() {
 
     setTaggedImages(tagged);
     setPrompt(processedText);
-    if (meta?.model) setModelId(meta.model);
+    if (meta?.model) {
+      const knownModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
+      if (knownModels.some(m => m.id === meta.model)) setModelId(meta.model);
+    }
     if (meta?.aspectRatio) setAspectRatio(meta.aspectRatio);
     if (meta?.quality) setQuality(meta.quality);
     if (meta?.azureResolution) setAzureResolution(meta.azureResolution);
@@ -6187,7 +6210,11 @@ function Lightbox({ item, onClose, onCopyPrompt, onPrev, onNext }: { item: Galle
 
   const copyPrompt = () => {
     if (!item.prompt) return;
-    navigator.clipboard.writeText(item.prompt).catch(() => { });
+    if (onCopyPrompt) {
+      onCopyPrompt(item.prompt, item.referenceImageUrls, { model: item.model, aspectRatio: item.aspect_ratio, quality: item.quality, azureResolution: item.azure_resolution });
+    } else {
+      navigator.clipboard.writeText(item.prompt).catch(() => { });
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
   };
