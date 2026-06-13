@@ -966,6 +966,12 @@ function GalleryInner() {
   const anySelected = selectedIds.size > 0;
   const toggleSelect = (id: string) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const clearSelection = () => { setSelectedIds(new Set()); setFolderPickerOpen(false); };
+  const marqueeStartRef = useRef<{x: number; y: number} | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<{x: number; y: number; w: number; h: number} | null>(null);
+  const marqueeRectRef = useRef<{x: number; y: number; w: number; h: number} | null>(null);
+  const isDraggingMarqueeRef = useRef(false);
+  const wasDraggingRef = useRef(false);
+  const preDragSelectedIdsRef = useRef<Set<string>>(new Set());
 
   const isVideo = tab === "videos";
   const models = isVideo ? VIDEO_MODELS : IMAGE_MODELS;
@@ -1104,6 +1110,71 @@ function GalleryInner() {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [folderPickerOpen]);
+
+  useEffect(() => {
+    const MIN_DRAG = 5;
+    const selectIntersecting = (r: {x: number; y: number; w: number; h: number}) => {
+      if (!gridOuterRef.current) return;
+      const toAdd: string[] = [];
+      gridOuterRef.current.querySelectorAll<HTMLElement>("[data-item-id]").forEach(el => {
+        const b = el.getBoundingClientRect();
+        if (b.right > r.x && b.left < r.x + r.w && b.bottom > r.y && b.top < r.y + r.h) {
+          const id = el.getAttribute("data-item-id");
+          if (id) toAdd.push(id);
+        }
+      });
+      setSelectedIds(() => {
+        const s = new Set(preDragSelectedIdsRef.current);
+        toAdd.forEach(id => s.add(id));
+        return s;
+      });
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!marqueeStartRef.current) return;
+      const dx = e.clientX - marqueeStartRef.current.x;
+      const dy = e.clientY - marqueeStartRef.current.y;
+      if (!isDraggingMarqueeRef.current) {
+        if (Math.abs(dx) < MIN_DRAG && Math.abs(dy) < MIN_DRAG) return;
+        isDraggingMarqueeRef.current = true;
+      }
+      const x1 = Math.min(marqueeStartRef.current.x, e.clientX);
+      const y1 = Math.min(marqueeStartRef.current.y, e.clientY);
+      const x2 = Math.max(marqueeStartRef.current.x, e.clientX);
+      const y2 = Math.max(marqueeStartRef.current.y, e.clientY);
+      const r = { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+      marqueeRectRef.current = r;
+      setMarqueeRect(r);
+      selectIntersecting(r);
+    };
+    const onMouseUp = () => {
+      const wasDragging = isDraggingMarqueeRef.current;
+      marqueeStartRef.current = null;
+      isDraggingMarqueeRef.current = false;
+      marqueeRectRef.current = null;
+      setMarqueeRect(null);
+      if (wasDragging) {
+        wasDraggingRef.current = true;
+        setTimeout(() => { wasDraggingRef.current = false; }, 80);
+      }
+    };
+    const onClickCapture = (e: MouseEvent) => {
+      if (wasDraggingRef.current) { e.stopPropagation(); e.preventDefault(); }
+    };
+    // Prevent native drag-and-drop from stealing mousemove events during marquee
+    const onDragStart = (e: DragEvent) => {
+      if (marqueeStartRef.current) e.preventDefault();
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("click", onClickCapture, true);
+    document.addEventListener("dragstart", onDragStart, true);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("click", onClickCapture, true);
+      document.removeEventListener("dragstart", onDragStart, true);
+    };
+  }, []);
 
   // Media picker
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -3032,7 +3103,13 @@ function GalleryInner() {
       </div>}
 
       {/* ── Grid ── */}
-      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px", display: "flex", flexDirection: "column" }}>
+      {!user && process.env.NEXT_PUBLIC_GUEST_MODE !== "true" ? <GalleryLoggedOut tab={tab} /> : <div ref={gridOuterRef} style={{ flex: 1, overflowY: "auto", paddingBottom: "260px", display: "flex", flexDirection: "column", userSelect: marqueeRect ? "none" : undefined, cursor: marqueeRect ? "crosshair" : undefined }} onMouseDown={e => {
+        if (e.button !== 0) return;
+        const target = e.target as HTMLElement;
+        if (target.closest("button, .gallery-action-btn, .gallery-checkbox")) return;
+        marqueeStartRef.current = { x: e.clientX, y: e.clientY };
+        preDragSelectedIdsRef.current = new Set(selectedIds);
+      }}>
         {loading || containerWidth === 0 ? (
           /* Skeleton — shown while loading or before container is measured */
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${zoom}, 1fr)`, gap: "1px", padding: "1px", alignItems: "start" }}>
@@ -3190,7 +3267,7 @@ function GalleryInner() {
                     );
                   }
                   return (
-                    <div key={layoutItem.item.id} style={{ width: layoutItem.width, flex: "0 0 auto", height: "100%", overflow: "hidden", background: selectedIds.has(layoutItem.item.id) ? "#ffffff" : "transparent", transition: "background 180ms ease" }}>
+                    <div key={layoutItem.item.id} data-item-id={layoutItem.item.id} style={{ width: layoutItem.width, flex: "0 0 auto", height: "100%", overflow: "hidden", background: selectedIds.has(layoutItem.item.id) ? "#ffffff" : "transparent", transition: "background 180ms ease" }}>
                       <GalleryCard
                         item={layoutItem.item}
                         displayWidth={layoutItem.width}
@@ -3227,6 +3304,22 @@ function GalleryInner() {
         )}
         <div ref={sentinelRef} style={{ height: "1px", width: "100%" }} />
       </div>}
+
+      {/* ── Marquee selection overlay ── */}
+      {marqueeRect && (
+        <div style={{
+          position: "fixed",
+          left: marqueeRect.x,
+          top: marqueeRect.y,
+          width: marqueeRect.w,
+          height: marqueeRect.h,
+          border: "2px solid #2dd4bf",
+          background: "rgba(45,212,191,0.08)",
+          borderRadius: 3,
+          pointerEvents: "none",
+          zIndex: 9999,
+        }} />
+      )}
 
       {/* ── Hidden file input ── */}
       <input
