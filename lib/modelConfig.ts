@@ -231,7 +231,7 @@ export const IMAGE_MODELS: ImageModel[] = [
         "auto":  "auto",
         "1:1":   "1024x1024",  // square
         "16:9":  "1536x1024",  // landscape (Azure canonical; 3:2 in practice)
-        "9:16":  "1024x1536",  // portrait  (Azure canonical; 2:3 in practice)
+        "9:16":  "1080x1920",  // portrait  — 1080p vertical
         "4:3":   "1280x960",   // adapted 4:3 — 1 228 800 px, both /16
         "3:4":   "960x1280",   // adapted 3:4 — 1 228 800 px, both /16
       },
@@ -240,7 +240,7 @@ export const IMAGE_MODELS: ImageModel[] = [
         "auto":  "auto",
         "1:1":   "2048x2048",  // 2K square — 4 194 304 px
         "16:9":  "2048x1152",  // 2K landscape — 2 359 296 px
-        "9:16":  "1152x2048",  // 2K portrait  — 2 359 296 px
+        "9:16":  "1440x2560",  // 2K portrait  — QHD vertical
         "4:3":   "2048x1536",  // adapted 4:3  — 3 145 728 px, both /16
         "3:4":   "1536x2048",  // adapted 3:4  — 3 145 728 px, both /16
       },
