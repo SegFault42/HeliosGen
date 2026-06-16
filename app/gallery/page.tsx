@@ -3099,6 +3099,49 @@ function GalleryInner() {
           ))}
         </div>
 
+        {/* Center: current folder breadcrumb */}
+        {selectedFolderId && (() => {
+          const path: string[] = [];
+          let cur: (typeof folders)[0] | undefined = folders.find(f => f.id === selectedFolderId);
+          while (cur) {
+            path.unshift(cur.name);
+            const parentId = cur.parentId;
+            cur = parentId ? folders.find(f => f.id === parentId) : undefined;
+          }
+          return (
+            <div style={{
+              position: "absolute",
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              pointerEvents: "none",
+              maxWidth: "40%",
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span style={{
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.6)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                letterSpacing: "-0.01em",
+              }}>
+                {path.map((name, i) => (
+                  <span key={i}>
+                    {i > 0 && <span style={{ color: "rgba(255,255,255,0.25)", margin: "0 4px" }}>/</span>}
+                    <span style={{ color: i === path.length - 1 ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.45)" }}>{name}</span>
+                  </span>
+                ))}
+              </span>
+            </div>
+          );
+        })()}
+
         {/* Right: zoom slider */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round">
