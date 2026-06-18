@@ -1096,6 +1096,7 @@ function GalleryInner() {
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const folderPickerRef = useRef<HTMLDivElement>(null);
   const folderPickerBtnRef = useRef<HTMLButtonElement>(null);
+  const [expandedPickerFolders, setExpandedPickerFolders] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!folderPickerOpen) return;
@@ -3512,80 +3513,115 @@ function GalleryInner() {
                     </span>
                   </div>
 
-                  {/* Folder rows */}
-                  <div style={{ padding: "6px 0" }}>
-                    {folders.map(folder => {
+                  {/* Folder rows – tree view */}
+                  <div style={{ padding: "6px 0", maxHeight: "280px", overflowY: "auto" }}>
+                    {(() => {
                       const getIds = (id: string) => itemFolderMap[id] ?? [];
-                      const checkedCount = selectedArr.filter(id => getIds(id).includes(folder.id)).length;
-                      const allChecked = checkedCount === selectedArr.length && selectedArr.length > 0;
-                      const someChecked = checkedCount > 0 && !allChecked;
-                      // Items in this folder across ALL loaded items (both tabs combined best-effort)
-                      const totalInFolder = items.filter(it => (itemFolderMap[it.id] ?? []).includes(folder.id)).length;
-                      // How many selected items would be newly added
-                      const toAddCount = selectedArr.filter(id => !getIds(id).includes(folder.id)).length;
 
-                      const toggleFolder = () => {
-                        if (allChecked) {
-                          removeItemsFromFolder(selectedArr, folder.id);
-                        } else {
-                          assignItemsToFolder(selectedArr, folder.id);
-                        }
+                      const renderFolder = (folder: typeof folders[0], depth: number): React.ReactNode => {
+                        const checkedCount = selectedArr.filter(id => getIds(id).includes(folder.id)).length;
+                        const allChecked = checkedCount === selectedArr.length && selectedArr.length > 0;
+                        const someChecked = checkedCount > 0 && !allChecked;
+                        const totalInFolder = items.filter(it => (itemFolderMap[it.id] ?? []).includes(folder.id)).length;
+                        const toAddCount = selectedArr.filter(id => !getIds(id).includes(folder.id)).length;
+                        const children = folders.filter(f => f.parentId === folder.id).sort((a, b) => a.orderIndex - b.orderIndex);
+                        const hasChildren = children.length > 0;
+                        const isExpanded = expandedPickerFolders.has(folder.id);
+
+                        const toggleFolder = () => {
+                          if (allChecked) {
+                            removeItemsFromFolder(selectedArr, folder.id);
+                          } else {
+                            assignItemsToFolder(selectedArr, folder.id);
+                          }
+                        };
+
+                        const toggleExpand = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          setExpandedPickerFolders(prev => {
+                            const next = new Set(prev);
+                            next.has(folder.id) ? next.delete(folder.id) : next.add(folder.id);
+                            return next;
+                          });
+                        };
+
+                        return (
+                          <React.Fragment key={folder.id}>
+                            <div
+                              onClick={toggleFolder}
+                              style={{
+                                display: "flex", alignItems: "center", gap: "6px",
+                                padding: "8px 14px 8px", paddingLeft: `${14 + depth * 18}px`,
+                                cursor: "pointer", transition: "background 120ms",
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                            >
+                              {/* Expand/collapse chevron */}
+                              <div
+                                onClick={hasChildren ? toggleExpand : undefined}
+                                style={{
+                                  width: "14px", height: "14px", flexShrink: 0, cursor: hasChildren ? "pointer" : "default",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  color: "rgba(255,255,255,0.3)",
+                                }}
+                              >
+                                {hasChildren && (
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                                    style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 150ms" }}>
+                                    <path d="M9 18l6-6-6-6"/>
+                                  </svg>
+                                )}
+                              </div>
+
+                              {/* Folder icon */}
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={allChecked ? "#2DD4BF" : someChecked ? "rgba(45,212,191,0.5)" : "rgba(255,255,255,0.35)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "stroke 150ms" }}>
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                              </svg>
+
+                              {/* Name + count */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: "13px", color: (allChecked || someChecked) ? "#fff" : "rgba(255,255,255,0.75)", fontWeight: 500, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                                  {folder.name}
+                                </div>
+                                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "1px" }}>
+                                  {!allChecked && toAddCount > 0
+                                    ? `${totalInFolder} → ${totalInFolder + toAddCount} item${totalInFolder + toAddCount !== 1 ? "s" : ""}`
+                                    : `${totalInFolder} item${totalInFolder !== 1 ? "s" : ""}`}
+                                </div>
+                              </div>
+
+                              {/* Checkbox */}
+                              <div
+                                onClick={e => { e.stopPropagation(); toggleFolder(); }}
+                                style={{
+                                  width: "18px", height: "18px", borderRadius: "5px", flexShrink: 0, cursor: "pointer",
+                                  border: `2px solid ${allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.45)"}`,
+                                  background: allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.15)" : "transparent",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  transition: "background 120ms, border-color 120ms",
+                                }}
+                              >
+                                {allChecked && (
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0E14" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20 6 9 17l-5-5"/>
+                                  </svg>
+                                )}
+                                {someChecked && !allChecked && (
+                                  <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                                    <rect width="10" height="2" rx="1" fill="#0B0E14"/>
+                                  </svg>
+                                )}
+                              </div>
+                            </div>
+                            {hasChildren && isExpanded && children.map(child => renderFolder(child, depth + 1))}
+                          </React.Fragment>
+                        );
                       };
 
-                      return (
-                        <div
-                          key={folder.id}
-                          onClick={toggleFolder}
-                          style={{
-                            display: "flex", alignItems: "center", gap: "10px",
-                            padding: "9px 14px", cursor: "pointer",
-                            transition: "background 120ms",
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                        >
-                          {/* Folder icon */}
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={allChecked ? "#2DD4BF" : someChecked ? "rgba(45,212,191,0.5)" : "rgba(255,255,255,0.35)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transition: "stroke 150ms" }}>
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                          </svg>
-
-                          {/* Name + count */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "13px", color: (allChecked || someChecked) ? "#fff" : "rgba(255,255,255,0.75)", fontWeight: 500, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                              {folder.name}
-                            </div>
-                            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "1px" }}>
-                              {!allChecked && toAddCount > 0
-                                ? `${totalInFolder} → ${totalInFolder + toAddCount} item${totalInFolder + toAddCount !== 1 ? "s" : ""}`
-                                : `${totalInFolder} item${totalInFolder !== 1 ? "s" : ""}`}
-                            </div>
-                          </div>
-
-                          {/* Custom checkbox matching gallery-checkbox style */}
-                          <div
-                            onClick={e => { e.stopPropagation(); toggleFolder(); }}
-                            style={{
-                              width: "18px", height: "18px", borderRadius: "5px", flexShrink: 0, cursor: "pointer",
-                              border: `2px solid ${allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.45)"}`,
-                              background: allChecked ? "#fff" : someChecked ? "rgba(255,255,255,0.15)" : "transparent",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              transition: "background 120ms, border-color 120ms",
-                            }}
-                          >
-                            {allChecked && (
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0E14" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6 9 17l-5-5"/>
-                              </svg>
-                            )}
-                            {someChecked && !allChecked && (
-                              <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
-                                <rect width="10" height="2" rx="1" fill="#0B0E14"/>
-                              </svg>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                      const rootFolders = folders.filter(f => f.parentId === null).sort((a, b) => a.orderIndex - b.orderIndex);
+                      return rootFolders.map(f => renderFolder(f, 0));
+                    })()}
                   </div>
                 </div>
               )}
@@ -6266,7 +6302,13 @@ function syntaxHighlightYaml(
           parts.push(<span key={k++}>{colorYamlValue(listMatch[2], k, tagged, onEnter, onLeave, onMD)}</span>);
           k++;
         } else {
-          parts.push(<span key={k++}>{line}</span>);
+          if (tagged?.length && onEnter && onLeave && onMD) {
+            const { nodes, nextKey } = splitByMentions(line, undefined, tagged, k, onEnter, onLeave, onMD);
+            parts.push(...nodes);
+            k = nextKey;
+          } else {
+            parts.push(<span key={k++}>{line}</span>);
+          }
         }
       }
     }

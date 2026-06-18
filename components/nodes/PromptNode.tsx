@@ -25,32 +25,42 @@ function getMentionQuery(text: string, cursor: number): string | null {
 type MentionPreview = { imageUrl?: string; videoUrl?: string };
 
 /** Render text with exact @NodeLabel matches highlighted as chips. */
+function splitTextByMentions(
+  text: string,
+  sorted: string[],
+  color: string | undefined,
+  keyStart: number,
+): { nodes: ReactNode[]; nextKey: number } {
+  const parts: ReactNode[] = [];
+  let rest = text;
+  let k = keyStart;
+  while (rest.length > 0) {
+    let earliest: { idx: number; label: string } | null = null;
+    for (const label of sorted) {
+      const idx = rest.indexOf(`@${label}`);
+      if (idx !== -1 && (earliest === null || idx < earliest.idx)) earliest = { idx, label };
+    }
+    if (!earliest) {
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{rest}</span>);
+      break;
+    }
+    if (earliest.idx > 0)
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{rest.slice(0, earliest.idx)}</span>);
+    parts.push(<span key={k++} className="mention-chip">@{earliest.label}</span>);
+    rest = rest.slice(earliest.idx + earliest.label.length + 1);
+  }
+  return { nodes: parts, nextKey: k };
+}
+
 function renderWithMentions(
   text: string,
   knownLabels: string[],
 ): ReactNode {
   if (!text) return null;
   const sorted = [...knownLabels].sort((a, b) => b.length - a.length);
-  const parts: ReactNode[] = [];
-  let rest = text;
-  let key = 0;
-  while (rest.length > 0) {
-    let earliest: { idx: number; label: string } | null = null;
-    for (const label of sorted) {
-      const idx = rest.indexOf(`@${label}`);
-      if (idx !== -1 && (earliest === null || idx < earliest.idx)) {
-        earliest = { idx, label };
-      }
-    }
-    if (!earliest) { parts.push(<span key={key++}>{rest}</span>); break; }
-    if (earliest.idx > 0) parts.push(<span key={key++}>{rest.slice(0, earliest.idx)}</span>);
-
-    parts.push(
-      <span key={key++} className="mention-chip">@{earliest.label}</span>
-    );
-    rest = rest.slice(earliest.idx + earliest.label.length + 1);
-  }
-  return <>{parts}</>;
+  if (!sorted.length) return <span>{text}</span>;
+  const { nodes } = splitTextByMentions(text, sorted, undefined, 0);
+  return <>{nodes}</>;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -701,9 +711,9 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
               style={textMode !== "text" ? { overflowY: "scroll" } : undefined}
             >
               {textMode === "json"
-                ? syntaxHighlightJson(localText, jsonErrorPos ?? undefined)
+                ? syntaxHighlightJson(localText, jsonErrorPos ?? undefined, knownLabels)
                 : textMode === "yaml"
-                  ? syntaxHighlightYaml(localText)
+                  ? syntaxHighlightYaml(localText, knownLabels)
                   : promptMaxLength !== null && localText.length > promptMaxLength
                   ? <>
                       {renderWithMentions(localText.slice(0, promptMaxLength), knownLabels)}
@@ -1127,10 +1137,23 @@ function getJsonErrorPos(text: string): number | null {
   }
 }
 
-function syntaxHighlightYaml(yaml: string): ReactNode {
+function syntaxHighlightYaml(yaml: string, knownLabels: string[] = []): ReactNode {
+  const sorted = [...knownLabels].sort((a, b) => b.length - a.length);
   const lines = yaml.split("\n");
   const parts: ReactNode[] = [];
   let k = 0;
+
+  const pushText = (text: string, color?: string) => {
+    if (!text) return;
+    if (sorted.length) {
+      const { nodes, nextKey } = splitTextByMentions(text, sorted, color, k);
+      parts.push(...nodes);
+      k = nextKey;
+    } else {
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{text}</span>);
+    }
+  };
+
   lines.forEach((line, i) => {
     if (/^---/.test(line) || /^\.\.\.$/.test(line)) {
       parts.push(<span key={k++} style={{ color: "#6b7280" }}>{line}</span>);
@@ -1141,16 +1164,16 @@ function syntaxHighlightYaml(yaml: string): ReactNode {
         parts.push(<span key={k++}>{indent}</span>);
         parts.push(<span key={k++} style={{ color: "#06b6d4" }}>{key}</span>);
         parts.push(<span key={k++} style={{ color: "#6b7280" }}>{colon}</span>);
-        parts.push(<span key={k++}>{colorYamlValue(rest, k)}</span>);
+        parts.push(<span key={k++}>{colorYamlValue(rest, k, sorted)}</span>);
         k++;
       } else {
         const listMatch = line.match(/^(\s*-\s+)(.*)/);
         if (listMatch) {
           parts.push(<span key={k++} style={{ color: "#6b7280" }}>{listMatch[1]}</span>);
-          parts.push(<span key={k++}>{colorYamlValue(listMatch[2], k)}</span>);
+          parts.push(<span key={k++}>{colorYamlValue(listMatch[2], k, sorted)}</span>);
           k++;
         } else {
-          parts.push(<span key={k++}>{line}</span>);
+          pushText(line);
         }
       }
     }
@@ -1159,37 +1182,50 @@ function syntaxHighlightYaml(yaml: string): ReactNode {
   return <>{parts}</>;
 }
 
-function colorYamlValue(value: string, baseKey: number): ReactNode {
+function colorYamlValue(value: string, baseKey: number, sorted: string[] = []): ReactNode {
   const commentIdx = value.search(/#/);
   const main = commentIdx >= 0 ? value.slice(0, commentIdx) : value;
   const comment = commentIdx >= 0 ? value.slice(commentIdx) : "";
   let k = baseKey * 100;
   const out: ReactNode[] = [];
   const trimmed = main.trim();
+
+  const pushValue = (text: string, color?: string) => {
+    if (!text) return;
+    if (sorted.length) {
+      const { nodes, nextKey } = splitTextByMentions(text, sorted, color, k);
+      out.push(...nodes);
+      k = nextKey;
+    } else {
+      out.push(<span key={k++} style={color ? { color } : undefined}>{text}</span>);
+    }
+  };
+
   if (/^(true|false|yes|no|on|off)$/i.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#a78bfa" }}>{main}</span>);
+    pushValue(main, "#a78bfa");
   } else if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed) || /^0x[\da-fA-F]+$/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#fb923c" }}>{main}</span>);
+    pushValue(main, "#fb923c");
   } else if (/^(null|~)$/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#a78bfa" }}>{main}</span>);
+    pushValue(main, "#a78bfa");
   } else if (/^['"]/.test(trimmed)) {
-    out.push(<span key={k++} style={{ color: "#86efac" }}>{main}</span>);
+    pushValue(main, "#86efac");
   } else if (trimmed !== "") {
-    out.push(<span key={k++} style={{ color: "rgba(255,255,255,0.82)" }}>{main}</span>);
+    pushValue(main, "rgba(255,255,255,0.82)");
   } else {
-    out.push(<span key={k++}>{main}</span>);
+    pushValue(main);
   }
   if (comment) out.push(<span key={k++} style={{ color: "#4b5563" }}>{comment}</span>);
   return <>{out}</>;
 }
 
-function syntaxHighlightJson(json: string, errorPos?: number): ReactNode {
+function syntaxHighlightJson(json: string, errorPos?: number, knownLabels: string[] = []): ReactNode {
+  const sorted = [...knownLabels].sort((a, b) => b.length - a.length);
   const parts: ReactNode[] = [];
   let k = 0;
 
   const push = (from: number, to: number, color?: string) => {
     if (from >= to) return;
-    // If the error position falls inside this slice, split around it
+    const text = json.slice(from, to);
     if (errorPos !== undefined && errorPos >= from && errorPos < to) {
       if (errorPos > from)
         parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(from, errorPos)}</span>);
@@ -1200,8 +1236,12 @@ function syntaxHighlightJson(json: string, errorPos?: number): ReactNode {
       );
       if (errorPos + 1 < to)
         parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(errorPos + 1, to)}</span>);
+    } else if (sorted.length) {
+      const { nodes, nextKey } = splitTextByMentions(text, sorted, color, k);
+      parts.push(...nodes);
+      k = nextKey;
     } else {
-      parts.push(<span key={k++} style={color ? { color } : undefined}>{json.slice(from, to)}</span>);
+      parts.push(<span key={k++} style={color ? { color } : undefined}>{text}</span>);
     }
   };
 
@@ -1209,23 +1249,23 @@ function syntaxHighlightJson(json: string, errorPos?: number): ReactNode {
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(json)) !== null) {
-    push(last, m.index); // whitespace / indentation
+    push(last, m.index);
     if (m[1] !== undefined) {
       if (m[2] !== undefined) {
-        push(m.index, m.index + m[1].length, "#06b6d4");             // key
-        push(m.index + m[1].length, m.index + m[0].length, "#6b7280"); // colon
+        push(m.index, m.index + m[1].length, "#06b6d4");
+        push(m.index + m[1].length, m.index + m[0].length, "#6b7280");
       } else {
-        push(m.index, m.index + m[1].length, "#86efac");             // string value
+        push(m.index, m.index + m[1].length, "#86efac");
       }
     } else if (m[3] !== undefined) {
-      push(m.index, m.index + m[3].length, "#fb923c");               // number
+      push(m.index, m.index + m[3].length, "#fb923c");
     } else if (m[4] !== undefined) {
-      push(m.index, m.index + m[4].length, "#a78bfa");               // boolean / null
+      push(m.index, m.index + m[4].length, "#a78bfa");
     } else if (m[5] !== undefined) {
-      push(m.index, m.index + m[5].length, "#6b7280");               // punctuation
+      push(m.index, m.index + m[5].length, "#6b7280");
     }
     last = re.lastIndex;
   }
-  push(last, json.length); // trailing text
+  push(last, json.length);
   return <>{parts}</>;
 }
