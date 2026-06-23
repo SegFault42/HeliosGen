@@ -155,6 +155,32 @@ export async function POST(req: NextRequest) {
       if (maybeSeed !== undefined && apiInput.seedKey) input[apiInput.seedKey] = maybeSeed;
     }
 
+  } else if (apiInput.useKlingTurbo) {
+    // ── Kling 3.0 Turbo (text-to-video / image-to-video) ─────────────────────
+    const startFrameUrl = rawStartFrame
+      ? await ensureR2(rawStartFrame, "references").catch(() => rawStartFrame)
+      : undefined;
+
+    const durationValue = String(clampedDuration);
+
+    if (startFrameUrl) {
+      effectiveApiId = cfg.imageApiId!;
+      input = {
+        prompt:              prompt ?? "",
+        image_urls:          [startFrameUrl],
+        [apiInput.durationKey!]: durationValue,
+        [apiInput.resolutionKey!]: resolution,
+      };
+    } else {
+      effectiveApiId = cfg.apiId;
+      input = {
+        prompt:                     prompt ?? "",
+        [apiInput.aspectRatioKey!]: aspectRatio,
+        [apiInput.durationKey!]:    durationValue,
+        [apiInput.resolutionKey!]:  resolution,
+      };
+    }
+
   } else if (apiInput.useGoogleVeo) {
     // ── Google Veo 3.1 ───────────────────────────────────────────────────────
     const [startFrameUrl, endFrameUrl, refImages] = await Promise.all([

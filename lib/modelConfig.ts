@@ -381,6 +381,12 @@ export interface VideoModel {
     useHappyHorse?: boolean;
     /** When true, use Google-specific payload and routing */
     useGoogleVeo?: boolean;
+    /**
+     * When true, routes based on whether a start-frame image is provided:
+     * - with image → imageApiId (i2v), sends image_urls + duration + resolution, no aspect_ratio
+     * - without image → apiId (t2v), sends prompt + duration + aspect_ratio + resolution
+     */
+    useKlingTurbo?: boolean;
   };
 }
 
@@ -493,6 +499,31 @@ export const VIDEO_MODELS: VideoModel[] = [
       useKlingElements: true,
       promptMaxLength: 2500,
       extra: { multi_shots: false, multi_prompt: [], kling_elements: [] },
+    },
+  },
+  {
+    id: "kling-3.0-turbo",
+    apiId: "kling/v3-turbo-text-to-video",
+    imageApiId: "kling/v3-turbo-image-to-video",
+    name: "Kling 3.0 Turbo",
+    provider: "Kling",
+    ratios: ["16:9", "9:16", "1:1"],
+    durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    defaultDuration: 5,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame"],
+    sound: false,
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      durationKey: "duration",
+      durationAsString: true,
+      durationMin: 3,
+      durationMax: 15,
+      resolutionKey: "resolution",
+      promptMaxLength: 2500,
+      useKlingTurbo: true,
     },
   },
   // ── X (Grok) ─────────────────────────────────────────────────────────────────
