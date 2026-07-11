@@ -199,6 +199,26 @@ export const IMAGE_MODELS: ImageModel[] = [
       extra: { nsfw_checker: false },
     },
   },
+  {
+    id: "seedream-5-pro",
+    apiId: "seedream/5-pro-image-to-image",
+    textOnlyApiId: "seedream/5-pro-text-to-image",
+    name: "Seedream 5.0 Pro",
+    provider: "Seedream",
+    ratios: ["1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2"],
+    supportsImages: true,
+    maxImages: 10,
+    supportsQuality: true,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      imageInputKey: "image_urls",
+      qualityKey: "quality",
+      qualityMap: { "1k": "basic", "2k": "high" },
+      qualityOptions: ["1k", "2k"],
+      promptMaxLength: 3000,
+      extra: { nsfw_checker: false },
+    },
+  },
   // ── X (Grok) ────────────────────────────────────────────────────────────────
   {
     id: "grok-imagine-image",
