@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
-import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
+import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
 import { useWorkflowStore } from "@/lib/store";
 import type { User } from "@supabase/supabase-js";
 import { Maximize2, Minimize2, ShieldAlert, X } from "lucide-react";
@@ -660,6 +660,8 @@ interface SavedSettings {
   sound?: boolean;
   refImageUrls?: string[];
   azureResolution?: string;
+  azureCustomWidth?: number;
+  azureCustomHeight?: number;
   promptTextMode?: "text" | "json" | "yaml";
   multiPromptMode?: boolean;
   vidStartFrameUrl?: string | null;
@@ -685,6 +687,17 @@ function loadSettings(tab: Tab, folderId: string | null): Partial<SavedSettings>
 function saveSettings(tab: Tab, folderId: string | null, s: SavedSettings) {
   if (typeof window === "undefined") return;
   try { localStorage.setItem(settingsKey(tab, folderId), JSON.stringify(s)); } catch {}
+}
+
+/** Whether Azure is fully configured (provider + base URL + deployment) for a given model. */
+function isAzureActiveForModel(modelId: string, azureResolutionOptions?: string[]): boolean {
+  if (typeof window === "undefined" || !azureResolutionOptions?.length) return false;
+  try {
+    const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
+    const base     = localStorage.getItem("aiui-azure-base-url") ?? "";
+    const deploy   = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
+    return provider === "azure" && !!base && !!deploy;
+  } catch { return false; }
 }
 
 function loadKlingElements(): KlingElement[] {
@@ -989,9 +1002,15 @@ function GalleryInner() {
     const s = loadSettings(tab, selectedFolderId);
     const mId = (s?.modelId && models.find(m => m.id === s.modelId)) ? s.modelId : models[0].id;
     const mdl = models.find(m => m.id === mId) ?? models[0];
+    const azureOpts = (mdl as { azureResolutionOptions?: string[] }).azureResolutionOptions;
+    if (s?.aspectRatio === "custom" && Number.isFinite(s.azureCustomWidth) && Number.isFinite(s.azureCustomHeight) && isAzureActiveForModel(mId, azureOpts)) {
+      return "custom";
+    }
     if (s?.aspectRatio && mdl.ratios.includes(s.aspectRatio)) return s.aspectRatio;
     return ("defaultRatio" in mdl ? (mdl as { defaultRatio: string }).defaultRatio : null) ?? mdl.ratios[0] ?? "1:1";
   });
+  const [azureCustomWidth, setAzureCustomWidth] = useState<number | undefined>(() => loadSettings(tab, selectedFolderId)?.azureCustomWidth);
+  const [azureCustomHeight, setAzureCustomHeight] = useState<number | undefined>(() => loadSettings(tab, selectedFolderId)?.azureCustomHeight);
   const [quality, setQuality] = useState<string>(() => loadSettings(tab, selectedFolderId)?.quality ?? "2k");
   const [isAzureProvider, setIsAzureProvider] = useState<boolean>(false);
   const [count, setCount] = useState<number>(() => loadSettings(tab, selectedFolderId)?.count ?? 1);
@@ -1468,12 +1487,16 @@ function GalleryInner() {
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
     const saved = loadSettings(tab, prevFolderIdRef.current);
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
-    const savedAR = saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null;
+    const azureOpts = (model as { azureResolutionOptions?: string[] }).azureResolutionOptions;
+    const savedIsCustom = saved?.aspectRatio === "custom" && Number.isFinite(saved.azureCustomWidth) && Number.isFinite(saved.azureCustomHeight) && isAzureActiveForModel(model.id, azureOpts);
+    const savedAR = savedIsCustom ? "custom" : (saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null);
     skipNextModelEffect.current = true;
     setModelId(model.id);
     const resolvedPrompt = saved?.prompt ?? "";
     setPrompt(resolvedPrompt);
     setAspectRatio(savedAR ?? ("defaultRatio" in model ? (model as { defaultRatio: string }).defaultRatio : null) ?? model.ratios[0] ?? "16:9");
+    setAzureCustomWidth(saved?.azureCustomWidth);
+    setAzureCustomHeight(saved?.azureCustomHeight);
     setQuality(saved?.quality ?? "2k");
     setCount(saved?.count ?? 1);
     if ("defaultDuration" in model) setDuration(saved?.duration ?? (model as { defaultDuration: number }).defaultDuration ?? 5);
@@ -1627,7 +1650,7 @@ function GalleryInner() {
       .map(r => r.cdnUrl!))];
     const readyCdnUrl = (r: RefImage) => !r.uploading && !r.error && !!r.cdnUrl;
     const s: SavedSettings = {
-      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, promptTextMode, multiPromptMode,
+      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode,
       vidStartFrameUrl: vidStartFrame?.cdnUrl ?? null,
       vidEndFrameUrl: vidEndFrame?.cdnUrl ?? null,
       vidResourceUrls: vidResources.filter(readyCdnUrl).map(r => r.cdnUrl!),
@@ -1639,7 +1662,7 @@ function GalleryInner() {
     };
     settingsSnapshotRef.current = s;
     saveSettings(tab, prevFolderIdRef.current, s);
-  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, promptTextMode, multiPromptMode, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
+  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
 
   // Save/restore all settings when switching folders
   useEffect(() => {
@@ -1651,7 +1674,9 @@ function GalleryInner() {
     const saved = loadSettings(tab, selectedFolderId);
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
-    const savedAR = saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null;
+    const azureOpts = (model as { azureResolutionOptions?: string[] }).azureResolutionOptions;
+    const savedIsCustom = saved?.aspectRatio === "custom" && Number.isFinite(saved.azureCustomWidth) && Number.isFinite(saved.azureCustomHeight) && isAzureActiveForModel(model.id, azureOpts);
+    const savedAR = savedIsCustom ? "custom" : (saved?.aspectRatio && model.ratios.includes(saved.aspectRatio) ? saved.aspectRatio : null);
     const savedUrls = saved?.refImageUrls ?? [];
     const savedPrompt = saved?.prompt ?? "";
     const toRef = (url: string): RefImage => ({ id: url, objectUrl: url, cdnUrl: url, uploading: false, error: false });
@@ -1659,6 +1684,8 @@ function GalleryInner() {
     setPrompt(savedPrompt);
     setModelId(model.id);
     setAspectRatio(savedAR ?? ("defaultRatio" in model ? (model as { defaultRatio: string }).defaultRatio : null) ?? model.ratios[0] ?? "1:1");
+    setAzureCustomWidth(saved?.azureCustomWidth);
+    setAzureCustomHeight(saved?.azureCustomHeight);
     setQuality(saved?.quality ?? "2k");
     setCount(saved?.count ?? 1);
     if ("defaultDuration" in model) setDuration(saved?.duration ?? (model as { defaultDuration: number }).defaultDuration ?? 5);
@@ -2027,7 +2054,10 @@ function GalleryInner() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           prompt: resolvedPrompt, model: modelId, aspectRatio, quality, imageUrls,
-          ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality, azureResolution } : {}),
+          ...(isAzure ? {
+            azureBaseUrl, azureDeployment, azureQuality: quality, azureResolution,
+            ...(aspectRatio === "custom" ? { azureCustomWidth, azureCustomHeight } : {}),
+          } : {}),
         }),
       });
       const text = await res.text();
@@ -2244,7 +2274,10 @@ function GalleryInner() {
         type: isVideo ? "video" : "image",
         prompt: dbgPrompt, model: modelId, aspectRatio, quality,
         provider: dbgIsAzure ? "azure" : "kie",
-        ...(dbgIsAzure ? { azureBaseUrl: dbgAzureBaseUrl, azureDeployment: dbgAzureDeployment, azureQuality: quality, azureResolution } : {}),
+        ...(dbgIsAzure ? {
+          azureBaseUrl: dbgAzureBaseUrl, azureDeployment: dbgAzureDeployment, azureQuality: quality, azureResolution,
+          ...(aspectRatio === "custom" ? { azureCustomWidth, azureCustomHeight } : {}),
+        } : {}),
         ...(isVideo ? {
           duration, mode,
           startFrameUrl:       vidStartFrame?.cdnUrl ?? null,
@@ -4392,12 +4425,19 @@ function GalleryInner() {
 
                 {/* Aspect ratio */}
                 {ratios.length > 0 && (
-                  <CustomDropdown
+                  <AspectRatioDropdown
                     value={aspectRatio}
                     onChange={setAspectRatio}
                     disabled={submitting}
-                    options={ratios.map(r => ({ value: r, label: r, preview: <RatioPreview ratio={r} /> }))}
-                    icon={<RatioTriggerPreview ratio={aspectRatio} />}
+                    ratios={ratios}
+                    allowCustom={isAzureProvider && azureResolutionOpts.length > 0}
+                    customWidth={azureCustomWidth}
+                    customHeight={azureCustomHeight}
+                    onApplyCustom={(w, h) => {
+                      setAzureCustomWidth(w);
+                      setAzureCustomHeight(h);
+                      setAspectRatio("custom");
+                    }}
                   />
                 )}
 
@@ -5535,6 +5575,260 @@ function CustomDropdown({
               ))
             )}
           </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+// ── AspectRatioDropdown ─────────────────────────────────────────────────────────
+// Like CustomDropdown, but for Azure gpt-image-2 it also offers a "Custom…" entry
+// that opens an inline width/height subpanel (Azure's popular-sizes + manual entry).
+
+function AspectRatioDropdown({
+  value,
+  onChange,
+  disabled,
+  ratios,
+  allowCustom,
+  customWidth,
+  customHeight,
+  onApplyCustom,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  ratios: string[];
+  allowCustom: boolean;
+  customWidth?: number;
+  customHeight?: number;
+  onApplyCustom: (w: number, h: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"list" | "custom">("list");
+  const [pos, setPos] = useState({ left: 0, bottom: 0, minW: 0 });
+  const [widthDraft, setWidthDraft] = useState(1024);
+  const [heightDraft, setHeightDraft] = useState(1024);
+  const [customError, setCustomError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const label = value === "custom" ? `${customWidth ?? 1024}×${customHeight ?? 1024}` : value;
+
+  const openDrop = () => {
+    if (disabled || !triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6, minW: r.width });
+    setView("list");
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        !triggerRef.current?.contains(e.target as Node) &&
+        !dropRef.current?.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    minWidth: 0,
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: "8px",
+    padding: "6px 8px",
+    fontSize: "12px",
+    color: "#ffffff",
+    fontFamily: "inherit",
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={() => open ? setOpen(false) : openDrop()}
+        disabled={disabled}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          height: "36px",
+          padding: "0 12px",
+          borderRadius: "8px",
+          border: open ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(255,255,255,0.1)",
+          background: open ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.05)",
+          flexShrink: 0,
+          cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          transition: "border-color 140ms, background 140ms",
+          userSelect: "none",
+        }}
+        onMouseEnter={e => {
+          if (!disabled && !open) {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.16)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+          }
+        }}
+        onMouseLeave={e => {
+          if (!open) {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+          }
+        }}
+      >
+        {value !== "custom" && (
+          <span style={{ display: "flex", alignItems: "center", color: "white", flexShrink: 0 }}>
+            <RatioTriggerPreview ratio={value} />
+          </span>
+        )}
+        <span style={{ fontSize: "13px", color: "#ffffff", whiteSpace: "nowrap", letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" }}>
+          {label}
+        </span>
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" strokeLinecap="round"
+          style={{ flexShrink: 0, transition: "transform 140ms", transform: open ? "rotate(180deg)" : "none" }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={dropRef}
+          data-custom-dropdown-portal=""
+          style={{
+            position: "fixed",
+            left: pos.left,
+            bottom: pos.bottom,
+            minWidth: view === "custom" ? 240 : Math.max(pos.minW, 160),
+            background: "#0E1012",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "14px",
+            boxShadow: "0 8px 48px rgba(0,0,0,0.75), 0 2px 12px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+            overflow: "hidden",
+            zIndex: 9999,
+            animation: "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        >
+          {view === "list" ? (
+            <div style={{ padding: "5px", maxHeight: "300px", overflowY: "auto" }}>
+              {ratios.map(r => (
+                <DropItem
+                  key={r}
+                  label={r}
+                  active={r === value}
+                  onClick={() => { onChange(r); setOpen(false); }}
+                  preview={<RatioPreview ratio={r} />}
+                />
+              ))}
+              {allowCustom && (
+                <>
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />
+                  <DropItem
+                    label="Custom…"
+                    active={value === "custom"}
+                    onClick={() => {
+                      setWidthDraft(customWidth ?? 1024);
+                      setHeightDraft(customHeight ?? 1024);
+                      setCustomError(null);
+                      setView("custom");
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                <button
+                  onClick={() => setView("list")}
+                  style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", color: "rgba(255,255,255,0.4)", fontSize: "11px", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
+                >
+                  <span aria-hidden>‹</span> Back
+                </button>
+                <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.3)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
+                  Custom size
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <input
+                  type="number"
+                  value={widthDraft}
+                  onChange={e => setWidthDraft(Number(e.target.value))}
+                  placeholder="Width"
+                  style={inputStyle}
+                />
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "11px", flexShrink: 0 }}>×</span>
+                <input
+                  type="number"
+                  value={heightDraft}
+                  onChange={e => setHeightDraft(Number(e.target.value))}
+                  placeholder="Height"
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", marginBottom: "8px" }}>
+                {AZURE_POPULAR_SIZES.map(p => (
+                  <button
+                    key={p.label}
+                    onClick={() => { setWidthDraft(p.width); setHeightDraft(p.height); setCustomError(null); }}
+                    style={{
+                      textAlign: "left",
+                      fontSize: "10px",
+                      color: "rgba(255,255,255,0.55)",
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: "6px",
+                      padding: "5px 7px",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.55)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {customError && (
+                <div style={{ fontSize: "10px", color: "#f87171", marginBottom: "8px", lineHeight: 1.4 }}>
+                  {customError}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  const err = validateAzureCustomSize(widthDraft, heightDraft);
+                  if (err) { setCustomError(err); return; }
+                  onApplyCustom(widthDraft, heightDraft);
+                  setOpen(false);
+                }}
+                style={{
+                  width: "100%",
+                  textAlign: "center",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "#fff",
+                  background: "rgba(255,255,255,0.1)",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "7px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.16)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+              >
+                Apply
+              </button>
+            </div>
+          )}
         </div>,
         document.body,
       )}

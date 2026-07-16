@@ -93,6 +93,39 @@ export interface ImageModel {
   azureApiVersion?: string;
 }
 
+/**
+ * Azure gpt-image-2 "Popular sizes" quick-pick list, per Azure's documented
+ * size constraints (max edge 3840px, edges multiples of 16, ratio ≤ 3:1,
+ * total pixels 655,360–8,294,400).
+ */
+export const AZURE_POPULAR_SIZES: { label: string; width: number; height: number }[] = [
+  { label: "1024×1024 (square)", width: 1024, height: 1024 },
+  { label: "1536×1024 (landscape)", width: 1536, height: 1024 },
+  { label: "1024×1536 (portrait)", width: 1024, height: 1536 },
+  { label: "2048×2048 (2K square)", width: 2048, height: 2048 },
+  { label: "2048×1152 (2K landscape)", width: 2048, height: 1152 },
+  { label: "3840×2160 (4K landscape)", width: 3840, height: 2160 },
+  { label: "2160×3840 (4K portrait)", width: 2160, height: 3840 },
+];
+
+/**
+ * Validates a custom width/height against Azure gpt-image-2's size constraints.
+ * Returns an error message, or null when the size is valid.
+ */
+export function validateAzureCustomSize(width: number, height: number): string | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return "Enter valid dimensions";
+  }
+  if (width > 3840 || height > 3840) return "Max edge length is 3840px";
+  if (width % 16 !== 0 || height % 16 !== 0) return "Both edges must be multiples of 16px";
+  const long = Math.max(width, height);
+  const short = Math.min(width, height);
+  if (long / short > 3) return "Long:short ratio must not exceed 3:1";
+  const total = width * height;
+  if (total < 655360 || total > 8294400) return "Total pixels must be 655,360–8,294,400";
+  return null;
+}
+
 export const IMAGE_MODELS: ImageModel[] = [
   // ── Google ──────────────────────────────────────────────────────────────────
   {
@@ -416,6 +449,8 @@ export interface VideoModel {
     useHappyHorse?: boolean;
     /** When true, use Google-specific payload and routing */
     useGoogleVeo?: boolean;
+    /** When true, use Gemini Omni Video payload (image_urls + video_list, quota-based) */
+    useGeminiOmniVideo?: boolean;
     /**
      * When true, routes based on whether a start-frame image is provided:
      * - with image → imageApiId (i2v), sends image_urls + duration + resolution, no aspect_ratio
@@ -502,6 +537,34 @@ export const VIDEO_MODELS: VideoModel[] = [
         enableTranslation: true,
       },
       useGoogleVeo: true,
+    },
+  },
+  {
+    id: "gemini-omni-video",
+    apiId: "gemini-omni-video",
+    name: "Gemini Omni Video",
+    provider: "Google",
+    ratios: ["16:9", "9:16"],
+    durations: [4, 6, 8, 10],
+    defaultDuration: 8,
+    defaultRatio: "16:9",
+    handles: ["prompt", "resource", "referenceVideo"],
+    sound: false,
+    supportsSeeds: true,
+    maxResources: 7,
+    maxReferenceVideos: 1,
+    resolutions: ["720p", "1080p", "4k"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      durationKey: "duration",
+      durationAsString: true,
+      durationMin: 4,
+      durationMax: 10,
+      resolutionKey: "resolution",
+      seedKey: "seed",
+      useGeminiOmniVideo: true,
+      promptMaxLength: 20000,
     },
   },
   // ── Kling ───────────────────────────────────────────────────────────────────

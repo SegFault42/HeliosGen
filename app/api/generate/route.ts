@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { jobStore } from "@/lib/jobStore";
 import { ensureR2, uploadBuffer } from "@/lib/r2";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { IMAGE_MODELS } from "@/lib/modelConfig";
+import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_MODE, resolveUserId } from "@/lib/guestMode";
@@ -184,22 +184,26 @@ export async function POST(req: NextRequest) {
     azureResolution,
     azureBaseUrl,
     azureDeployment,
+    azureCustomWidth,
+    azureCustomHeight,
     debugOnly,
   } = (await req.json()) as {
-    model?:           string;
-    prompt?:          string;
-    imageUrls?:       string[];
-    aspectRatio?:     string;
-    quality?:         string;
-    azureQuality?:    string;     // "auto" | "low" | "medium" | "high"
-    azureResolution?: string;     // "1k" | "2k" | "4k"
-    azureBaseUrl?:    string;     // global base URL from settings
-    azureDeployment?: string;     // per-model deployment name from settings
-    debugOnly?:       boolean;
+    model?:              string;
+    prompt?:             string;
+    imageUrls?:          string[];
+    aspectRatio?:        string;
+    quality?:            string;
+    azureQuality?:       string;     // "auto" | "low" | "medium" | "high"
+    azureResolution?:    string;     // "1k" | "2k" | "4k"
+    azureBaseUrl?:       string;     // global base URL from settings
+    azureDeployment?:    string;     // per-model deployment name from settings
+    azureCustomWidth?:   number;     // manual size — used when aspectRatio === "custom"
+    azureCustomHeight?:  number;
+    debugOnly?:          boolean;
   };
 
   if (debugOnly) {
-    const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution };
+    const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution, azureCustomWidth, azureCustomHeight };
     console.log("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
     return NextResponse.json({ ok: true });
   }
@@ -227,7 +231,12 @@ export async function POST(req: NextRequest) {
 
     const resSizeMaps     = cfg.azureResolutionSizeMaps ?? {};
     const sizeMap         = (azureResolution && resSizeMaps[azureResolution]) ? resSizeMaps[azureResolution] : (cfg.azureSizeMap ?? {});
-    const size            = sizeMap[aspectRatio] ?? "1024x1024";
+    const customSizeError = aspectRatio === "custom" && azureCustomWidth && azureCustomHeight
+      ? validateAzureCustomSize(azureCustomWidth, azureCustomHeight)
+      : null;
+    const size            = aspectRatio === "custom" && azureCustomWidth && azureCustomHeight && !customSizeError
+      ? `${azureCustomWidth}x${azureCustomHeight}`
+      : (sizeMap[aspectRatio] ?? "1024x1024");
     const quality         = azureQuality || "medium";
     const base            = azureBaseUrl.replace(/\/$/, "");
     const azureApiVersion = cfg.azureApiVersion ?? "2025-04-01-preview";

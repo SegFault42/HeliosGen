@@ -45,6 +45,9 @@ export interface NodeData extends Record<string, unknown> {
   // generation settings
   quality?: string;
   azureQuality?: string;
+  azureResolution?: string;
+  azureCustomWidth?: number;
+  azureCustomHeight?: number;
   // video output
   videoUrl?: string;
   // video model

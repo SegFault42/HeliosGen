@@ -16,7 +16,7 @@ import { browserNotify, requestNotificationPermission } from "@/lib/browserNotif
 type GenerateNodeType = Node<NodeData, "generateNode">;
 
 import { ShieldBan } from "lucide-react";
-import { IMAGE_MODELS } from "@/lib/modelConfig";
+import { IMAGE_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import MissingInputWarning from "./MissingInputWarning";
 
@@ -208,6 +208,10 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   const [qualityOpen, setQualityOpen] = useState(false);
   const [azureQualityOpen, setAzureQualityOpen] = useState(false);
   const [azureResolutionOpen, setAzureResolutionOpen] = useState(false);
+  const [azureCustomSizeOpen, setAzureCustomSizeOpen] = useState(false);
+  const [customWidthDraft, setCustomWidthDraft] = useState(1024);
+  const [customHeightDraft, setCustomHeightDraft] = useState(1024);
+  const [customSizeError, setCustomSizeError] = useState<string | null>(null);
   const modelPopup = useAnimatedPopup(modelOpen && !data.imageUrl);
   const ratioPopup = useAnimatedPopup(ratioOpen);
   const qualityPopup = useAnimatedPopup(qualityOpen);
@@ -242,12 +246,17 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
     if (!anyOpen) return;
     const handler = (e: MouseEvent) => {
       if (controlBarRef.current && !controlBarRef.current.contains(e.target as unknown as globalThis.Node)) {
-        setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); setAzureResolutionOpen(false);
+        setModelOpen(false); setRatioOpen(false); setQualityOpen(false); setAzureQualityOpen(false); setAzureResolutionOpen(false); setAzureCustomSizeOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [modelOpen, ratioOpen, qualityOpen, azureQualityOpen]);
+
+  // Reset the custom-size subpanel whenever the ratio dropdown itself closes
+  useEffect(() => {
+    if (!ratioOpen) { setAzureCustomSizeOpen(false); setCustomSizeError(null); }
+  }, [ratioOpen]);
 
   const openLightbox = useCallback(() => {
     setLightboxImgLoaded(false);
@@ -399,14 +408,19 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
   })();
   const promptOverLimit = promptInfo?.over ?? false;
 
+  // Azure gpt-image-2 lets the user pick a manual width/height instead of a ratio
+  const allowAzureCustomSize = isAzureProvider && !!caps.azureResolutionOptions;
+
   // If current ratio isn't valid for this model, fall back to first valid ratio (or 1:1)
   const rawRatio = (data.aspectRatio as string) ?? "9:16";
-  const aspectRatio = caps.ratios.includes(rawRatio)
+  const aspectRatio = caps.ratios.includes(rawRatio) || (allowAzureCustomSize && rawRatio === "custom")
     ? rawRatio
     : (caps.ratios[0] ?? "1:1");
 
   // "auto" has no fixed pixel dimensions — treat as 1:1 for the CSS ratio
-  const [rw, rh] = aspectRatio === "auto" ? [1, 1] : aspectRatio.split(":").map(Number);
+  const [rw, rh] = aspectRatio === "auto" ? [1, 1]
+    : aspectRatio === "custom" ? [Number(data.azureCustomWidth) || 1024, Number(data.azureCustomHeight) || 1024]
+    : aspectRatio.split(":").map(Number);
   const cssRatio = `${rw} / ${rh}`;
   const isPending = status === "pending";
   const animBusy = loading || status === "running";
@@ -643,7 +657,13 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       imageUrls: orderedUrls,
       aspectRatio,
       quality,
-      ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality, azureResolution } : {}),
+      ...(isAzure ? {
+        azureBaseUrl, azureDeployment, azureQuality, azureResolution,
+        ...(aspectRatio === "custom" ? {
+          azureCustomWidth: data.azureCustomWidth as number | undefined,
+          azureCustomHeight: data.azureCustomHeight as number | undefined,
+        } : {}),
+      } : {}),
     };
 
     if (!resolvedPrompt.trim()) {
@@ -705,7 +725,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         setLoading(false);
       }
     }, 3000);
-  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError, kieKeySet, addToast]);
+  }, [id, nodes, edges, model, aspectRatio, quality, data.azureQuality, data.azureCustomWidth, data.azureCustomHeight, debugMode, connectedPromptNodeId, updateNodeData, flashEdgeError, kieKeySet, addToast]);
 
   const handleGenerateBatch = useCallback(() => {
     generate();
@@ -1115,28 +1135,113 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
               className="flex items-center gap-1 px-2.5 py-1 rounded-full hover:brightness-125 transition-all"
               style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              <span className="text-[11px] text-white/70 tabular-nums">{aspectRatio}</span>
+              <span className="text-[11px] text-white/70 tabular-nums">
+                {aspectRatio === "custom"
+                  ? `${(data.azureCustomWidth as number | undefined) ?? 1024}×${(data.azureCustomHeight as number | undefined) ?? 1024}`
+                  : aspectRatio}
+              </span>
               <ChevronIcon open={ratioOpen} />
             </button>
             {ratioPopup.visible && (
-              <div className={`absolute bottom-full left-0 mb-2 w-32 bg-[#111622] border border-[#1E2840] rounded-md overflow-hidden z-[1002] shadow-2xl ${ratioPopup.className}`}>
-                {caps.ratios.map((r) => {
-                  const { rw: iw, rh: ih, x, y } = ratioRect(r);
-                  const active = r === aspectRatio;
-                  return (
+              <div className={`absolute bottom-full left-0 mb-2 ${azureCustomSizeOpen ? "w-56" : "w-32"} bg-[#111622] border border-[#1E2840] rounded-md overflow-hidden z-[1002] shadow-2xl ${ratioPopup.className}`}>
+                {!azureCustomSizeOpen ? (
+                  <>
+                    {caps.ratios.map((r) => {
+                      const { rw: iw, rh: ih, x, y } = ratioRect(r);
+                      const active = r === aspectRatio;
+                      return (
+                        <button
+                          key={r}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${active ? "text-white" : "text-[#A0A0A0]"}`}
+                        >
+                          <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
+                            <rect x={x} y={y} width={iw} height={ih} rx="1" fill={active ? "#FFFFFF" : "none"} stroke={active ? "#FFFFFF" : "#5A5A55"} strokeWidth="1" />
+                          </svg>
+                          <span className="tabular-nums">{r}</span>
+                        </button>
+                      );
+                    })}
+                    {allowAzureCustomSize && (
+                      <>
+                        <div className="border-t border-white/[0.06] mx-2 my-0.5" />
+                        <button
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => {
+                            setCustomWidthDraft((data.azureCustomWidth as number | undefined) ?? 1024);
+                            setCustomHeightDraft((data.azureCustomHeight as number | undefined) ?? 1024);
+                            setCustomSizeError(null);
+                            setAzureCustomSizeOpen(true);
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${aspectRatio === "custom" ? "text-white" : "text-[#A0A0A0]"}`}
+                        >
+                          <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
+                            <rect x="2" y="1" width="16" height="12" rx="1" fill="none" stroke={aspectRatio === "custom" ? "#FFFFFF" : "#5A5A55"} strokeWidth="1" strokeDasharray="2 1.5" />
+                          </svg>
+                          <span className="flex-1 text-left">Custom…</span>
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <div className="p-2.5" onMouseDown={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-2">
+                      <button
+                        onClick={() => setAzureCustomSizeOpen(false)}
+                        className="flex items-center gap-1 text-[10px] text-[#4A4A45] hover:text-white transition-colors"
+                      >
+                        <span aria-hidden>‹</span> Back
+                      </button>
+                      <span className="text-[9px] text-[#4A4A45] tracking-wider uppercase font-semibold">Custom size</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <input
+                        type="number"
+                        value={customWidthDraft}
+                        onChange={(e) => setCustomWidthDraft(Number(e.target.value))}
+                        placeholder="Width"
+                        className="w-full min-w-0 bg-[#0B0F17] border border-[#1E2840] rounded px-2 py-1 text-[11px] text-white tabular-nums focus:outline-none focus:border-[#3A4A6A]"
+                      />
+                      <span className="text-[#4A4A45] text-[11px] shrink-0">×</span>
+                      <input
+                        type="number"
+                        value={customHeightDraft}
+                        onChange={(e) => setCustomHeightDraft(Number(e.target.value))}
+                        placeholder="Height"
+                        className="w-full min-w-0 bg-[#0B0F17] border border-[#1E2840] rounded px-2 py-1 text-[11px] text-white tabular-nums focus:outline-none focus:border-[#3A4A6A]"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 mb-2">
+                      {AZURE_POPULAR_SIZES.map((p) => (
+                        <button
+                          key={p.label}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => { setCustomWidthDraft(p.width); setCustomHeightDraft(p.height); setCustomSizeError(null); }}
+                          className="text-[10px] text-[#A0A0A0] hover:text-white bg-[#0B0F17] hover:bg-[#141C28] rounded px-1.5 py-1 text-left transition-colors"
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    {customSizeError && (
+                      <div className="text-[10px] text-red-400 mb-2 leading-tight">{customSizeError}</div>
+                    )}
                     <button
-                      key={r}
                       onMouseDown={(e) => e.stopPropagation()}
-                      onClick={() => { updateNodeData(id, { aspectRatio: r }); setRatioOpen(false); }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[11px] hover:bg-[#141C28] transition-colors ${active ? "text-white" : "text-[#A0A0A0]"}`}
+                      onClick={() => {
+                        const err = validateAzureCustomSize(customWidthDraft, customHeightDraft);
+                        if (err) { setCustomSizeError(err); return; }
+                        updateNodeData(id, { aspectRatio: "custom", azureCustomWidth: customWidthDraft, azureCustomHeight: customHeightDraft });
+                        setAzureCustomSizeOpen(false);
+                        setRatioOpen(false);
+                      }}
+                      className="w-full text-center text-[11px] font-medium text-white bg-[#1E2840] hover:bg-[#26324A] rounded py-1.5 transition-colors"
                     >
-                      <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0">
-                        <rect x={x} y={y} width={iw} height={ih} rx="1" fill={active ? "#FFFFFF" : "none"} stroke={active ? "#FFFFFF" : "#5A5A55"} strokeWidth="1" />
-                      </svg>
-                      <span className="tabular-nums">{r}</span>
+                      Apply
                     </button>
-                  );
-                })}
+                  </div>
+                )}
               </div>
             )}
           </div>

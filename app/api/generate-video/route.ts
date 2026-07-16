@@ -222,6 +222,29 @@ export async function POST(req: NextRequest) {
     };
     if (apiInput.extra) Object.assign(input, apiInput.extra);
 
+  } else if (apiInput.useGeminiOmniVideo) {
+    // ── Gemini Omni Video (quota-based: image=1 slot, video=2 slots, max 7) ────
+    const r2RefImages = await Promise.all(
+      (rawRefImages as string[]).map((u) => ensureR2(u, "references").catch(() => u))
+    );
+    const r2RefVideos = await Promise.all(
+      (rawRefVideoUrls as string[]).slice(0, 1).map((u) => ensureR2(u, "references").catch(() => u))
+    );
+
+    const videoSlots = r2RefVideos.length > 0 ? 2 : 0;
+    const clampedImages = r2RefImages.slice(0, 7 - videoSlots);
+
+    const maybeSeed = seed !== undefined && seed !== null && Number(seed) > 0 ? Number(seed) : undefined;
+
+    input = { prompt: prompt ?? "" };
+    if (clampedImages.length > 0) input.image_urls = clampedImages;
+    if (r2RefVideos.length > 0)   input.video_list = r2RefVideos.map((url) => ({ url, start: 0, ends: 10 }));
+    // duration is ignored by the model when video input is provided
+    if (r2RefVideos.length === 0) input[apiInput.durationKey!] = String(clampedDuration);
+    if (apiInput.aspectRatioKey)  input[apiInput.aspectRatioKey] = aspectRatio;
+    if (apiInput.resolutionKey)   input[apiInput.resolutionKey]  = resolution;
+    if (maybeSeed !== undefined && apiInput.seedKey) input[apiInput.seedKey] = maybeSeed;
+
   } else if (apiInput.referenceImagesKey) {
     // ── Reference-image-based models (Grok Imagine, Grok Imagine 1.5) ─────────
     const refImageUrls = (
@@ -366,6 +389,11 @@ export async function POST(req: NextRequest) {
     ? [
         ...((input.input_urls as string[] | undefined) ?? []),
         ...((input.video_urls as string[] | undefined) ?? []),
+      ]
+    : apiInput.useGeminiOmniVideo
+    ? [
+        ...((input.image_urls as string[] | undefined) ?? []),
+        ...((input.video_list as Array<{ url: string }> | undefined)?.map((v) => v.url) ?? []),
       ]
     : apiInput.referenceImagesKey
     ? (input[apiInput.referenceImagesKey] as string[] | undefined) ?? []
