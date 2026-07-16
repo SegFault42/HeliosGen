@@ -11,6 +11,7 @@ import {
   Connection,
   Edge,
   Viewport,
+  OnNodeDrag,
   useReactFlow,
   useViewport,
 } from "@xyflow/react";
@@ -1399,7 +1400,7 @@ export default function WorkflowCanvas() {
     setPotentialGroupIds(visited.size > 1 ? visited : null);
   }, [breakGroupSelection, nodes, edges]);
 
-  const handleNodeDragStart = useCallback((_e: React.MouseEvent, node: Node) => {
+  const handleNodeDragStart: OnNodeDrag = useCallback((_e, node) => {
     pushUndoSnapshot();
     breakGroupSelection(node);
     setPotentialGroupIds(null);
