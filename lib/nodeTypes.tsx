@@ -136,7 +136,7 @@ export const NODE_SIZE: Record<string, { w: number; h: number }> = {
   assistantNode: { w: 280, h: 200 },
   videoGeneratorNode: { w: 320, h: 220 }, // Safe default for 16:9 + controls
   generateNode: { w: 280, h: 280 },       // 1:1 default
-  promptNode: { w: 260, h: 130 },
+  promptNode: { w: 520, h: 250 },
   imageInputNode: { w: 200, h: 160 },
   videoInputNode: { w: 220, h: 180 },
 };
