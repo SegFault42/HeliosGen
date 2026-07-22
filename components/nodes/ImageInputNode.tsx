@@ -265,7 +265,8 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
                 src={baseSrc}
                 alt="Input"
                 fill
-                unoptimized
+                quality={30}
+                sizes="600px"
                 style={{
                   objectFit: "fill", zIndex: 1,
                   animation: isUploading ? "upload-pulse 1.6s ease-in-out infinite" : undefined,
@@ -310,7 +311,8 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
                   src={topSrc}
                   alt=""
                   fill
-                  unoptimized
+                  quality={30}
+                  sizes="600px"
                   style={{ objectFit: "fill" }}
                   onLoad={() => requestAnimationFrame(() => requestAnimationFrame(() => setTopReady(true)))}
                 />
@@ -357,7 +359,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
               <Handle
                 type="source"
                 position={Position.Right}
-                style={{ top: 20 }}
+                style={{ top: "50%" }}
                 className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
                 title="Image output"
               >
@@ -439,7 +441,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       <Handle
         type="source"
         position={Position.Right}
-        style={{ top: 20 }}
+        style={{ top: "50%" }}
         className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}`}
         title="Image output"
       >

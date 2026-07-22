@@ -831,13 +831,13 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
         ]} />
       )}
 
-      {/* ── Icon handles — bottom-anchored, consistent with other nodes ── */}
-      {/* prompt is top-most; image is closest to bottom */}
+      {/* ── Icon handles — centered as a group on the node's vertical middle ── */}
+      {/* prompt sits above center; image sits below center */}
       <Handle
         type="target"
         position={Position.Left}
         id="prompt"
-        style={{ top: `calc(100% - ${caps.supportsImages ? 90 : 52}px)` }}
+        style={{ top: caps.supportsImages ? "calc(50% - 16px)" : "50%" }}
         className={`node-handle-icon node-handle-icon-prompt${promptConnected ? " node-handle-connected" : ""}${errorHandles.has("prompt") ? " node-handle-error" : ""}`}
         onMouseEnter={() => setHoveredHandle("prompt")}
         onMouseLeave={() => setHoveredHandle(null)}
@@ -850,7 +850,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           type="target"
           position={Position.Left}
           id="image"
-          style={{ top: "calc(100% - 52px)" }}
+          style={{ top: "calc(50% + 16px)" }}
           className={`node-handle-icon node-handle-icon-resource${imageConnected ? " node-handle-connected" : ""}${errorHandles.has("image") ? " node-handle-error" : ""}`}
           onMouseEnter={() => setHoveredHandle("image")}
           onMouseLeave={() => setHoveredHandle(null)}
@@ -865,8 +865,8 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
           style={{
             top: hoveredHandle === "prompt"
-              ? `calc(100% - ${caps.supportsImages ? 90 : 52}px)`
-              : "calc(100% - 52px)",
+              ? (caps.supportsImages ? "calc(50% - 16px)" : "50%")
+              : "calc(50% + 16px)",
             left: 0,
             transform: "translate(calc(-100% - 34px), -50%)",
             background: "#1A1A1A",
@@ -887,7 +887,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       <Handle
         type="source"
         position={Position.Right}
-        style={{ top: 20 }}
+        style={{ top: "50%" }}
         className={`node-handle-icon node-handle-icon-out-image${sourceConnected ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
         title="Image output"
       >

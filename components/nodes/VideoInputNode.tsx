@@ -27,6 +27,10 @@ const VIDEO_SOURCE_HANDLES = [
   { id: "videoRefOut",   type: "video", label: "Reference video", icon: <VidSrcVideoIcon /> },
   { id: "audioRefOut",   type: "audio", label: "Reference audio", icon: <VidSrcAudioIcon /> },
 ] as const;
+const VIDEO_SOURCE_HANDLE_SPACING = 32; // px between source handles
+// Fixed slot offset from the node's vertical center — keeps the whole stack centered
+// while every handle keeps its own slot, so edges don't jump when a handle hides.
+const videoSourceHandleCenterOffset = (i: number) => (i - (VIDEO_SOURCE_HANDLES.length - 1) / 2) * VIDEO_SOURCE_HANDLE_SPACING;
 
 export default function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
@@ -672,7 +676,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
               type="source"
               position={Position.Right}
               id={h.id}
-              style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+              style={{ top: `calc(50% + ${videoSourceHandleCenterOffset(i)}px)`, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
               className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
               onMouseEnter={() => { if (visible) setHoveredSrcHandle(h.id); }}
               onMouseLeave={() => setHoveredSrcHandle(null)}
@@ -690,7 +694,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
           return (
             <div
               className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
-              style={{ top: 20 + idx * 32, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
+              style={{ top: `calc(50% + ${videoSourceHandleCenterOffset(idx)}px)`, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
             >
               <span style={{ color }} className="mr-1.5">●</span>{def.label}
             </div>
@@ -1325,7 +1329,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
             type="source"
             position={Position.Right}
             id={h.id}
-            style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+            style={{ top: `calc(50% + ${videoSourceHandleCenterOffset(i)}px)`, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
             className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}`}
             onMouseEnter={() => { if (visible) setHoveredSrcHandle(h.id); }}
             onMouseLeave={() => setHoveredSrcHandle(null)}
@@ -1343,7 +1347,7 @@ export default function VideoInputNode({ id, data, selected }: NodeProps<VideoIn
         return (
           <div
             className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
-            style={{ top: 20 + idx * 32, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
+            style={{ top: `calc(50% + ${videoSourceHandleCenterOffset(idx)}px)`, right: 0, transform: "translate(calc(100% + 34px), -50%)", background: "#1A1A1A", border: `1px solid ${color}33`, color: "#CCCCCC" }}
           >
             <span style={{ color }} className="mr-1.5">●</span>{def.label}
           </div>

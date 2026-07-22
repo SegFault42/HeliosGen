@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node, useViewport } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
+import { thumbSrc } from "@/lib/galleryUtils";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import CornerResizer from "./CornerResizer";
 
@@ -23,6 +24,24 @@ function getMentionQuery(text: string, cursor: number): string | null {
 }
 
 type MentionPreview = { imageUrl?: string; videoUrl?: string };
+
+// ── Remembered JSON/YAML toggle — new prompt nodes start in whatever mode was last used ──
+const TEXT_MODE_STORAGE_KEY = "promptNode:lastTextMode";
+
+function loadLastTextMode(): "text" | "json" | "yaml" {
+  if (typeof window === "undefined") return "text";
+  const v = window.localStorage.getItem(TEXT_MODE_STORAGE_KEY);
+  return v === "json" || v === "yaml" ? v : "text";
+}
+
+function saveLastTextMode(mode: "text" | "json" | "yaml") {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TEXT_MODE_STORAGE_KEY, mode);
+  } catch {
+    // ignore storage failures (e.g. private browsing quota)
+  }
+}
 
 /** Render text with exact @NodeLabel matches highlighted as chips. */
 function splitTextByMentions(
@@ -83,7 +102,11 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const selectedRef = useRef(selected);
   const prevSelectedRef = useRef(selected);
 
-  const [textMode, setTextMode] = useState<"text" | "json" | "yaml">("text");
+  const [textMode, setTextModeState] = useState<"text" | "json" | "yaml">(loadLastTextMode);
+  const setTextMode = useCallback((mode: "text" | "json" | "yaml") => {
+    setTextModeState(mode);
+    saveLastTextMode(mode);
+  }, []);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [hasScrollTop, setHasScrollTop] = useState(false);
@@ -707,7 +730,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             <div
               ref={highlightRef}
               aria-hidden
-              className={`absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words select-none${textMode !== "text" ? " font-mono" : " overflow-hidden"}`}
+              className={`absolute inset-0 px-3 pt-2.5 pb-8 text-[15px] text-white leading-[1.6] pointer-events-none whitespace-pre-wrap break-words select-none${textMode !== "text" ? " font-mono" : " overflow-hidden"}`}
               style={textMode !== "text" ? { overflowY: "scroll" } : undefined}
             >
               {textMode === "json"
@@ -730,7 +753,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             {!localText && textMode === "text" && (
               <div
                 aria-hidden
-                className="absolute inset-0 px-3 pt-2.5 pb-8 text-[13px] text-[#3A4055] leading-[1.6] pointer-events-none select-none"
+                className="absolute inset-0 px-3 pt-2.5 pb-8 text-[15px] text-[#3A4055] leading-[1.6] pointer-events-none select-none"
               >
                 Describe what you want to generate…
               </div>
@@ -740,7 +763,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
             React never writes .value, so cursor position is never reset. */}
             <textarea
               ref={textareaRef}
-              className={`prompt-ta relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[13px] leading-[1.6] resize-none outline-none overflow-y-auto z-10${textMode !== "text" ? " font-mono" : ""}`}
+              className={`prompt-ta relative w-full h-full px-3 pt-2.5 pb-8 bg-transparent text-[15px] leading-[1.6] resize-none outline-none overflow-y-auto z-10${textMode !== "text" ? " font-mono" : ""}`}
               style={{ color: "transparent", caretColor: "white", overscrollBehavior: "contain", ...(textMode !== "text" ? { overflowY: "scroll" as const } : {}) }}
               defaultValue={storePrompt}
               readOnly={readOnly}
@@ -846,7 +869,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
         <Handle
           type="source"
           position={Position.Right}
-          style={{ top: 20 }}
+          style={{ top: "50%" }}
           className={`node-handle-icon node-handle-icon-out-text${sourceConnected ? " node-handle-connected" : ""}${hasError ? " node-handle-error" : ""}`}
           title="Text output"
         >
@@ -886,7 +909,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
                   <div className="w-6 h-6 rounded bg-[#1A1A1A] overflow-hidden shrink-0 flex items-center justify-center">
                     {imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                      <img src={thumbSrc(imageUrl, 24)} alt="" className="w-full h-full object-cover" />
                     ) : videoUrl ? (
                       // eslint-disable-next-line jsx-a11y/media-has-caption
                       <video
@@ -1026,7 +1049,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
                     <button key={n.id} onClick={() => insertMentionModal(label)}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${active ? "bg-[#1A2010]" : "hover:bg-[#141C28]"}`}>
                       <div className="w-5 h-5 rounded bg-[#1A1A1A] overflow-hidden shrink-0 flex items-center justify-center">
-                        {imageUrl ? <img src={imageUrl} alt="" className="w-full h-full object-cover" /> :
+                        {imageUrl ? <img src={thumbSrc(imageUrl, 20)} alt="" className="w-full h-full object-cover" /> :
                           videoUrl ? <video src={videoUrl} autoPlay loop muted playsInline className="w-full h-full" style={{ objectFit: "cover" }} /> :
                             <EmptyThumb />}
                       </div>
@@ -1083,7 +1106,7 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
               ) : chipPopover.preview.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={chipPopover.preview.imageUrl}
+                  src={thumbSrc(chipPopover.preview.imageUrl, 140)}
                   alt=""
                   style={{ display: "block", width: "100%", height: "auto" }}
                 />

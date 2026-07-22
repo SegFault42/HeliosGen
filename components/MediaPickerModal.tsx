@@ -1,7 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { GalleryItem, galleryCache, getToken } from "@/lib/galleryUtils";
+import { GalleryItem, galleryCache, getToken, thumbSrc } from "@/lib/galleryUtils";
 
 type TabId = "uploads" | "image-gen" | "video-gen";
 
@@ -15,18 +15,33 @@ const SHIMMER_CSS = `
   100% { opacity: 1; transform: translateY(0); }
 }`;
 
-const NEXT_IMG_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1920, 3840];
+const PICKER_POS_STORAGE_KEY = "mediaPickerModal:pos";
 
-function pickerThumbSrc(url: string, w = 96): string {
-  if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
-  const target = w * 2;
-  const snapped = NEXT_IMG_WIDTHS.find(s => s >= target) ?? NEXT_IMG_WIDTHS[NEXT_IMG_WIDTHS.length - 1];
-  return `/_next/image?url=${encodeURIComponent(url)}&w=${snapped}&q=75`;
+function loadSavedPickerPos(): { left: number; top: number } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PICKER_POS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.left === "number" && typeof parsed?.top === "number") return parsed;
+  } catch {
+    // ignore malformed storage
+  }
+  return null;
+}
+
+function savePickerPos(left: number, top: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PICKER_POS_STORAGE_KEY, JSON.stringify({ left, top }));
+  } catch {
+    // ignore storage failures (e.g. private browsing quota)
+  }
 }
 
 function PickerImage({ src }: { src: string }) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-  const thumbUrl = pickerThumbSrc(src);
+  const thumbUrl = thumbSrc(src);
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {status === "loading" && (
@@ -106,6 +121,40 @@ export function MediaPickerModal({
   const [urlError, setUrlError] = useState("");
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<GalleryItem | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    if (!pos.isCustom) return;
+    if ((e.target as HTMLElement).closest("button, input")) return;
+    dragOffsetRef.current = { x: e.clientX - pos.left, y: e.clientY - pos.top };
+    setIsDragging(true);
+    e.preventDefault();
+  }, [pos.isCustom, pos.left, pos.top]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMove = (e: MouseEvent) => {
+      setPos((p) => ({
+        ...p,
+        left: Math.max(4, Math.min(e.clientX - dragOffsetRef.current.x, window.innerWidth - p.width - 4)),
+        top: Math.max(4, Math.min(e.clientY - dragOffsetRef.current.y, window.innerHeight - p.width - 4)),
+      }));
+    };
+    const handleUp = () => {
+      setIsDragging(false);
+      setPos((p) => {
+        savePickerPos(p.left, p.top);
+        return p;
+      });
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [isDragging]);
 
   const submitUrl = async () => {
     const trimmed = urlInput.trim();
@@ -155,12 +204,14 @@ export function MediaPickerModal({
       targetBottom = Math.max(targetBottom, 8);
       anchored = true;
     } else if (x !== undefined && y !== undefined) {
-      // Position at cursor
-      const modalW = 860;
-      const modalH = 410;
-      targetLeft = Math.max(12, Math.min(x, window.innerWidth - modalW - 12));
-      targetTop = Math.max(12, Math.min(y, window.innerHeight - modalH - 12));
-      targetWidth = modalW;
+      // Position at cursor — square popup (or the remembered spot, if the user moved it before)
+      const modalSize = 520;
+      const saved = loadSavedPickerPos();
+      const rawLeft = saved ? saved.left : x;
+      const rawTop = saved ? saved.top : y;
+      targetLeft = Math.max(12, Math.min(rawLeft, window.innerWidth - modalSize - 12));
+      targetTop = Math.max(12, Math.min(rawTop, window.innerHeight - modalSize - 12));
+      targetWidth = modalSize;
       custom = true;
     }
 
@@ -370,7 +421,7 @@ export function MediaPickerModal({
         bottom: pos.isAnchored ? pos.bottom : (pos.isCustom ? "auto" : "auto"),
         transform: (pos.isAnchored || pos.isCustom) ? "none" : "translate(-50%, -50%)",
         width: (pos.isAnchored || pos.isCustom) ? pos.width : "min(660px, calc(100vw - 32px))",
-        height: (pos.isAnchored || pos.isCustom) ? `${88 + 0.25 * (pos.width - 64)}px` : "520px",
+        height: pos.isCustom ? `${pos.width}px` : pos.isAnchored ? `${88 + 0.25 * (pos.width - 64)}px` : "520px",
         background: "rgba(14,16,18,0.92)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
@@ -384,7 +435,14 @@ export function MediaPickerModal({
         animation: "picker-dropIn 160ms cubic-bezier(0.16,1,0.3,1)",
       }}>
         {/* Tab bar */}
-        <div style={{ padding: "14px 18px 12px", display: "flex", alignItems: "center", gap: "4px", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div
+          onMouseDown={handleDragStart}
+          style={{
+            padding: "14px 18px 12px", display: "flex", alignItems: "center", gap: "4px", flexShrink: 0,
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+            cursor: pos.isCustom ? (isDragging ? "grabbing" : "grab") : "default",
+          }}
+        >
           {tabs.map((t) => {
             const active = activeTab === t.id;
             return (

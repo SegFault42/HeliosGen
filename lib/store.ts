@@ -526,7 +526,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
             const nodeType = s.nodes.find((n) => n.id === id)?.type;
             let nodeDefaults = s.nodeDefaults;
             if (nodeType === "generateNode") {
-              const pick = filterKeys(data, ["model", "aspectRatio", "quality"]);
+              const pick = filterKeys(data, ["model", "aspectRatio", "quality", "azureQuality", "azureResolution"]);
               if (pick) nodeDefaults = { ...nodeDefaults, generateNode: { ...nodeDefaults.generateNode, ...pick } };
             } else if (nodeType === "videoGeneratorNode") {
               const pick = filterKeys(data, ["videoModel", "klingMode", "duration", "aspectRatio", "sound", "grokResolution"]);

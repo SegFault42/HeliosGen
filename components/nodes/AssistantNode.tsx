@@ -416,7 +416,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
         type="source"
         position={Position.Right}
         id="textOut"
-        style={{ top: 20 }}
+        style={{ top: "50%" }}
         className={`node-handle-icon node-handle-icon-out-text node-handle-icon-out-assistant${sourceConnected ? " node-handle-connected" : ""}`}
         title="Assistant output"
       >

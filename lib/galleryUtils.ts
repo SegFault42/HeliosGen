@@ -15,6 +15,18 @@ export interface GalleryItem {
   referenceImageUrls?: string[];
 }
 
+// Matches Next.js's default image `deviceSizes`/`imageSizes` buckets, so the
+// generated /_next/image URL always lands on a size Next has already cached.
+const NEXT_IMG_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1920, 3840];
+
+/** Downsized CDN thumbnail URL for displaying `url` at roughly `w` px (2x for retina). */
+export function thumbSrc(url: string, w = 96): string {
+  if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  const target = w * 2;
+  const snapped = NEXT_IMG_WIDTHS.find(s => s >= target) ?? NEXT_IMG_WIDTHS[NEXT_IMG_WIDTHS.length - 1];
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${snapped}&q=75`;
+}
+
 export async function getToken(): Promise<string | undefined> {
   if (process.env.NEXT_PUBLIC_GUEST_MODE === "true") return "guest";
   const { data } = await createClient().auth.getSession();

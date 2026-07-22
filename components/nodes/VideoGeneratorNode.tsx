@@ -41,7 +41,6 @@ const CONNECTABLE_FOR_TYPE: Record<string, Set<string>> = {
   video: new Set(["videoRef", "referenceVideo"]),
   audio: new Set(["audioRef"]),
 };
-const HANDLE_BOTTOM_BASE = 52; // px above node bottom edge
 const HANDLE_SPACING = 38; // px between handles
 
 const HANDLE_COLORS: Record<string, string> = {
@@ -67,6 +66,10 @@ const SOURCE_HANDLES = [
   { id: "videoRefOut", type: "video", label: "Reference video", icon: <SrcVideoIcon /> },
   { id: "audioRefOut", type: "audio", label: "Reference audio", icon: <SrcAudioIcon /> },
 ] as const;
+const SOURCE_HANDLE_SPACING = 32; // px between source handles
+// Fixed slot offset from the node's vertical center — keeps the whole stack centered
+// while every handle keeps its own slot, so edges don't jump when frame handles hide.
+const sourceHandleCenterOffset = (i: number) => (i - (SOURCE_HANDLES.length - 1) / 2) * SOURCE_HANDLE_SPACING;
 
 const STATUS_DOT: Record<string, string> = {
   idle: "bg-[#1E1E1E]",
@@ -558,16 +561,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   // Lock input handles once at least one generation has completed.
   const hasGeneration = generations.some((g) => typeof g === "string" && !!g && !g.startsWith("blob:"));
 
-  // Compute bottom-anchored positions — active handles stack together with no gaps.
-  // When locked, unconnected handles are excluded so the remaining ones restack cleanly.
+  // Compute center-anchored positions — active handles stack together, centered on the
+  // node's vertical middle, with no gaps. When locked, unconnected handles are excluded
+  // so the remaining ones restack cleanly.
   const activeInOrder = HANDLE_ORDER.filter((hid) => {
     if (!activeHandles.has(hid)) return false;
     if (hasGeneration && !connectedHandles.has(hid)) return false;
     return true;
   });
   const N = activeInOrder.length;
-  const handleBottomMap = new Map(
-    activeInOrder.map((hid, idx) => [hid, HANDLE_BOTTOM_BASE + (N - 1 - idx) * HANDLE_SPACING])
+  const handleCenterOffsetMap = new Map(
+    activeInOrder.map((hid, idx) => [hid, (idx - (N - 1) / 2) * HANDLE_SPACING])
   );
 
   // Apply model-specific label/class overrides.
@@ -1189,7 +1193,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             type="source"
             position={Position.Right}
             id={h.id}
-            style={{ top: 20 + i * 32, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
+            style={{ top: `calc(50% + ${sourceHandleCenterOffset(i)}px)`, visibility: visible ? undefined : "hidden", pointerEvents: visible ? undefined : "none" }}
             className={`node-handle-icon node-handle-icon-out-${h.type}${edges.some((e) => e.source === id && e.sourceHandle === h.id) ? " node-handle-connected" : ""}${(data.hasError as boolean) ? " node-handle-error" : ""}`}
             onMouseEnter={() => { if (visible) setHoveredSourceHandle(h.id); }}
             onMouseLeave={() => setHoveredSourceHandle(null)}
@@ -1209,7 +1213,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <div
             className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
             style={{
-              top: 20 + idx * 32,
+              top: `calc(50% + ${sourceHandleCenterOffset(idx)}px)`,
               right: 0,
               transform: "translate(calc(100% + 34px), -50%)",
               background: "#1A1A1A",
@@ -1226,7 +1230,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       {/* ── Handles ──────────────────────────────────────────────────── */}
       {handles.map((h) => {
         const hidden = !activeHandles.has(h.id) || (hasGeneration && !connectedHandles.has(h.id));
-        const bottomPx = handleBottomMap.get(h.id) ?? 0;
+        const centerOffset = handleCenterOffsetMap.get(h.id) ?? 0;
         const isMotionStartFrame = h.id === "startFrame" && cfg.apiInput.useMotionControl;
         const compatible = !connectingHandleType
           || (CONNECTABLE_FOR_TYPE[connectingHandleType]?.has(h.id) ?? false);
@@ -1238,7 +1242,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             position={Position.Left}
             id={h.id}
             isConnectable={connectable}
-            style={{ top: `calc(100% - ${bottomPx}px)`, visibility: hidden ? "hidden" : undefined, pointerEvents: hidden ? "none" : undefined }}
+            style={{ top: `calc(50% + ${centerOffset}px)`, visibility: hidden ? "hidden" : undefined, pointerEvents: hidden ? "none" : undefined }}
             className={`${h.className}${errorHandles.has(h.id) ? " node-handle-error" : ""}${connectedHandles.has(h.id) ? " node-handle-connected" : ""}`}
             onMouseEnter={() => { if (!hidden && compatible) setHoveredHand(h.id); }}
             onMouseLeave={() => setHoveredHand(null)}
@@ -1257,7 +1261,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
       {/* Handle tooltip */}
       {hoveredDef && (() => {
-        const bottomPx = handleBottomMap.get(hoveredDef.id) ?? 0;
+        const centerOffset = handleCenterOffsetMap.get(hoveredDef.id) ?? 0;
         const tooltipColor =
           hoveredDef.id === "startFrame" && cfg.apiInput.useMotionControl
             ? "#f472b6"
@@ -1266,7 +1270,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <div
             className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
             style={{
-              top: `calc(100% - ${bottomPx}px)`,
+              top: `calc(50% + ${centerOffset}px)`,
               left: 0,
               transform: "translate(calc(-100% - 34px), -50%)",
               background: "#1A1A1A",
