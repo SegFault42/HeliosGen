@@ -13,6 +13,7 @@ if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_GUEST_MODE !== "tru
   }
 }
 import { edgeStyle } from "./edgeStyles";
+import { VIDEO_MODELS } from "./modelConfig";
 import {
   Node,
   Edge,
@@ -404,7 +405,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
             if (connection.targetHandle === "startFrame") {
               const targetNode = s.nodes.find((n) => n.id === connection.target);
               const videoModelId = (targetNode?.data?.videoModel as string | undefined) ?? "";
-              if (videoModelId === "kling-2.6-motion-control") colorKey = "character";
+              const videoModelCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
+              if (videoModelCfg?.apiInput.useMotionControl) colorKey = "character";
             }
             const edges = addEdge(
               {

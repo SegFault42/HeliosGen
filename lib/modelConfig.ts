@@ -848,4 +848,37 @@ export const VIDEO_MODELS: VideoModel[] = [
       promptMaxLength: 2500,
     },
   },
+  {
+    id: "kling-3.0-motion-control",
+    apiId: "kling-3.0/motion-control",
+    name: "Motion Control 3.0",
+    provider: "Kling",
+    ratios: [],    // no aspect-ratio selector — output inherits from inputs
+    durations: [], // no duration selector
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame", "videoRef"],
+    requiredHandles: ["startFrame", "videoRef"],
+    sound: false,
+    promptOptional: true,
+    // character_orientation: "video" follows subject pose from motion video (recommended, default)
+    // character_orientation: "image" keeps subject pose from reference image
+    modes: [
+      { value: "video", label: "Video orient." },
+      { value: "image", label: "Image orient." },
+    ],
+    defaultMode: "video",
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "720p",
+    apiInput: {
+      durationMin: 0,
+      durationMax: 0,                    // no duration field sent to the API
+      modeKey: "character_orientation",  // mode selector → character_orientation
+      resolutionKey: "mode",             // resolution selector → mode (720p / 1080p)
+      useMotionControl: true,
+      videoRefMaxDuration: 30,           // reference video may not exceed 30 s
+      promptMaxLength: 2500,
+      extra: { background_source: "input_video" }, // background_source not user-selectable yet — default to video background
+    },
+  },
 ];

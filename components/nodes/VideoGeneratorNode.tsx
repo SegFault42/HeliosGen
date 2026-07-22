@@ -582,7 +582,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       label = `Reference videos (up to ${cfg.maxReferenceVideos})`;
     if (h.id === "audioRef" && cfg.maxReferenceAudios)
       label = `Reference audios (up to ${cfg.maxReferenceAudios})`;
-    if (h.id === "startFrame" && cfg.id === "kling-2.6-motion-control") {
+    if (h.id === "startFrame" && cfg.apiInput.useMotionControl) {
       label = "Character";
       className = "node-handle-icon node-handle-icon-character";
     }
@@ -1227,7 +1227,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       {handles.map((h) => {
         const hidden = !activeHandles.has(h.id) || (hasGeneration && !connectedHandles.has(h.id));
         const bottomPx = handleBottomMap.get(h.id) ?? 0;
-        const isMotionStartFrame = h.id === "startFrame" && cfg.id === "kling-2.6-motion-control";
+        const isMotionStartFrame = h.id === "startFrame" && cfg.apiInput.useMotionControl;
         const compatible = !connectingHandleType
           || (CONNECTABLE_FOR_TYPE[connectingHandleType]?.has(h.id) ?? false);
         const connectable = !hidden && compatible && !hasGeneration;
@@ -1259,7 +1259,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       {hoveredDef && (() => {
         const bottomPx = handleBottomMap.get(hoveredDef.id) ?? 0;
         const tooltipColor =
-          hoveredDef.id === "startFrame" && cfg.id === "kling-2.6-motion-control"
+          hoveredDef.id === "startFrame" && cfg.apiInput.useMotionControl
             ? "#f472b6"
             : HANDLE_COLORS[hoveredDef.id] ?? "#888";
         return (
@@ -1782,8 +1782,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                                 : undefined;
                               updateNodeData(id, { videoModel: m.id, aspectRatio: validRatio, duration: validDur, ...(validRes !== undefined && { grokResolution: validRes }) });
                               const removedHandles = (cfg.handles as string[]).filter((h) => !(m.handles as string[]).includes(h));
-                              const wasMotionControl = cfg.id === "kling-2.6-motion-control";
-                              const isMotionControl = m.id === "kling-2.6-motion-control";
+                              const wasMotionControl = cfg.apiInput.useMotionControl;
+                              const isMotionControl = m.apiInput.useMotionControl;
                               if (wasMotionControl !== isMotionControl && !removedHandles.includes("startFrame")) {
                                 removedHandles.push("startFrame");
                               }

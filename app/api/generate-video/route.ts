@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
       mode:                  resolution,   // "720p" or "1080p"
       character_orientation: mode,         // "image" or "video"
     };
+    if (apiInput.extra) Object.assign(input, apiInput.extra);
 
   } else if (apiInput.firstFrameKey) {
     // ── Seedance-style models (separate frame keys + multi-ref arrays) ─────────
