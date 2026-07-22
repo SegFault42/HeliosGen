@@ -683,7 +683,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       durationMax: 15,
       resolutionKey: "resolution",
       referenceImagesKey: "image_urls",
-      promptMaxLength: 5000,
+      promptMaxLength: 4096,
     },
   },
   // ── Bytedance ─────────────────────────────────────────────────────────────────
