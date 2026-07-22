@@ -240,8 +240,6 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         className={`node-card group${(data.hasError as boolean) ? " node-error-blink" : ""}`}
         style={{
           width: "100%",
-          // Floor the width so a node that was persisted with a 0/undefined width
-          // (older bug) still renders and self-heals via the ResizeObserver below.
           minWidth: 120,
           aspectRatio: ratio,
           background: "transparent",
