@@ -1822,11 +1822,33 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
                 {/* Duration */}
                 {durations.length > 0 && (
-                  <div className="relative">
+                  <div className="relative flex items-center gap-1">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        const idx = Math.max(0, (durations as readonly number[]).indexOf(duration));
+                        if (idx > 0) updateNodeData(id, { duration: (durations as readonly number[])[idx - 1] });
+                      }}
+                      disabled={Math.max(0, (durations as readonly number[]).indexOf(duration)) <= 0}
+                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-white/[0.07] bg-black/45 text-white/75 text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
+                      style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                    >−</button>
                     <Pill onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
                       <span className="text-[11px] text-white/70 tabular-nums">{duration}s</span>
                       <ChevronIcon open={durOpen} />
                     </Pill>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={() => {
+                        const idx = Math.max(0, (durations as readonly number[]).indexOf(duration));
+                        if (idx < (durations as readonly number[]).length - 1) updateNodeData(id, { duration: (durations as readonly number[])[idx + 1] });
+                      }}
+                      disabled={Math.max(0, (durations as readonly number[]).indexOf(duration)) >= (durations as readonly number[]).length - 1}
+                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-white/[0.07] bg-black/45 text-white/75 text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
+                      style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                    >+</button>
                     <FloatMenu open={durOpen}>
                       <div className="p-3 min-w-[200px]" onMouseDown={(e) => e.stopPropagation()}>
                         <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>

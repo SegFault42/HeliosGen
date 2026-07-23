@@ -4441,28 +4441,57 @@ function GalleryInner() {
                   />
                 )}
 
-                {/* Duration (video) — slider pill */}
+                {/* Duration (video) — stepper + slider pill */}
                 {isVideo && durations.length > 0 && (
-                  <button
-                    ref={durPillRef}
-                    onClick={() => durPickerOpen ? closeDurPicker() : openDurPicker()}
-                    disabled={submitting}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      height: "36px", padding: "0 11px",
-                      borderRadius: "8px",
-                      border: durPickerOpen ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(255,255,255,0.1)",
-                      background: durPickerOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.05)",
-                      color: "#fff", fontSize: "13px", fontFamily: "inherit",
-                      cursor: submitting ? "not-allowed" : "pointer",
-                      transition: "border-color 140ms, background 140ms",
-                      flexShrink: 0,
-                    }}>
-                    <span style={{ fontVariantNumeric: "tabular-nums", display: "inline-block", width: "2ch", textAlign: "right" }}>{duration}</span><span>s</span>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2.5" strokeLinecap="round" style={{ transition: "transform 180ms cubic-bezier(0.16,1,0.3,1)", transform: durPickerOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                      <polyline points="6 9 12 15 18 9"/>
-                    </svg>
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", height: "36px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", flexShrink: 0, overflow: "hidden" }}>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); const i = Math.max(0, durations.indexOf(duration)); if (i > 0) setDuration(durations[i - 1]); }}
+                      disabled={submitting || Math.max(0, durations.indexOf(duration)) <= 0}
+                      style={{
+                        width: "26px", height: "36px", flexShrink: 0,
+                        border: "none", borderRight: "1px solid rgba(255,255,255,0.1)",
+                        background: "transparent", color: "rgba(255,255,255,0.75)", fontSize: "14px", lineHeight: 1,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: (submitting || Math.max(0, durations.indexOf(duration)) <= 0) ? "not-allowed" : "pointer",
+                        opacity: Math.max(0, durations.indexOf(duration)) <= 0 ? 0.35 : 1,
+                        padding: 0,
+                      }}
+                    >−</button>
+                    <button
+                      ref={durPillRef}
+                      onClick={() => durPickerOpen ? closeDurPicker() : openDurPicker()}
+                      disabled={submitting}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "5px",
+                        height: "36px", padding: "0 9px",
+                        border: "none",
+                        background: durPickerOpen ? "rgba(255,255,255,0.08)" : "transparent",
+                        color: "#fff", fontSize: "13px", fontFamily: "inherit",
+                        cursor: submitting ? "not-allowed" : "pointer",
+                        transition: "background 140ms",
+                        flexShrink: 0,
+                      }}>
+                      <span style={{ fontVariantNumeric: "tabular-nums", display: "inline-block", width: "2ch", textAlign: "right" }}>{duration}</span><span>s</span>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2.5" strokeLinecap="round" style={{ transition: "transform 180ms cubic-bezier(0.16,1,0.3,1)", transform: durPickerOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); const i = Math.max(0, durations.indexOf(duration)); if (i < durations.length - 1) setDuration(durations[i + 1]); }}
+                      disabled={submitting || Math.max(0, durations.indexOf(duration)) >= durations.length - 1}
+                      style={{
+                        width: "26px", height: "36px", flexShrink: 0,
+                        border: "none", borderLeft: "1px solid rgba(255,255,255,0.1)",
+                        background: "transparent", color: "rgba(255,255,255,0.75)", fontSize: "14px", lineHeight: 1,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: (submitting || Math.max(0, durations.indexOf(duration)) >= durations.length - 1) ? "not-allowed" : "pointer",
+                        opacity: Math.max(0, durations.indexOf(duration)) >= durations.length - 1 ? 0.35 : 1,
+                        padding: 0,
+                      }}
+                    >+</button>
+                  </div>
                 )}
 
                 {/* Mode (video) */}
