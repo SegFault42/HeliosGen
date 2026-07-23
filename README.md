@@ -24,7 +24,7 @@ And create an account and use it here : https://helios.sdd.cash/
 ## ✨ Simple Image & Video Generation
 
 <p align="center">
-  <img width="2912" height="2292" alt="Image generation example" src="https://github.com/user-attachments/assets/f9bd5a48-3a3d-4b1a-a6d9-2e5f359c8b95" />
+  <img width="2912" height="2292" alt="Image generation example" src="https://github.com/user-attachments/assets/8263b83d-addb-4af8-99d1-d8406c52be2c" />
 </p>
 
 ---
@@ -32,7 +32,7 @@ And create an account and use it here : https://helios.sdd.cash/
 ## 🔄 Workflow Generation
 
 <p align="center">
-  <img width="1459" height="1146" alt="Workflow generation example" src="https://github.com/user-attachments/assets/1e6e6b2d-672d-4307-9db6-d8a3f29beee7" />
+  <img width="1459" height="1146" alt="Workflow generation example" src="https://github.com/user-attachments/assets/fc7f1109-76d1-4af0-b91d-0e915bcf5461" />
 </p>
 
 ---
@@ -40,7 +40,7 @@ And create an account and use it here : https://helios.sdd.cash/
 ## 🧠 Native JSON Prompt Preview
 
 <p align="center">
-  <img width="886" height="463" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/9d5649a4-989c-450b-959b-1a8f26f678b5" />
+  <img width="886" height="463" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/dedbdf4f-9d52-4e29-ad6e-a2e67e341a73" />
 </p>
 
 ---
@@ -103,17 +103,18 @@ You only pay for what you generate.
 # ⚡ Supported Models
 
 ## Images
-- GPT Image 2
-- Nano Banana / Pro
-- Seedream 5.0 Lite
-- Z-Image
-- Grok Imagine
+- GPT Image 2 (OpenAI)
+- Nano Banana / Nano Banana 2 / Nano Banana 2 Lite / Nano Banana Pro (Google)
+- Seedream 5.0 Lite / Pro (Seedream)
+- Z-Image (Z-AI)
+- Grok Imagine (X)
 
 ## Videos
-- Veo 3.1
-- Kling 3.0
-- Seedance 2.0
-- Grok Imagine Video
+- Veo 3.1 Lite / Fast / Quality, Gemini Omni Video (Google)
+- Kling 3.0, Kling 3.0 Turbo, Motion Control 2.6 / 3.0 (Kling)
+- Seedance 2.0 / Fast / Mini (Bytedance)
+- Grok Imagine, Grok Imagine 1.5 preview (X)
+- HappyHorse (Alibaba)
 
 More models are coming.
 
