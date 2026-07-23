@@ -240,6 +240,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         className={`node-card group${(data.hasError as boolean) ? " node-error-blink" : ""}`}
         style={{
           width: "100%",
+          minWidth: 120,
           aspectRatio: ratio,
           background: "transparent",
         }}
