@@ -40,7 +40,7 @@ And create an account and use it here : https://helios.sdd.cash/
 ## 🧠 Native JSON Prompt Preview
 
 <p align="center">
-  <img width="886" height="463" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/dedbdf4f-9d52-4e29-ad6e-a2e67e341a73" />
+  <img width="886" alt="JSON prompt preview" src="https://github.com/user-attachments/assets/dedbdf4f-9d52-4e29-ad6e-a2e67e341a73" />
 </p>
 
 ---
