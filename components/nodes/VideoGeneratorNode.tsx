@@ -558,17 +558,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, hhConnKey, updateNodeInternals]);
 
-  // Lock input handles once at least one generation has completed.
+  // Once a generation has completed, an already-connected input can't be silently
+  // swapped by dragging a new edge onto it (must disconnect first) — but every handle
+  // stays visible so a freshly emptied (or never-used) slot can always accept a new
+  // connection. Hiding unconnected handles post-generation used to strand them
+  // permanently (compounded by page reloads, which drop any in-memory "was connected"
+  // state), so visibility no longer depends on generation history at all.
   const hasGeneration = generations.some((g) => typeof g === "string" && !!g && !g.startsWith("blob:"));
 
   // Compute center-anchored positions — active handles stack together, centered on the
-  // node's vertical middle, with no gaps. When locked, unconnected handles are excluded
-  // so the remaining ones restack cleanly.
-  const activeInOrder = HANDLE_ORDER.filter((hid) => {
-    if (!activeHandles.has(hid)) return false;
-    if (hasGeneration && !connectedHandles.has(hid)) return false;
-    return true;
-  });
+  // node's vertical middle, with no gaps.
+  const activeInOrder = HANDLE_ORDER.filter((hid) => activeHandles.has(hid));
   const N = activeInOrder.length;
   const handleCenterOffsetMap = new Map(
     activeInOrder.map((hid, idx) => [hid, (idx - (N - 1) / 2) * HANDLE_SPACING])
@@ -1229,12 +1229,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
       {/* ── Handles ──────────────────────────────────────────────────── */}
       {handles.map((h) => {
-        const hidden = !activeHandles.has(h.id) || (hasGeneration && !connectedHandles.has(h.id));
+        const hidden = !activeHandles.has(h.id);
         const centerOffset = handleCenterOffsetMap.get(h.id) ?? 0;
         const isMotionStartFrame = h.id === "startFrame" && cfg.apiInput.useMotionControl;
         const compatible = !connectingHandleType
           || (CONNECTABLE_FOR_TYPE[connectingHandleType]?.has(h.id) ?? false);
-        const connectable = !hidden && compatible && !hasGeneration;
+        // Once a generation has completed, an already-connected handle can't be
+        // silently swapped — but an empty (or never-used) slot is always connectable.
+        const connectable = !hidden && compatible && (!hasGeneration || !connectedHandles.has(h.id));
         return (
           <Handle
             key={h.id}
