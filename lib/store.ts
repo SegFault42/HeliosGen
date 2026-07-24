@@ -234,6 +234,9 @@ interface WorkflowStore {
     generateNode:        Partial<NodeData>;
     videoGeneratorNode:  Partial<NodeData>;
   };
+
+  /** Last manually-resized {w,h} per node type — new nodes of that type inherit it. */
+  lastNodeSize: Record<string, { w: number; h: number }>;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -254,6 +257,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
         nodeCounters: {},
 
         nodeDefaults: { generateNode: {}, videoGeneratorNode: {} },
+        lastNodeSize: {},
 
         undoStack: [],
         redoStack: [],
@@ -382,9 +386,25 @@ export const useWorkflowStore = create<WorkflowStore>()(
             const edges = removedIds.size > 0
               ? s.edges.filter((e) => !removedIds.has(e.source) && !removedIds.has(e.target))
               : s.edges;
+
+            // A "dimensions" change with resizing === false is the final size of a
+            // manual corner-drag resize (as opposed to auto-measurement, which omits
+            // `resizing`). Remember it per node type so new nodes inherit the last size.
+            let lastNodeSize = s.lastNodeSize;
+            for (const c of changes) {
+              if (c.type !== "dimensions" || c.resizing !== false || !c.dimensions) continue;
+              const nodeType = s.nodes.find((n) => n.id === c.id)?.type;
+              if (!nodeType) continue;
+              lastNodeSize = {
+                ...lastNodeSize,
+                [nodeType]: { w: c.dimensions.width, h: c.dimensions.height },
+              };
+            }
+
             return {
               nodes,
               edges,
+              lastNodeSize,
               spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, edges, s.nodeCounters),
             };
           }),
@@ -715,6 +735,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
         debugMode:    s.debugMode,
         sidebarCollapsed: s.sidebarCollapsed,
         nodeDefaults: s.nodeDefaults,
+        lastNodeSize: s.lastNodeSize,
       }),
 
       // Migration: v0 had flat nodes/edges/nodeCounters; wrap them in a space
@@ -723,6 +744,10 @@ export const useWorkflowStore = create<WorkflowStore>()(
         // Ensure nodeDefaults exists for old stored data
         if (!state.nodeDefaults) {
           state.nodeDefaults = { generateNode: {}, videoGeneratorNode: {} };
+        }
+        // Ensure lastNodeSize exists for old stored data
+        if (!state.lastNodeSize) {
+          state.lastNodeSize = {};
         }
         // If there are no spaces (old format), migrate
         if (!state.spaces || state.spaces.length === 0) {

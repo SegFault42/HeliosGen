@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META, getLastNodeSettings } from "@/lib/nodeTypes";
+import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { getToken } from "@/lib/galleryUtils";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 
@@ -82,10 +82,11 @@ export default function AddNodeMenu({ anchorRect, onClose }: AddNodeMenuProps) {
     (type: string, extraData?: Partial<NodeData>): string => {
       const container = document.querySelector(".react-flow") as HTMLElement | null;
       const rect = container?.getBoundingClientRect();
-      const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
+      const storeState = useWorkflowStore.getState();
+      const size = getDefaultNodeSize(type, storeState.lastNodeSize);
       const GAP = 40;
 
-      const nodesNow = useWorkflowStore.getState().nodes;
+      const nodesNow = storeState.nodes;
       const count = nodesNow.filter((n) => n.type === type).length + 1;
 
       const DISPLAY: Record<string, string> = {

@@ -142,3 +142,11 @@ export const NODE_SIZE: Record<string, { w: number; h: number }> = {
 };
 
 export const FALLBACK_SIZE = { w: 280, h: 280 };
+
+/** Size to use for a newly created node: last manually-resized size for this type, else the static default. */
+export function getDefaultNodeSize(
+  type: string,
+  lastNodeSize: Record<string, { w: number; h: number }>,
+): { w: number; h: number } {
+  return lastNodeSize[type] ?? NODE_SIZE[type] ?? FALLBACK_SIZE;
+}

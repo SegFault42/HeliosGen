@@ -21,7 +21,7 @@ import { useWorkflowStore, NodeData } from "@/lib/store";
 import { VIDEO_MODELS } from "@/lib/modelConfig";
 import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
-import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings } from "@/lib/nodeTypes";
+import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
 import { createClient } from "@/lib/supabase/client";
 import { sha256Hex } from "@/lib/assetHash";
@@ -160,6 +160,22 @@ function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
   };
   if (type === "assistantNode") return "ASSISTANT";
   return `${names[type] ?? type} #${count}`;
+}
+
+/** True if `node` has a free "prompt" input handle that a pasted text node can connect into. */
+function nodeAcceptsPromptInput(node: Node<NodeData>, edges: Edge[]): boolean {
+  const taken = edges.some((e) => e.target === node.id && e.targetHandle === "prompt");
+  if (taken) return false;
+
+  if (node.type === "generateNode") return true;
+
+  if (node.type === "videoGeneratorNode") {
+    const videoModelId = (node.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
+    return videoCfg?.handles.includes("prompt" as never) ?? false;
+  }
+
+  return false;
 }
 
 export default function WorkflowCanvas() {
@@ -489,9 +505,10 @@ export default function WorkflowCanvas() {
       const GAP = 24;
 
       // First pass: compute per-file node type + size so we can centre the row.
+      const lastNodeSize = useWorkflowStore.getState().lastNodeSize;
       const fileMeta = files.map((f) => {
         const type = f.type.startsWith("image/") ? "imageInputNode" : "videoInputNode";
-        const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
+        const size = getDefaultNodeSize(type, lastNodeSize);
         return { file: f, type, size } as { file: File; type: string; size: { w: number; h: number } };
       });
 
@@ -599,7 +616,7 @@ export default function WorkflowCanvas() {
     };
 
 
-    const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
+    const size = getDefaultNodeSize(type, useWorkflowStore.getState().lastNodeSize);
     // Read nodes fresh from the store (not from stale closure)
     const currentNodes = useWorkflowStore.getState().nodes;
     const label = nodeLabel(type, currentNodes);
@@ -724,20 +741,56 @@ export default function WorkflowCanvas() {
           // If the OS clipboard contains our node-copy sentinel, paste nodes.
           // Otherwise treat non-empty text as external content → prompt node.
           if (text && text !== nodeSentinelRef.current) {
-            const rect = wrapperRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const { x: panX, y: panY, zoom } = viewportRef.current;
-            const cx = (mousePosRef.current.x - rect.left - panX) / zoom;
-            const cy = (mousePosRef.current.y - rect.top - panY) / zoom;
-            const size = NODE_SIZE["promptNode"] ?? FALLBACK_SIZE;
-            const currentNodes = useWorkflowStore.getState().nodes;
+            const currentState = useWorkflowStore.getState();
+            const currentNodes = currentState.nodes;
+            const currentEdges = currentState.edges;
+            const size = getDefaultNodeSize("promptNode", currentState.lastNodeSize);
+
+            // If exactly one node is selected, and it has an unconnected "prompt"
+            // input handle, drop the new text node next to it and wire it in.
+            const selected = currentNodes.filter((n) => n.selected);
+            const target = selected.length === 1 ? selected[0] : null;
+            const targetAcceptsPrompt = target ? nodeAcceptsPromptInput(target, currentEdges) : false;
+
+            const newId = `promptNode-${uid()}`;
+            let position: { x: number; y: number };
+            const gap = 60;
+            if (target && targetAcceptsPrompt) {
+              const targetSize = {
+                w: target.measured?.width ?? (typeof target.style?.width === "number" ? target.style.width : undefined) ?? NODE_SIZE[target.type ?? ""]?.w ?? FALLBACK_SIZE.w,
+                h: target.measured?.height ?? (typeof target.style?.height === "number" ? target.style.height : undefined) ?? NODE_SIZE[target.type ?? ""]?.h ?? FALLBACK_SIZE.h,
+              };
+              position = {
+                x: target.position.x - size.w - gap,
+                y: target.position.y + (targetSize.h - size.h) / 2,
+              };
+            } else {
+              const rect = wrapperRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const { x: panX, y: panY, zoom } = viewportRef.current;
+              const cx = (mousePosRef.current.x - rect.left - panX) / zoom;
+              const cy = (mousePosRef.current.y - rect.top - panY) / zoom;
+              position = { x: cx - size.w / 2, y: cy - size.h / 2 };
+            }
+
             addNode({
-              id: `promptNode-${uid()}`,
+              id: newId,
               type: "promptNode",
-              position: { x: cx - size.w / 2, y: cy - size.h / 2 },
+              position,
               style: { width: size.w, height: size.h },
               data: { label: nodeLabel("promptNode", currentNodes), prompt: text },
             });
+
+            if (target && targetAcceptsPrompt) {
+              insertEdge({
+                id: `edge-${uid()}`,
+                source: newId,
+                target: target.id,
+                targetHandle: "prompt",
+                animated: false,
+                style: edgeStyle("prompt"),
+              });
+            }
           } else if (clipboardRef.current) {
             handlePaste();
           }
@@ -749,7 +802,7 @@ export default function WorkflowCanvas() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [handleCopy, handlePaste, handleUndo, handleRedo, addNode]);
+  }, [handleCopy, handlePaste, handleUndo, handleRedo, addNode, insertEdge]);
 
   // ── Auto-trim + frame-extract on new connections ─────────────────────────────
   const handleConnect = useCallback((connection: Connection) => {
@@ -1311,9 +1364,10 @@ export default function WorkflowCanvas() {
     const { x: panX, y: panY, zoom } = viewportRef.current;
     const cx = (rect.width / 2 - panX) / zoom;
     const cy = (rect.height / 2 - panY) / zoom;
-    const size = NODE_SIZE[type] ?? FALLBACK_SIZE;
+    const currentState = useWorkflowStore.getState();
+    const size = getDefaultNodeSize(type, currentState.lastNodeSize);
 
-    const currentNodes = useWorkflowStore.getState().nodes;
+    const currentNodes = currentState.nodes;
     addNode({
       id: `${type}-${uid()}`,
       type,

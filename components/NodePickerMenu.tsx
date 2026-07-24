@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useReactFlow, Node, Edge } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { edgeStyle, EDGE_COLORS } from "@/lib/edgeStyles";
-import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META, getLastNodeSettings } from "@/lib/nodeTypes";
+import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { VIDEO_MODELS, IMAGE_MODELS } from "@/lib/modelConfig";
 
 // Extract the aspect ratio as a float from any source node type
@@ -164,7 +164,8 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
 
   const handleSelect = (type: string) => {
     const flowPos = screenToFlowPosition({ x: dropState.screenX, y: dropState.screenY });
-    const size    = NODE_SIZE[type] ?? FALLBACK_SIZE;
+    const storeState = useWorkflowStore.getState();
+    const size    = getDefaultNodeSize(type, storeState.lastNodeSize);
     const isInput = dropState.isInputHandle === true;
 
     const position = {
@@ -172,7 +173,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
       y: flowPos.y - size.h / 2,
     };
 
-    const nodesInStore = useWorkflowStore.getState().nodes;
+    const nodesInStore = storeState.nodes;
     const count  = nodesInStore.filter((n) => n.type === type).length + 1;
     const label  = `${NODE_DISPLAY_NAMES[type] ?? type} #${count}`;
 
