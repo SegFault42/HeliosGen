@@ -16,6 +16,15 @@ export type CodexStatus =
   | { kind: "ready" }
   | { kind: "not_ready"; installed: boolean; authFound: boolean };
 
+/** Whether the `claude` binary backing the Local CLI model is reachable. */
+export type LocalCliStatus =
+  | { kind: "unknown" }
+  | { kind: "known"; claude: boolean };
+
+const LOCAL_CLI_ROWS = [
+  { key: "claude" as const, label: "Claude CLI", install: "npm i -g @anthropic-ai/claude-code" },
+];
+
 /* ─── Persistence ───────────────────────────────────────────────────────────── */
 
 const AZURE_DEPLOYS_KEY      = "aiui-azure-endpoints";       // per-model deployment names
@@ -428,6 +437,7 @@ function ApiKeysPanel({
   onAzureKeyDelete,
   codexStatus,
   onCodexLoginSuccess,
+  localCliStatus,
 }: {
   azureBaseUrl: string;
   onBaseUrlChange: (v: string) => void;
@@ -439,6 +449,7 @@ function ApiKeysPanel({
   onAzureKeyDelete: () => Promise<void>;
   codexStatus: CodexStatus;
   onCodexLoginSuccess: () => void;
+  localCliStatus: LocalCliStatus;
 }) {
   const [kieInput, setKieInput]       = useState("");
   const [kieSaving, setKieSaving]     = useState(false);
@@ -932,6 +943,57 @@ function ApiKeysPanel({
         )}
       </div>
 
+      {/* ──── Local CLI status (Assistant) ─────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          padding: "16px",
+          background: "rgba(45,212,191,0.04)",
+          border: "1px solid rgba(45,212,191,0.14)",
+          borderRadius: "12px",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Local CLI</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+            Runs the Assistant through the <code style={{ fontFamily: "monospace" }}>claude</code> CLI on this
+            machine — its own login, no API key
+          </div>
+        </div>
+
+        {LOCAL_CLI_ROWS.map(({ key, label, install }) => {
+          const installed = localCliStatus.kind === "known" && localCliStatus[key];
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>{label}</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.22)", fontFamily: "monospace", marginTop: "1px" }}>
+                  {install}
+                </div>
+              </div>
+              <span
+                style={{
+                  fontSize: "10px", fontWeight: 600,
+                  color:      installed ? "rgba(74,222,128,0.8)"  : "rgba(251,146,60,0.8)",
+                  background: installed ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)",
+                  border: `1px solid ${installed ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`,
+                  borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap",
+                }}
+              >
+                {localCliStatus.kind === "unknown" ? "CHECKING…" : installed ? "INSTALLED" : "NOT FOUND"}
+              </span>
+            </div>
+          );
+        })}
+
+        <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+          Sign in from a terminal on this machine (<code style={{ fontFamily: "monospace" }}>claude</code>), then
+          pick <strong>Claude CLI</strong> in the Assistant&apos;s model menu.
+        </p>
+      </div>
+
     </div>
   );
 }
@@ -1330,6 +1392,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [kieKeyStatus, setKieKeyStatus]               = useState<"unknown" | "set" | "unset">("unknown");
   const [azureKeyStatus, setAzureKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
   const [codexStatus, setCodexStatus]         = useState<CodexStatus>({ kind: "unknown" });
+  const [localCliStatus, setLocalCliStatus]   = useState<LocalCliStatus>({ kind: "unknown" });
   const setKieKeySet    = useWorkflowStore((s) => s.setKieKeySet);
   const setAzureKeySet  = useWorkflowStore((s) => s.setAzureKeySet);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -1373,6 +1436,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     );
     // Check whether the server has a working codex-imagegen + codex login
     refreshCodexStatus();
+    // Check which local CLIs back the Assistant's "Local CLI" models
+    fetch("/api/settings/local-cli-status")
+      .then((r) => r.json())
+      .then((d: { claude: { installed: boolean } }) =>
+        setLocalCliStatus({ kind: "known", claude: d.claude.installed })
+      )
+      .catch(() => setLocalCliStatus({ kind: "known", claude: false }));
   }, [refreshCodexStatus]);
 
   /* Close on Escape */
@@ -1649,6 +1719,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onAzureKeyDelete={handleAzureKeyDelete}
                 codexStatus={codexStatus}
                 onCodexLoginSuccess={refreshCodexStatus}
+                localCliStatus={localCliStatus}
               />
             )}
             {activeNav === "image-models" && (

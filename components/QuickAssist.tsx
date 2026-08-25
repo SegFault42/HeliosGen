@@ -300,7 +300,7 @@ export function QuickAssist() {
                 </button>
                 {modelOpen && (
                   <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, minWidth: "180px", background: "rgba(18,20,23,0.98)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", boxShadow: "0 -8px 32px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4)", overflow: "hidden", zIndex: 10, animation: "qaSlideDown 120ms cubic-bezier(0.16,1,0.3,1)" }}>
-                    <div style={{ padding: "4px" }}>
+                    <div style={{ padding: "4px", maxHeight: "min(48vh, 420px)", overflowY: "auto" }}>
                       {MODEL_GROUPS.map((group, gi) => (
                         <div key={group.label}>
                           {gi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />}

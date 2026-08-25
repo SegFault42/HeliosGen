@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { createClient } from "@/lib/supabase/client";
 
 export interface StoredMessage {
@@ -37,7 +38,7 @@ export const useChatSessionStore = create<ChatSessionState>()(
   persist(
     (set, get) => ({
       sessions: [],
-      preferredModel: "claude-sonnet-4-6",
+      preferredModel: DEFAULT_MODEL,
 
       setPreferredModel: (model) => set({ preferredModel: model }),
 
@@ -154,6 +155,13 @@ export const useChatSessionStore = create<ChatSessionState>()(
     {
       name: process.env.NEXT_PUBLIC_GUEST_MODE === "true" ? "heliosgen-chats-guest" : "heliosgen-chats",
       storage: createJSONStorage(() => localStorage),
+      // Bumped once, so browsers that were open at the time carry `version: 1` in
+      // their stored blob. The version has to stay declared — zustand refuses any
+      // stored state whose version doesn't match, and errors without a migrate —
+      // but there is nothing to rewrite: the model preference is whatever the user
+      // last picked, and stays that way.
+      version: 1,
+      migrate: (persisted) => persisted as ChatSessionState,
     }
   )
 );

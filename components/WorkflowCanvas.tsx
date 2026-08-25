@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_MODEL } from "@/lib/models";
 import {
   ReactFlow,
   Background,
@@ -1263,7 +1264,7 @@ export default function WorkflowCanvas() {
             headers: authHeaders(token),
             body: JSON.stringify({
               prompt,
-              model: node.data.model ?? "claude-sonnet-4-6",
+              model: node.data.model ?? DEFAULT_MODEL,
               systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
             }),
           });

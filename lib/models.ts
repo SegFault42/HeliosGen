@@ -37,7 +37,23 @@ export const MODEL_GROUPS: ModelGroup[] = [
       { id: "azure-auto", label: "Azure Auto", desc: "Router" },
     ],
   },
+  // Runs on the `claude` CLI installed on this machine, using its own login
+  // instead of API credits — see lib/localCli.ts.
+  {
+    label: "Local CLI",
+    models: [
+      { id: "claude-cli", label: "Claude CLI", desc: "Terminal" },
+    ],
+  },
 ];
 
 export const MODELS: Model[] = MODEL_GROUPS.flatMap(g => g.models);
+
+/**
+ * What the Assistant answers with until the user picks something else. The local
+ * `claude` CLI runs on its own login, so it costs no Kie.ai credit — but it only
+ * works where that binary exists (see lib/localCli.ts), which is not the case on
+ * a deployed instance.
+ */
+export const DEFAULT_MODEL = "claude-cli";
 export type ModelId = string;

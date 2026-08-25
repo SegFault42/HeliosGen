@@ -260,6 +260,45 @@ In **Settings → Image Models**, set GPT Image 2's provider toggle to **Codex C
 
 ---
 
+# 🖥️ Local CLI assistant (optional — run the Assistant on your own subscription)
+
+The **Assistant** (⌘K panel, `/chat`, and the workflow Assistant node) can also run
+on the `claude` CLI installed on your own machine, instead of spending Kie.ai
+credits. Pick **Claude CLI** under **Local CLI** in the Assistant's model menu.
+
+Like the Codex CLI image backend above, this is a single shared login on the machine
+running the server — not a per-user API key — so it's meant for local / self-hosted
+single-user setups. The CLI is launched with no tool access (`--tools ""`) and from a
+temp directory, so it can't read or write the project it's serving.
+
+### 1. Install the CLI
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### 2. Log in
+
+Run it once in a terminal on that machine and sign in:
+
+```bash
+claude        # Claude Pro / Max, or an Anthropic API key
+```
+
+**Settings → API Keys → Local CLI** shows **INSTALLED** once the binary is found.
+
+### 3. Optional environment variables
+
+The binary is looked up on `PATH`. Override only if needed:
+
+```env
+CLAUDE_CLI_PATH=/usr/local/bin/claude
+# Model the CLI should use (defaults to whatever the CLI is configured with)
+CLAUDE_CLI_MODEL=sonnet
+```
+
+---
+
 # 🌍 Deployment
 
 Recommended platforms:

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GenerateButton from "@/components/nodes/GenerateButton";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import CornerResizer from "./CornerResizer";
 import { createClient } from "@/lib/supabase/client";
@@ -14,7 +15,11 @@ type AssistantNodeType = Node<NodeData, "assistantNode">;
 const MODELS = [
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+  // Runs on the CLI installed on this machine — no Kie.ai key needed.
+  { id: "claude-cli", label: "Claude CLI (local)" },
 ];
+
+const LOCAL_CLI_MODEL_IDS = ["claude-cli"];
 
 export default function AssistantNode({ id, data, selected }: NodeProps<AssistantNodeType>) {
   const readOnly = useReadOnly();
@@ -48,7 +53,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
   const status = (data.status as string) ?? "idle";
   const outputText = (data.outputText as string) ?? "";
   const localPrompt = (data.localPrompt as string) ?? "";
-  const model = (data.model as string) ?? "claude-sonnet-4-6";
+  const model = (data.model as string) ?? DEFAULT_MODEL;
 
   const [viewMode, setViewMode] = useState<"input" | "output">("input");
   const [loading, setLoading] = useState(false);
@@ -405,7 +410,7 @@ export default function AssistantNode({ id, data, selected }: NodeProps<Assistan
                 Stop
               </button>
             ) : (
-              <GenerateButton onClick={handleGenerate} disabled={!hasPrompt || kieKeySet === false} />
+              <GenerateButton onClick={handleGenerate} disabled={!hasPrompt || (kieKeySet === false && !LOCAL_CLI_MODEL_IDS.includes(model))} />
             ))}
           </div>
         </div>

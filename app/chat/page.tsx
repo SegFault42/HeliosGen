@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChatSessionStore, type StoredMessage, type ChatSession } from "@/lib/chatSessionStore";
 import { getToken } from "@/lib/galleryUtils";
-import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
+import { DEFAULT_MODEL, MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Send, ChevronUp, Copy, Check } from "lucide-react";
 import { motion } from "motion/react";
@@ -34,6 +34,10 @@ function ModelPicker({
   disabledIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
+  // Measured when the menu opens: the list is taller than the room under the
+  // button on a short window, and the overflow used to be simply unreachable —
+  // the page behind it doesn't scroll.
+  const [placement, setPlacement] = useState<{ dir: "up" | "down"; max: number }>({ dir: direction, max: 420 });
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,15 +48,30 @@ function ModelPicker({
     return () => window.removeEventListener("pointerdown", onPointer);
   }, []);
 
+  /** Flips the menu to whichever side has room, then caps it to that space. */
+  const toggle = () => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) {
+      const below = window.innerHeight - rect.bottom - 16;
+      const above = rect.top - 16;
+      const dir: "up" | "down" =
+        direction === "down"
+          ? (below < 240 && above > below ? "up" : "down")
+          : (above  < 240 && below > above ? "down" : "up");
+      setPlacement({ dir, max: Math.max(180, Math.min(420, dir === "down" ? below : above)) });
+    }
+    setOpen(o => !o);
+  };
+
   const current = MODELS.find(m => m.id === model);
-  const dropPos = direction === "up"
+  const dropPos = placement.dir === "up"
     ? { bottom: "calc(100% + 6px)" }
     : { top: "calc(100% + 6px)" };
 
   return (
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         style={{
           display: "flex", alignItems: "center", gap: "5px",
           padding: "0 8px", height: "32px", borderRadius: "8px",
@@ -68,7 +87,7 @@ function ModelPicker({
           size={12}
           style={{
             opacity: 0.5,
-            transform: direction === "up"
+            transform: placement.dir === "up"
               ? (open ? "rotate(180deg)" : "none")
               : (open ? "none" : "rotate(180deg)"),
             transition: "transform 120ms",
@@ -82,7 +101,7 @@ function ModelPicker({
           border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.6)", overflow: "hidden", zIndex: 100,
         }}>
-          <div style={{ padding: "4px" }}>
+          <div style={{ padding: "4px", maxHeight: `${placement.max}px`, overflowY: "auto" }}>
             {MODEL_GROUPS.map((group, gi) => (
               <div key={group.label}>
                 {gi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />}
@@ -311,7 +330,7 @@ function ChatWindow({
     session.messages.map((m) => ({ ...m }))
   );
   const [input, setInput] = useState("");
-  const [model, setModel] = useState<ModelId>((session.model || defaultModel || "claude-sonnet-4-6") as ModelId);
+  const [model, setModel] = useState<ModelId>((session.model || defaultModel || DEFAULT_MODEL) as ModelId);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const kieKeySet   = useWorkflowStore((s) => s.kieKeySet);
   const azureKeySet = useWorkflowStore((s) => s.azureKeySet);
@@ -432,7 +451,10 @@ function ChatWindow({
   useEffect(() => {
     if (initialMessage && !hasSentInitial.current) {
       hasSentInitial.current = true;
-      send(initialMessage);
+      // `send` opens with flushSync, which React rejects while it is still
+      // rendering — this effect can run inside that phase when the window mounts
+      // with a message already in hand. A microtask lets the commit finish first.
+      queueMicrotask(() => send(initialMessage));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -608,7 +630,7 @@ function ChatInner() {
 
   const { sessions, createSession, upsertSession, preferredModel, setPreferredModel } = useChatSessionStore();
   const [hydrated, setHydrated] = useState(false);
-  const [landingModel, setLandingModel] = useState<ModelId>("claude-sonnet-4-6");
+  const [landingModel, setLandingModel] = useState<ModelId>(DEFAULT_MODEL);
   const [pendingMessage, setPendingMessage] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const setAuthModalOpen = useWorkflowStore((s) => s.setAuthModalOpen);

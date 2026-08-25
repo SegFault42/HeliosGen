@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
 import { getAzureToken } from "@/lib/getAzureKey";
+import { isLocalCliInstalled, isLocalCliModel, localCliBinary, runLocalCli } from "@/lib/localCli";
+import { DEFAULT_MODEL } from "@/lib/models";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -18,6 +20,58 @@ const OPENAI_COMPAT_ENDPOINTS: Record<string, string> = {
 
 const AZURE_API_VERSION = "2024-04-01-preview";
 
+const SSE_HEADERS = {
+  "Content-Type":      "text/event-stream",
+  "Cache-Control":     "no-cache, no-transform",
+  "Connection":        "keep-alive",
+  "X-Accel-Buffering": "no",
+};
+
+/**
+ * The local CLIs take a single prompt string, so a multi-turn chat is flattened
+ * into a labelled transcript.
+ */
+function renderTurns(turns: Message[]): string {
+  if (turns.length === 1) return turns[0].content.trim();
+  return turns
+    .map((m) => `${m.role === "user" ? "Human" : "Assistant"}: ${m.content.trim()}`)
+    .join("\n\n");
+}
+
+/**
+ * Re-emits the CLI's text as the same Anthropic-shaped SSE the clients already
+ * parse. A failure part-way through can't change the status code any more, so it
+ * is sent as a final text delta rather than swallowed.
+ */
+function localCliStream(model: string, systemPrompt: string, prompt: string): ReadableStream {
+  const encoder = new TextEncoder();
+  const send = (text: string) =>
+    encoder.encode(`data: ${JSON.stringify({ type: "content_block_delta", delta: { text } })}\n\n`);
+
+  const chunks = runLocalCli({ model: "claude-cli", systemPrompt, prompt });
+
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const { value, done } = await chunks.next();
+        if (done) {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+          return;
+        }
+        controller.enqueue(send(value));
+      } catch (e) {
+        controller.enqueue(send(`\n\n[${model}] ${(e as Error).message}`));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      }
+    },
+    cancel() {
+      chunks.return(undefined);
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as {
     messages?: Message[];
@@ -29,7 +83,33 @@ export async function POST(req: NextRequest) {
     azureModelName?: string;
   };
 
-  const model = body.model ?? "claude-sonnet-4-6";
+  const model = body.model ?? DEFAULT_MODEL;
+
+  // ── Local CLI (the `claude` binary on this machine) ───────────────────────
+  // No API key: it runs on the CLI's own login. See lib/localCli.ts.
+  if (isLocalCliModel(model)) {
+    const systemPrompt =
+      body.systemPrompt?.trim() ||
+      body.messages?.find((m) => m.role === "system")?.content.trim() ||
+      "";
+    const turns = (body.messages ?? []).filter((m) => m.role !== "system");
+    const prompt = turns.length > 0 ? renderTurns(turns) : (body.prompt?.trim() ?? "");
+    if (!prompt) {
+      return new Response(JSON.stringify({ error: "messages or prompt is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (!(await isLocalCliInstalled(model))) {
+      return new Response(
+        JSON.stringify({
+          error: `\`${localCliBinary(model)}\` was not found on this machine. Install it, or point CLAUDE_CLI_PATH at it.`,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(localCliStream(model, systemPrompt, prompt), { headers: SSE_HEADERS });
+  }
 
   let messages: Message[];
 
@@ -102,14 +182,7 @@ export async function POST(req: NextRequest) {
         { status: upstream.status, headers: { "Content-Type": "application/json" } }
       );
     }
-    return new Response(upstream.body, {
-      headers: {
-        "Content-Type":      "text/event-stream",
-        "Cache-Control":     "no-cache, no-transform",
-        "Connection":        "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
-    });
+    return new Response(upstream.body, { headers: SSE_HEADERS });
   }
 
   // ── Kie.ai models ─────────────────────────────────────────────────────────
@@ -163,12 +236,5 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return new Response(upstream.body, {
-    headers: {
-      "Content-Type":       "text/event-stream",
-      "Cache-Control":      "no-cache, no-transform",
-      "Connection":         "keep-alive",
-      "X-Accel-Buffering":  "no",
-    },
-  });
+  return new Response(upstream.body, { headers: SSE_HEADERS });
 }
