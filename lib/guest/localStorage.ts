@@ -4,6 +4,7 @@ import { randomUUID, createHash } from "crypto";
 import https from "node:https";
 import http  from "node:http";
 import { lookupAssetHash, storeAssetHash } from "./db";
+import { uploadLocalFileToKie } from "./kieUpload";
 import { stripMetadata } from "../mediaMetadata";
 
 const GENERATED_DIR = join(process.cwd(), "public", "generated");
@@ -77,13 +78,21 @@ function toPublicUrl(path: string, base = process.env.CALLBACK_BASE_URL?.replace
 
 export async function ensureStorage(url: string, folder: string): Promise<string> {
   const base = process.env.CALLBACK_BASE_URL?.replace(/\/$/, "");
-  if (base && url.startsWith(`${base}/generated/`)) return url; // already public
+  const alreadyPublic = base && url.startsWith(`${base}/generated/`);
 
-  const stored = url.startsWith("data:")
+  const stored = alreadyPublic
+    ? url.slice(base!.length)
+    : url.startsWith("data:")
     ? await uploadDataUrl(url, folder)
     : url.startsWith("/generated/")
     ? url
     : await mirrorToStorage(url, folder);
 
-  return toPublicUrl(stored, base);
+  // Prefer handing kie.ai a URL it hosts itself — the ngrok tunnel serves its
+  // browser-warning page to some requests, which kie.ai then rejects as a
+  // corrupt image. Falls back to the tunnel URL when the upload isn't possible.
+  const kieUrl = await uploadLocalFileToKie(stored);
+  if (kieUrl) return kieUrl;
+
+  return alreadyPublic ? url : toPublicUrl(stored, base);
 }
