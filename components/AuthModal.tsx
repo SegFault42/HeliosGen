@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useWorkflowStore } from "@/lib/store";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type View = "signin" | "signup" | "forgot";
+type View = "signin" | "signup" | "forgot" | "magic";
 
 function PasswordStrengthBar({ password }: { password: string }) {
   const score = !password
@@ -109,6 +109,24 @@ export default function AuthModal() {
     if (mode === "forgot") {
       const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/`,
+      });
+      setBusy(false);
+      if (err) { setError(err.message); return; }
+      setForgotSent(true);
+      return;
+    }
+
+    if (mode === "magic") {
+      // Magic link is login-only. shouldCreateUser:false means an email with no
+      // existing account won't be signed up here — signup stays on its own flow.
+      // emailRedirectTo points at the PKCE callback route, which exchanges the
+      // ?code=... it lands with for a session (see app/api/auth/callback).
+      const { error: err } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        },
       });
       setBusy(false);
       if (err) { setError(err.message); return; }
@@ -314,7 +332,7 @@ export default function AuthModal() {
                 fontSize: "10px", fontWeight: 600, letterSpacing: "0.1em",
                 color: "rgba(255,255,255,0.38)", marginBottom: "6px",
               }}>
-                {mode === "forgot" ? "RESET PASSWORD" : mode === "signup" ? "CREATE ACCOUNT" : "WELCOME BACK"}
+                {mode === "forgot" ? "RESET PASSWORD" : mode === "magic" ? "MAGIC LINK" : mode === "signup" ? "CREATE ACCOUNT" : "WELCOME BACK"}
               </p>
               <h2 style={{
                 fontSize: isMobile ? "20px" : "24px", fontWeight: 700, color: "#fff",
@@ -322,6 +340,8 @@ export default function AuthModal() {
               }}>
                 {mode === "forgot"
                   ? "Reset your password"
+                  : mode === "magic"
+                  ? "Sign in with a magic link"
                   : mode === "signup"
                   ? "Sign up with email"
                   : "Sign in with email"}
@@ -346,7 +366,7 @@ export default function AuthModal() {
           </div>
 
           {/* Forgot / sent state */}
-          {mode === "forgot" ? (
+          {mode === "forgot" || mode === "magic" ? (
             forgotSent ? (
               <div style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
@@ -364,7 +384,9 @@ export default function AuthModal() {
                   </svg>
                 </div>
                 <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
-                  Reset link sent — check your inbox.
+                  {mode === "magic"
+                    ? "Magic link sent — check your inbox."
+                    : "Reset link sent — check your inbox."}
                 </p>
                 <button
                   onClick={() => { setMode("signin"); setError(""); setForgotSent(false); }}
@@ -379,7 +401,9 @@ export default function AuthModal() {
             ) : (
               <form onSubmit={submit} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "14px" }}>
                 <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", lineHeight: 1.5 }}>
-                  Enter your email and we'll send you a reset link.
+                  {mode === "magic"
+                    ? "Enter your email and we'll send you a sign-in link."
+                    : "Enter your email and we'll send you a reset link."}
                 </p>
                 <FieldLabel label="EMAIL" />
                 <InputWithIcon
@@ -392,7 +416,7 @@ export default function AuthModal() {
                   compact={isMobile}
                 />
                 {error && <ErrorMsg text={error} />}
-                <PrimaryButton busy={busy} label="Send reset link" compact={isMobile} />
+                <PrimaryButton busy={busy} label={mode === "magic" ? "Send magic link" : "Send reset link"} compact={isMobile} />
                 <div style={{ textAlign: "center" }}>
                   <button
                     type="button"
@@ -507,6 +531,20 @@ export default function AuthModal() {
               </p>
 
               <div style={{ textAlign: "center", marginTop: "-6px", visibility: mode === "signin" ? "visible" : "hidden" }}>
+                <button
+                  type="button"
+                  onClick={() => { setMode("magic"); setError(""); }}
+                  style={{
+                    fontSize: "12px", color: "rgba(255,255,255,0.3)", background: "none",
+                    border: "none", cursor: "pointer", fontFamily: "inherit",
+                    transition: "color 150ms",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                >
+                  Sign in using magic link
+                </button>
+                <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.2)", margin: "0 8px" }}>·</span>
                 <button
                   type="button"
                   onClick={() => { setMode("forgot"); setError(""); }}
