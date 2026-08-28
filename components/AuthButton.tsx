@@ -17,6 +17,28 @@ export default function AuthButton() {
   const supabase                   = createClient();
 
   useEffect(() => {
+    // Magic-link / OAuth landings come back to the Site URL root with a PKCE
+    // ?code=... in the query (not the hash). Exchange it for a session here,
+    // since the /api/auth/callback route isn't on this path.
+    const query = new URLSearchParams(window.location.search);
+    const code  = query.get("code");
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(async ({ error }) => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("code");
+        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+        if (error) {
+          // The client's own detectSessionInUrl may have already consumed the
+          // code, so a failure here can be benign — only warn if we truly have
+          // no session.
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) {
+            addToast("Sign-in link is invalid or expired — request a new one.", "info");
+          }
+        }
+      });
+    }
+
     // Handle Supabase auth hash params on page load.
     const hash   = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
