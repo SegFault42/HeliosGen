@@ -782,11 +782,18 @@ export function AppSidebar() {
   const avatarSeed = "guest";
 
   const folderParam = selectedFolderId ? `&folder=${selectedFolderId}` : "";
-  const navItems = [
+  const navItems: {
+    label: string;
+    href: string;
+    icon: typeof ImageIcon;
+    active: boolean;
+    disabled?: boolean;
+    onClick?: (e: React.MouseEvent) => void;
+  }[] = [
     { label: "Image", href: `/gallery?tab=images${folderParam}`, icon: ImageIcon, active: pathname === "/gallery" && tab === "images" },
     { label: "Video", href: `/gallery?tab=videos${folderParam}`, icon: VideoIcon, active: pathname === "/gallery" && tab === "videos" },
     { label: "Workflow", href: "/workflow", icon: Workflow, active: pathname === "/workflow" || (pathname.startsWith("/workflow/") && pathname !== "/workflow") },
-    { label: "Assets", href: "#", icon: Package, active: false, disabled: true },
+    { label: "Assets", href: "/assets", icon: Package, active: pathname === "/assets" },
     { label: "Chat", href: "/chat", icon: MessageSquare, active: pathname === "/chat" },
     { label: "Settings", href: "#", icon: Settings, active: false, onClick: (e: React.MouseEvent) => { e.preventDefault(); setSettingsOpen(true); } },
   ];

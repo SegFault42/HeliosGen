@@ -16,8 +16,9 @@ import {
   readFileSync,
   writeFileSync,
   readdirSync,
+  symlinkSync,
 } from "node:fs";
-import { join, dirname, sep } from "node:path";
+import { join, dirname, sep, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -174,6 +175,23 @@ for (const [dir, keepIf] of [
   if (!existsSync(dir)) continue;
   for (const name of readdirSync(dir)) {
     if (!keepIf(name)) rmSync(join(dir, name), { recursive: true, force: true });
+  }
+}
+
+// Next's standalone tracer leaves `.next/node_modules/<pkg>-<hash>` as *absolute*
+// symlinks into the pnpm store (and the now-deleted `.next/standalone` tree).
+// Once node_modules has been swapped for the flat prod install above, those
+// dangle — and a dangling symlink anywhere under `bundle.resources`
+// ("server/**/*") makes tauri's build script hard-fail with
+// "resource path ... doesn't exist". Repoint each at the flat install (dropping
+// any that no longer resolve).
+const nextNm = join(STAGE, ".next", "node_modules");
+if (existsSync(nextNm)) {
+  for (const entry of readdirSync(nextNm)) {
+    const pkg = entry.replace(/-[0-9a-f]{8,}$/, "");
+    const flat = join(STAGE, "node_modules", pkg);
+    rmSync(join(nextNm, entry), { recursive: true, force: true });
+    if (existsSync(flat)) symlinkSync(relative(nextNm, flat), join(nextNm, entry));
   }
 }
 
