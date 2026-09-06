@@ -707,8 +707,16 @@ function GalleryInner() {
   const [expandingPrompt, setExpandingPrompt] = useState(false);
   const [enhancePrompt, setEnhancePrompt] = useState(() => loadSettings(tab, selectedFolderId)?.enhancePrompt ?? false);
   const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
+  const [promptUndo, setPromptUndo] = useState<{
+    original: string; mode: "text" | "json" | "yaml"; enhanced: string;
+  } | null>(null);
   const promptExpansion = useRef<AbortController | null>(null);
-  useEffect(() => () => { promptExpansion.current?.abort(); }, [tab, selectedFolderId]);
+  // An edit (even one later undone) invalidates an in-flight enhancement.
+  useEffect(() => () => { promptExpansion.current?.abort(); }, [tab, selectedFolderId, prompt]);
+  useEffect(() => {
+    setPromptUndo(current => current?.enhanced === prompt ? current : null);
+    setReviewedPrompt(current => current === prompt ? current : null);
+  }, [prompt]);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
   const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab, selectedFolderId)?.promptTextMode ?? "text");
   const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.multiPromptMode ?? false);
@@ -1081,6 +1089,7 @@ function GalleryInner() {
     const saved = loadSettings(tab, prevFolderIdRef.current);
     setEnhancePrompt(saved?.enhancePrompt ?? false);
     setReviewedPrompt(null);
+    setPromptUndo(null);
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
     const azureOpts = (model as { azureResolutionOptions?: string[] }).azureResolutionOptions;
     const savedIsCustom = saved?.aspectRatio === "custom" && Number.isFinite(saved.azureCustomWidth) && Number.isFinite(saved.azureCustomHeight) && isAzureActiveForModel(model.id, azureOpts);
@@ -1291,6 +1300,7 @@ function GalleryInner() {
     setMultiPromptMode(saved?.multiPromptMode ?? false);
     setEnhancePrompt(saved?.enhancePrompt ?? false);
     setReviewedPrompt(null);
+    setPromptUndo(null);
     setRefImages(prev => { prev.forEach(r => URL.revokeObjectURL(r.objectUrl)); return savedUrls.map(toRef); });
     setTaggedImages(
       saved?.taggedImages?.length
@@ -1827,7 +1837,10 @@ function GalleryInner() {
         originalBlocks[blockIndex] = enhanced;
         enhanced = originalBlocks.join("\n\n");
       }
-      setPrompt(current => current === snapshot ? enhanced : current);
+      // No await between the abort check and insertion: draft/context changes
+      // abort the request, so review and undo belong only to an applied result.
+      setPrompt(enhanced);
+      setPromptUndo({ original: snapshot, mode: promptTextMode, enhanced });
       setReviewedPrompt(allBlocks || !multiPromptMode ? enhanced : null);
       setPromptTextMode("text");
       if (usedKie) addToast("Enhanced with Kie Luna — Codex ChatGPT is not configured.", "info");
@@ -1843,6 +1856,21 @@ function GalleryInner() {
       promptExpansion.current = null;
       setExpandingPrompt(false);
     }
+  };
+
+  const restoreOriginalPrompt = () => {
+    if (!promptUndo || promptUndo.enhanced !== prompt || expandingPrompt) return;
+    setPrompt(promptUndo.original);
+    setPromptTextMode(promptUndo.mode);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
+    requestAnimationFrame(() => {
+      const inputs = multiPromptMode
+        ? Array.from(document.querySelectorAll<HTMLTextAreaElement>("[data-prompt-stack] textarea"))
+        : inputRef.current ? [inputRef.current] : [];
+      inputs.forEach(input => resizeTextarea(input, promptExpanded ? window.innerHeight * 0.75 - 220 : 264));
+      inputs[0]?.focus();
+    });
   };
 
   const generate = async () => {
@@ -4461,6 +4489,18 @@ function GalleryInner() {
                   </span>
                   Enhance
                 </button>
+
+                {promptUndo?.enhanced === prompt && (
+                  <button type="button" onClick={restoreOriginalPrompt}
+                    disabled={submitting || expandingPrompt}
+                    title="Restore the exact text and display mode from before enhancement."
+                    style={{ height: "36px", padding: "0 10px", borderRadius: "8px",
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
+                      color: "rgba(255,255,255,0.55)", fontSize: "13px", fontFamily: "inherit",
+                      cursor: submitting || expandingPrompt ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                    Restore original
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
