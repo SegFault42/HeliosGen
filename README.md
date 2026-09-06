@@ -280,6 +280,16 @@ notarization.
 
 ---
 
+# Clearing generation placeholders
+
+**Cancel** is available only during the brief pre-submission window. After submission,
+**Dismiss** hides the placeholder without cancelling provider work; completed media is still saved.
+In the selected gallery folder's menu (or All assets), **Clear failed/stuck jobs** removes
+only failed or confirmed interrupted placeholders in the current image/video view,
+including the selected folder's descendants. It never clears healthy queued/running jobs or saved media.
+
+---
+
 # 🤝 Contributions
 
 Contributions are welcome.
@@ -302,4 +312,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-

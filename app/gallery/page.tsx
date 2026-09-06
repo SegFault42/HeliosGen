@@ -11,6 +11,7 @@ import { Maximize2, Minimize2, ShieldAlert, X } from "lucide-react";
 type User = { id: string };
 import { GalleryItem, getToken, galleryCache } from "@/lib/galleryUtils";
 import { useFolderStore } from "@/lib/folderStore";
+import { shouldClearJob, type JobCleanupScope } from "@/lib/pendingJobCleanup";
 import { MediaPickerModal } from "@/components/MediaPickerModal";
 import { useSidebar } from "@/components/ui/sidebar";
 import { QuickAssist } from "@/components/QuickAssist";
@@ -357,7 +358,7 @@ function JobTiming({ pg }: { pg: PendingGen }) {
   return <span style={{ fontSize: 10, color: "#aaa" }}>{pg.provider ?? "Provider pending"}{Number.isFinite(seconds) ? ` · ${Math.floor(seconds / 60)}m ${seconds % 60}s` : ""}</span>;
 }
 
-function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void }) {
+function PendingGenTile({ pg, onCancel, onDismiss }: { pg: PendingGen; onCancel: () => void; onDismiss: () => void }) {
   return (
     <>
       {/* Top radial glow — blue-emerald with slow pulse */}
@@ -420,6 +421,13 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
             </svg>
             <span style={{ fontSize: "11px", color: "#ccc", fontWeight: 500 }}>Cancel</span>
           </button>
+        )}
+        {!pg.prePending && (
+          <button
+            onClick={onDismiss}
+            title="Remove this placeholder only. The provider may continue; completed media will still be saved."
+            style={{ flexShrink: 0, fontSize: 11, color: "#aaa", padding: "4px 8px", borderRadius: 999, background: "rgba(0,0,0,0.58)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}
+          >Dismiss</button>
         )}
       </div>
 
@@ -931,12 +939,8 @@ function GalleryInner() {
   // Handle "Clean failed jobs" dispatched from the sidebar
   useEffect(() => {
     function handle(e: Event) {
-      const { folderId } = (e as CustomEvent<{ folderId: string | null }>).detail;
-      setPendingGens(prev => prev.filter(pg => {
-        if (!pg.error) return true;
-        if (folderId === null) return false;
-        return pg.folderId !== folderId;
-      }));
+      const scope = (e as CustomEvent<JobCleanupScope>).detail;
+      setPendingGens(prev => prev.filter(pg => !shouldClearJob(pg, scope)));
     }
     window.addEventListener("clean-failed-jobs", handle);
     return () => window.removeEventListener("clean-failed-jobs", handle);
@@ -2972,7 +2976,7 @@ function GalleryInner() {
                                   <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
                                 </svg>
                               </button>
-                              <button className="gallery-action-btn gallery-delete-btn" title="Dismiss" onClick={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}>
+                              <button className="gallery-action-btn gallery-delete-btn" title="Dismiss placeholder only; saved media is kept and the provider may still be running." onClick={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                                 </svg>
@@ -2983,6 +2987,7 @@ function GalleryInner() {
                           <PendingGenTile
                             pg={pg}
                             onCancel={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}
+                            onDismiss={() => setPendingGens(prev => prev.filter(p => p.id !== pg.id))}
                           />
                         )}
                       </div>
