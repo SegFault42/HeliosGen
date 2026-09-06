@@ -168,6 +168,18 @@ Provider-boundary checks: `node --experimental-strip-types --test lib/codexPromp
 
 ## Local data store
 
+### Codex connection checks
+
+Settings reports image-CLI installation and the local ChatGPT login separately.
+Checks run only local, bounded commands; they never generate an image, refresh
+authentication, or initiate login. Image capability is **Not verified**: even a
+local signed-in session does not prove current quota/model access. The most
+recent successful Codex image timestamp is historical evidence only.
+API-key sessions are distinguished from ChatGPT, and an auth file alone never
+counts as signed in. Explicit Connect/Reauth still starts the device-login flow.
+The status endpoint returns `imageCli`, `chatgptLogin`, `imageGeneration`, and
+`lastSuccessAt` instead of the old `ready`/`authFound` interpretation.
+
 `lib/guest/sqlite.ts` (SQLite via `node:sqlite`, built into Node 22 — no native
 dep) backs `lib/guest/db.ts` (generations, uploads, folders, settings, asset
 hashes) and `lib/guest/spaces.ts` (workflows, served to `useSpaceSync` via
@@ -206,7 +218,7 @@ plus every referenced image/video — portable and shareable as a file
 - [x] External CLIs — the shell resolves the login-shell `$PATH` for the sidecar
       so `ffmpeg`/`ffprobe` (video trim, frame extract) and `codex`/
       `codex-imagegen` (optional Codex provider) are found. They're not bundled;
-      if absent the feature degrades cleanly (Codex badge shows NOT CONFIGURED,
+      if absent the feature degrades cleanly (Codex checks report missing tools,
       video-trim errors). Codex still needs a one-time `codex login` in Settings.
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to

@@ -150,6 +150,15 @@ export function getGenerations(userId: string, type: "image" | "video"): Generat
   return rows.map(rowToGeneration);
 }
 
+/** Historical evidence only; does not prove current remote model access. */
+export function lastSuccessfulCodexImage(userId: string): string | null {
+  const row = db().prepare(`SELECT created_at FROM generations
+    WHERE user_id = ? AND generation_type = 'image' AND status = 'done'
+      AND task_id LIKE 'codex-%' AND image_url IS NOT NULL AND image_url != ''
+    ORDER BY created_at DESC LIMIT 1`).get(userId) as { created_at: string } | undefined;
+  return row?.created_at ?? null;
+}
+
 export function deleteGeneration(id: string, userId: string): void {
   db().prepare("DELETE FROM generations WHERE id = ? AND user_id = ?").run(id, userId);
 }

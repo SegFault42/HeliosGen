@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { checkCodexLogin } from "./codexStatus.mjs";
 
 /** null means not configured, never a runtime/model/quota failure. */
 export async function enhanceWithCodex(instruction: string, signal: AbortSignal): Promise<string | null> {
@@ -20,17 +21,10 @@ export async function enhanceWithCodex(instruction: string, signal: AbortSignal)
       child.stdin?.end(input);
     });
 
-  let login;
-  try { login = await run(["login", "status"], tmpdir(), 5000); }
-  catch (error) {
-    signal.throwIfAborted();
-    const failure = error as { code?: string | number; stderr?: string };
-    if (failure.code === "ENOENT" || (typeof failure.code === "number" && /not logged in/i.test(failure.stderr ?? ""))) return null;
-    throw new Error("Could not check Codex login. Fix the local CLI and retry; Kie was not called.");
-  }
-  const loginText = login.stdout + login.stderr;
-  if (/logged in using an? api key|not logged in/i.test(loginText)) return null;
-  if (!/logged in using chatgpt/i.test(loginText)) {
+  const login = await checkCodexLogin(signal);
+  signal.throwIfAborted();
+  if (login === "missing" || login === "signed_out" || login === "api_key") return null;
+  if (login !== "chatgpt") {
     throw new Error("Could not confirm a Codex ChatGPT login; Kie was not called.");
   }
 

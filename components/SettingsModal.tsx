@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { CodexConnection } from "@/lib/codexStatus.mjs";
 import { LocalUpdateButton } from "@/components/UpdateBanner";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MODEL_GROUPS } from "@/lib/models";
@@ -13,8 +14,7 @@ export type { ProviderId };
 
 export type CodexStatus =
   | { kind: "unknown" }
-  | { kind: "ready" }
-  | { kind: "not_ready"; installed: boolean; authFound: boolean };
+  | { kind: "checked"; details: CodexConnection };
 
 /* ─── Persistence ───────────────────────────────────────────────────────────── */
 
@@ -487,12 +487,12 @@ function ApiKeysPanel({
         } else if (d.status === "error") {
           // Safety net: the login-store verdict can race the credential write.
           // Before showing a red error, confirm against codex-status (which
-          // just checks auth.json on disk) — if the login actually landed,
+          // verifies the local ChatGPT login) — if the login actually landed,
           // treat it as success instead of latching an error.
           let recovered = false;
           try {
             const s = await fetch("/api/settings/codex-status").then((r) => r.json());
-            if (s.ready || s.authFound) recovered = true;
+            if (s.chatgptLogin === "chatgpt") recovered = true;
           } catch { /* fall through to error */ }
           if (recovered) {
             setLoginFlow({ status: "idle" });
@@ -829,20 +829,26 @@ function ApiKeysPanel({
           <span
             style={{
               marginLeft: "auto", fontSize: "10px", fontWeight: 600,
-              color: codexStatus.kind === "ready" ? "rgba(74,222,128,0.8)" : "rgba(251,146,60,0.8)",
-              background: codexStatus.kind === "ready" ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)",
-              border: `1px solid ${codexStatus.kind === "ready" ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`,
+              color: "rgba(255,255,255,0.5)",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap",
             }}
           >
-            {codexStatus.kind === "unknown" ? "CHECKING…" : codexStatus.kind === "ready" ? "READY" : "NOT CONFIGURED"}
+            {codexStatus.kind === "unknown" ? "CHECKING…" : "LOCAL CHECK"}
           </span>
         </div>
 
-        {/* auth.json can exist but hold a stale/invalidated refresh token (e.g. the
-            "session has ended" 401) — the status check only sees that the file is
-            there, so it still reports READY. Offer a manual reauth escape hatch. */}
-        {codexStatus.kind === "ready" && loginFlow.status === "idle" && (
+        {codexStatus.kind === "checked" && <div role="status" style={{ fontSize: "11px", lineHeight: 1.7, color: "rgba(255,255,255,0.55)" }}>
+          <div>Image CLI: {{ installed: "Installed", missing: "Not installed", error: "Check failed" }[codexStatus.details.imageCli]}</div>
+          <div>ChatGPT sign-in (local): {{ chatgpt: "Signed in", signed_out: "Signed out", api_key: "API-key login (ChatGPT required)", missing: "Cannot check — codex CLI missing", unknown: "Unverified", error: "Check failed" }[codexStatus.details.chatgptLogin]}</div>
+          <div>Image generation: Not verified</div>
+          {codexStatus.details.lastSuccessAt && <div>Last successful Codex image: {new Date(codexStatus.details.lastSuccessAt).toLocaleString()}</div>}
+          <div style={{ color: "rgba(255,255,255,0.3)" }}>Local checks and past success do not guarantee current model access. No test image is generated.</div>
+          <button onClick={onCodexLoginSuccess} style={{ padding: "4px 0", color: "rgba(255,255,255,0.65)", cursor: "pointer", background: "none", border: "none" }}>Refresh checks</button>
+        </div>}
+
+        {codexStatus.kind === "checked" && codexStatus.details.chatgptLogin === "chatgpt" && loginFlow.status === "idle" && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5, flex: 1 }}>
               Getting a &quot;session has ended&quot; or 401 error? Reauth below.
@@ -864,7 +870,7 @@ function ApiKeysPanel({
             host — the CLI clears old credentials the moment a login attempt begins,
             before the user does anything in the browser. Only offer it when auth is
             actually missing; a missing binary alone shouldn't risk a working login. */}
-        {codexStatus.kind === "not_ready" && !codexStatus.authFound && loginFlow.status === "idle" && (
+        {codexStatus.kind === "checked" && ["signed_out", "api_key"].includes(codexStatus.details.chatgptLogin) && loginFlow.status === "idle" && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5, flex: 1 }}>
               Requires <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>codex-imagegen-cli</a> installed on this server. Sign in below.
@@ -882,9 +888,9 @@ function ApiKeysPanel({
           </div>
         )}
 
-        {codexStatus.kind === "not_ready" && codexStatus.authFound && !codexStatus.installed && loginFlow.status === "idle" && (
+        {codexStatus.kind === "checked" && codexStatus.details.imageCli === "missing" && loginFlow.status === "idle" && (
           <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
-            Signed in, but <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>codex-imagegen-cli</a> isn&apos;t installed on this server yet — image generation will fail until it is.
+            <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>codex-imagegen-cli</a> isn&apos;t installed on this server yet — install it before generating images.
           </p>
         )}
 
@@ -1354,11 +1360,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const refreshCodexStatus = useCallback(() => {
     fetch("/api/settings/codex-status")
-      .then((r) => r.json())
-      .then((d: { ready: boolean; installed: boolean; authFound: boolean }) =>
-        setCodexStatus(d.ready ? { kind: "ready" } : { kind: "not_ready", installed: d.installed, authFound: d.authFound })
+      .then((r) => { if (!r.ok) throw new Error("Status check failed"); return r.json(); })
+      .then((details: CodexConnection) =>
+        setCodexStatus({ kind: "checked", details })
       )
-      .catch(() => setCodexStatus({ kind: "not_ready", installed: false, authFound: false }));
+      .catch(() => setCodexStatus({ kind: "checked", details: { imageCli: "error", chatgptLogin: "error", imageGeneration: "not_verified", lastSuccessAt: null } }));
   }, []);
 
   /* Load persisted data on mount */
