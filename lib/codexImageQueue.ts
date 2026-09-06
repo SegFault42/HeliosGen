@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 // One slot per server process, including development module reloads. Jobs retain
 // their own result; a rejected job must not poison the FIFO tail.
 const state = globalThis as typeof globalThis & { heliosCodexImageTail?: Promise<void> };
@@ -32,4 +34,3 @@ export function runCodexImageCommand(args: string[]): Promise<{ exitCode: number
     });
   });
 }
-import { spawn } from "node:child_process";

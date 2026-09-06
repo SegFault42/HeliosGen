@@ -102,6 +102,7 @@ function fetchBuffer(url: string, maxRedirects = 5, signal?: AbortSignal): Promi
         return reject(new Error(`HTTP ${res.statusCode} fetching image`));
       }
       const chunks: Buffer[] = [];
+      res.on("error", reject);
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end",  () => resolve(Buffer.concat(chunks)));
       res.on("error", reject);

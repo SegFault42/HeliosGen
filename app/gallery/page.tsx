@@ -974,7 +974,7 @@ function GalleryInner() {
         window.dispatchEvent(new Event("credits-refresh"));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+        setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: msg } : p));
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1917,7 +1917,7 @@ function GalleryInner() {
       const token = await getToken();
       if (!token) {
         setPendingGens(prev => prev.map(p =>
-          activeIds.has(p.id) ? { ...p, error: "Please sign in to generate." } : p
+          activeIds.has(p.id) ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: "Please sign in to generate." } : p
         ));
         return;
       }
@@ -1957,7 +1957,7 @@ function GalleryInner() {
           );
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: msg } : p));
           browserNotify("Generation failed", msg.slice(0, 100));
         }
       };
@@ -2895,7 +2895,7 @@ function GalleryInner() {
                                 const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: pg.createdAt ?? new Date().toISOString(), tab: pg.tab, retried: true, folderId: pg.folderId };
                                 setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
                                 const token = await getToken();
-                                if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p)); return; }
+                                if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: "Please sign in." } : p)); return; }
                                 const storedRefs = pg.referenceImageUrls ?? [];
                                 const retryIsVideo = pg.tab === "videos";
                                 let taskId: string;
@@ -2930,7 +2930,7 @@ function GalleryInner() {
                                   }
                                   setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, taskId } : p));
                                 } catch (e: unknown) {
-                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } : p));
                                   return;
                                 }
                                 try {
@@ -2959,7 +2959,7 @@ function GalleryInner() {
                                   onGenComplete(newPending.folderId, fresh.filter(i => !existingIds.has(i.id)).map(i => i.id));
                                   window.dispatchEvent(new Event("credits-refresh"));
                                 } catch (e: unknown) {
-                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } : p));
                                 }
                               }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
