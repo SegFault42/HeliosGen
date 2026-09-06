@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
+import { enqueueCodexImage } from "@/lib/codexImageQueue";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/storage";
@@ -79,21 +80,22 @@ function httpsPost(
 // Fetch any http/https URL to a Buffer, following redirects.
 // Root-relative "/generated/..." refs aren't valid URLs — read those straight
 // off local disk.
-function fetchBuffer(url: string, maxRedirects = 5): Promise<Buffer> {
+function fetchBuffer(url: string, maxRedirects = 5, signal?: AbortSignal): Promise<Buffer> {
   if (url.startsWith("/generated/")) {
     const rel = normalize(decodeURIComponent(url.slice("/generated/".length).split(/[?#]/)[0]));
     if (rel.startsWith("..") || rel.includes("\0")) {
       return Promise.reject(new Error(`Refusing to read outside media dir: ${url}`));
     }
-    return readFile(join(MEDIA_DIR, rel));
+    return readFile(join(MEDIA_DIR, rel), { signal });
   }
   return new Promise((resolve, reject) => {
     if (maxRedirects <= 0) return reject(new Error("Too many redirects"));
     const u   = new URL(url);
     const mod = u.protocol === "https:" ? https : (http as unknown as typeof https);
-    mod.get(url, (res) => {
+    mod.get(url, { signal }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchBuffer(res.headers.location, maxRedirects - 1).then(resolve).catch(reject);
+        res.resume();
+        return fetchBuffer(new URL(res.headers.location, url).href, maxRedirects - 1, signal).then(resolve).catch(reject);
       }
       if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
         return reject(new Error(`HTTP ${res.statusCode} fetching image`));
@@ -245,10 +247,26 @@ async function runCodexImagegen(opts: {
 
     const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
       let err = "";
-      const proc = spawn("codex-imagegen", args);
+      let timedOut = false;
+      let spawnError: Error | undefined;
+      let forceKill: ReturnType<typeof setTimeout> | undefined;
+      const proc = spawn("codex-imagegen", args, { stdio: ["ignore", "ignore", "pipe"] });
+      const deadline = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+        forceKill = setTimeout(() => proc.kill("SIGKILL"), 2_000);
+      }, 10 * 60_000);
       proc.stderr.on("data", (d: Buffer) => err += d.toString());
-      proc.on("close", (code) => resolve({ exitCode: code ?? -1, stderr: err }));
-      proc.on("error", (e) => reject(new Error(`codex-imagegen spawn failed: ${e.message} — is it installed and on PATH?`)));
+      proc.on("error", (e) => { spawnError = e; });
+      // Only settle after close: a timeout must not free the queue while the
+      // old CLI is still running. Spawn failures also emit close.
+      proc.on("close", (code) => {
+        clearTimeout(deadline);
+        clearTimeout(forceKill);
+        if (timedOut) reject(new Error("Codex image generation timed out after 10 minutes."));
+        else if (spawnError) reject(new Error(`codex-imagegen spawn failed: ${spawnError.message} — is it installed and on PATH?`));
+        else resolve({ exitCode: code ?? -1, stderr: err });
+      });
     });
 
     if (exitCode !== 0) {
@@ -466,16 +484,21 @@ export async function POST(req: NextRequest) {
       .replace(/<<<image (\d+)>>>/gi, (_m, n) => `image ${n}`)
       + (aspectRatio && aspectRatio !== "auto" ? ` Aspect ratio: ${aspectRatio}.` : "")).trim();
 
-    (async () => {
+    void enqueueCodexImage(async () => {
       try {
-        const images = await Promise.all(
-          r2ImageUrls.slice(0, 5).map(async (url) => {
-            const buf = await fetchBuffer(url);
+        const images: Array<{ buf: Buffer; ext: string }> = [];
+        const downloadSignal = AbortSignal.timeout(60_000);
+        try {
+          for (const url of r2ImageUrls.slice(0, 5)) {
+            const buf = await fetchBuffer(url, 5, downloadSignal);
             const raw = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
             const ext = raw === "jpg" ? "jpeg" : raw;
-            return { buf, ext };
-          }),
-        );
+            images.push({ buf, ext });
+          }
+        } catch (error) {
+          if (downloadSignal.aborted) throw new Error("Codex reference image download timed out after 60 seconds.");
+          throw error;
+        }
 
         const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size });
         const imageUrl = await uploadBuffer(outBuf, "image/png", "generated");
@@ -491,7 +514,7 @@ export async function POST(req: NextRequest) {
         console.error("[codex] background error:", msg, e);
         jobStore.set(codexTaskId, { status: "error", error: cleanCodexError(msg) });
       }
-    })();
+    });
 
     return NextResponse.json({ taskId: codexTaskId });
   }

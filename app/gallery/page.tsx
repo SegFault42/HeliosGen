@@ -1901,28 +1901,7 @@ function GalleryInner() {
 
       setSubmitting(true);
       const promptByPendingId = new Map(newPendings.map((p, i) => [p.id, multiPrompts ? multiPrompts[i] : undefined]));
-      let taskIds: string[];
-      try {
-        taskIds = await Promise.all(active.map(p => generateOne(token, promptByPendingId.get(p.id))));
-      } catch (e: unknown) {
-        setSubmitting(false);
-        const msg = e instanceof Error ? e.message : String(e);
-        setPendingGens(prev => prev.map(p =>
-          activeIds.has(p.id) ? { ...p, error: msg } : p
-        ));
-        return;
-      }
-      setSubmitting(false);
-
-      // Store taskIds so polls can be resumed after a page refresh
-      setPendingGens(prev => prev.map(p => {
-        const idx = active.findIndex(np => np.id === p.id);
-        return idx >= 0 ? { ...p, taskId: taskIds[idx] } : p;
-      }));
-
-      // ── Poll each task independently ──────────────────────────────────────
-      taskIds.forEach(async (taskId, i) => {
-        const pending = active[i];
+      const trackTask = async (pending: PendingGen, taskId: string) => {
         try {
           await pollTask(taskId);
           // Fetch fresh items before touching state so both updates land in one render.
@@ -1958,7 +1937,22 @@ function GalleryInner() {
           setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
           browserNotify("Generation failed", msg.slice(0, 100));
         }
-      });
+      };
+
+      // Save and track each accepted submission immediately. A rejected sibling
+      // must not lose task IDs or stop polling work the server already accepted.
+      await Promise.all(active.map(async pending => {
+        try {
+          const taskId = await generateOne(token, promptByPendingId.get(pending.id));
+          if (!taskId) throw new Error("Generation returned no task ID.");
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, taskId } : p));
+          void trackTask(pending, taskId);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+        }
+      }));
+      setSubmitting(false);
     };
 
     const batchTimer = setTimeout(submitBatch, 3000);
