@@ -115,6 +115,14 @@ if (!existsSync(join(STANDALONE, "server.js"))) {
 
 console.log("[desktop] staging server →", STAGE);
 cpSync(STANDALONE, STAGE, { recursive: true });
+// Opt in for a local source installation only. Published release bundles must
+// not contain the build machine's checkout path or offer source installation.
+if (process.env.HELIOS_LOCAL_UPDATER === "1" && process.platform === "darwin") {
+  writeFileSync(join(STAGE, "local-updater.json"), JSON.stringify({
+    root: execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: ROOT, encoding: "utf8" }).trim(),
+    revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim(),
+  }));
+}
 rmSync(join(STAGE, "src-tauri"), { recursive: true, force: true }); // never nest ourselves
 cpSync(join(ROOT, ".next", "static"), join(STAGE, ".next", "static"), { recursive: true });
 copyFileSync(join(ROOT, "scripts", "desktop", "sidecar-guard.js"), join(STAGE, "sidecar-guard.js"));

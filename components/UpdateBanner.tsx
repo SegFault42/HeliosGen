@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * "Update available" bar, styled like {@link KieBanner} but amber.
@@ -160,6 +161,78 @@ export default function UpdateBanner() {
       {open && <ChangelogModal info={info} onClose={() => setOpen(false)} />}
     </>
   );
+}
+
+/** Compact update action in the Settings sidebar. */
+export function LocalUpdateButton() {
+  const [state, setState] = useState({ available: false, running: false, message: "", error: false });
+  const [starting, setStarting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [requested, setRequested] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => fetch("/api/app-update", { cache: "no-store" })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((s) => { if (alive) setState(s); })
+      .catch(() => { /* The sidecar is briefly offline during app replacement. */ });
+    void poll();
+    const timer = setInterval(poll, 2000);
+    return () => { alive = false; clearInterval(timer); };
+  }, []);
+
+  async function update() {
+    setConfirming(false);
+    setRequested(true);
+    setStarting(true);
+    try {
+      const response = await fetch("/api/app-update", {
+        method: "POST", headers: { "x-helios-update": "1" },
+        signal: AbortSignal.timeout(10000),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not start update.");
+      setState((s) => ({ ...s, running: true, error: false, message: result.message }));
+    } catch (error) {
+      setState((s) => ({ ...s, error: true, message: (error as Error).message }));
+    } finally { setStarting(false); }
+  }
+
+  if (!state.available) return (
+    <a href="https://github.com/SegFault42/HeliosGen/releases/latest"
+      style={{ marginTop: "auto", padding: "24px 10px 8px", fontSize: 12, color: "rgba(255,255,255,0.5)", textDecoration: "none" }}>
+      Check for updates ↗
+    </a>
+  );
+
+  return <><div style={{ marginTop: "auto", paddingTop: 16 }}>
+    <button onClick={() => setConfirming(true)} disabled={!state.available || state.running || starting}
+      title={!state.available ? "Restore the local source checkout to enable updates" : "Install the latest stable release and restart"}
+      style={{ width: "100%", textAlign: "left", fontSize: 12, fontWeight: 400, padding: "8px 10px", borderRadius: 7,
+        border: "none", background: "transparent", color: "rgba(255,255,255,0.5)",
+        cursor: state.running || starting || !state.available ? "default" : "pointer", opacity: state.running || starting || !state.available ? 0.6 : 1 }}>
+      {state.running || starting ? "Updating…" : "Update HeliosGen"}
+    </button>
+    {(requested || state.running || state.error) && <span role="status" aria-live="polite"
+      style={{ display: "block", padding: "4px 10px", fontSize: 11, overflowWrap: "anywhere", color: state.error ? "#f87171" : "rgba(255,255,255,0.4)" }}>
+      {state.message}
+    </span>}
+  </div>
+    {confirming && createPortal(<div style={{ position: "fixed", inset: 0, zIndex: 10001, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)" }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="update-title" aria-describedby="update-description"
+        style={{ width: "min(90vw, 460px)", padding: 24, borderRadius: 16, background: "#0a0b0e", border: "1px solid rgba(255,255,255,0.15)", color: "#eee" }}>
+        <h2 id="update-title" style={{ fontSize: 17, fontWeight: 600 }}>Update HeliosGen?</h2>
+        <p id="update-description" style={{ fontSize: 13, lineHeight: 1.6, margin: "16px 0", color: "#aaa" }}>
+          Save your work and finish any generations first. If a new stable release is available,
+          it will build and install automatically, then restart the app. This can take several minutes.
+          Your media and settings stay in place; the database and previous app are backed up.
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+          <button autoFocus onClick={() => setConfirming(false)} style={{ padding: "8px 14px", color: "#ccc", cursor: "pointer" }}>Cancel</button>
+          <button onClick={update} style={{ padding: "8px 14px", borderRadius: 8, color: `rgb(${AMBER})`, background: `rgba(${AMBER},0.15)`, border: `1px solid rgba(${AMBER},0.4)`, cursor: "pointer" }}>Check and install update</button>
+        </div>
+      </div>
+    </div>, document.body)}
+  </>;
 }
 
 function ChangelogModal({ info, onClose }: { info: UpdateInfo; onClose: () => void }) {
