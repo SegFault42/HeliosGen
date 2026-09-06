@@ -36,7 +36,7 @@ export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
   void loop(taskId, apiKey, kind)
     .catch((e) => {
       console.error(`[kie-poller] ${taskId} crashed:`, e);
-      settle(taskId, kind, { status: "error", error: "Generation failed (poller error)" });
+      settle(taskId, kind, { status: "error", phase: "interrupted", error: "Status tracking was interrupted. The provider may still be running." });
     })
     .finally(() => active.delete(taskId));
 }
@@ -54,11 +54,13 @@ function isKieTaskId(taskId: string): boolean {
  * only — reads the kie.ai key from the guest DB). No-op if already polling, if
  * no key is configured, or if the task belongs to a non-kie local provider.
  */
-export function resumeKieJob(taskId: string, kind: Kind): void {
-  if (active.has(taskId) || !isKieTaskId(taskId)) return;
+export function resumeKieJob(taskId: string, kind: Kind): boolean {
+  if (active.has(taskId)) return true;
+  if (!isKieTaskId(taskId)) return false;
   const key = guestDb.getKieApiToken();
-  if (!key) return;
+  if (!key) return false;
   pollKieJob(taskId, key, kind);
+  return true;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -73,11 +75,11 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
     try {
       const res = await fetch(
         `${BASE}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
-        { headers: { Authorization: `Bearer ${apiKey}` } },
+        { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(30_000) },
       );
       const json = await res.json();
       if (json?.code !== undefined && json.code !== 200 && json.code !== 0) {
-        settle(taskId, kind, { status: "error", error: json.msg ?? `kie.ai error ${json.code}` });
+        settle(taskId, kind, { status: "error", phase: "interrupted", error: `Status tracking unavailable: ${json.msg ?? `kie.ai error ${json.code}`}. The provider may still be running.` });
         return;
       }
       data = (json?.data ?? json) as Record<string, unknown>;
@@ -87,6 +89,9 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
     }
 
     const state = String(data.state ?? data.status ?? "").toLowerCase();
+    if (["generating", "running", "processing"].includes(state)) {
+      jobStore.set(taskId, { status: "pending", type: kind, phase: "generating" });
+    }
 
     if (state === "success" || state === "succeeded") {
       const urls = extractUrls(data);
@@ -107,7 +112,7 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
     // waiting / queuing / generating / running → keep polling
   }
 
-  settle(taskId, kind, { status: "error", error: "Generation timed out" });
+  settle(taskId, kind, { status: "error", phase: "interrupted", error: "Status tracking timed out. The provider may still be running; reopen the gallery to check again." });
 }
 
 function extractUrls(data: Record<string, unknown>): string[] {
@@ -164,7 +169,7 @@ function settle(taskId: string, kind: Kind, result: JobResult): void {
         ? { status: "done", video_url: result.videoUrl }
         : { status: "done", image_url: result.imageUrl, image_urls: result.imageUrls },
     );
-  } else if (result.status === "error") {
+  } else if (result.status === "error" && result.phase !== "interrupted") {
     guestDb.updateGeneration(taskId, { status: "error", error_msg: result.error });
   }
 }
