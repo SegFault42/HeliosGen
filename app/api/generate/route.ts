@@ -194,7 +194,7 @@ const CODEX_SIZE_MAP: Record<string, string> = {
 /**
  * codex-imagegen's stderr wraps the underlying failure as `codex-imagegen exited
  * with code N: <tmp path> Error: <detail>`, where <detail> is either a JSON blob
- * (e.g. `HTTP 429: {"error":{"message":"..."}}`) or plain prose terminated by a
+ * (e.g. `HTTP 429: {"error":{"message":"..."}}`) or plain prose including a
  * semicolon (e.g. `Responses stream ended without an image result; last status
  * was failed.`). Pull out just the useful part instead of showing the whole dump.
  */
@@ -211,8 +211,7 @@ function cleanCodexError(raw: string): string {
     } catch { /* not valid JSON — fall through */ }
   }
 
-  const semiIdx = tail.indexOf(";");
-  return (semiIdx !== -1 ? tail.slice(0, semiIdx).trim() : tail) || raw;
+  return tail || raw; // Keep the final status/reason after a semicolon.
 }
 
 /**
@@ -252,7 +251,7 @@ async function runCodexImagegen(opts: {
     });
 
     if (exitCode !== 0) {
-      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(0, 500) || "no stderr output"}`);
+      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-2000) || "no stderr output"}`);
     }
 
     return await readFile(outPath);
