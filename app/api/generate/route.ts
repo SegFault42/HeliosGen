@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
-import { enqueueCodexImage } from "@/lib/codexImageQueue";
+import { enqueueCodexImage, runCodexImageCommand } from "@/lib/codexImageQueue";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/storage";
@@ -98,6 +98,7 @@ function fetchBuffer(url: string, maxRedirects = 5, signal?: AbortSignal): Promi
         return fetchBuffer(new URL(res.headers.location, url).href, maxRedirects - 1, signal).then(resolve).catch(reject);
       }
       if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+        res.destroy();
         return reject(new Error(`HTTP ${res.statusCode} fetching image`));
       }
       const chunks: Buffer[] = [];
@@ -245,29 +246,7 @@ async function runCodexImagegen(opts: {
       ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"]
       : ["generate", "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"];
 
-    const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
-      let err = "";
-      let timedOut = false;
-      let spawnError: Error | undefined;
-      let forceKill: ReturnType<typeof setTimeout> | undefined;
-      const proc = spawn("codex-imagegen", args, { stdio: ["ignore", "ignore", "pipe"] });
-      const deadline = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-        forceKill = setTimeout(() => proc.kill("SIGKILL"), 2_000);
-      }, 10 * 60_000);
-      proc.stderr.on("data", (d: Buffer) => err += d.toString());
-      proc.on("error", (e) => { spawnError = e; });
-      // Only settle after close: a timeout must not free the queue while the
-      // old CLI is still running. Spawn failures also emit close.
-      proc.on("close", (code) => {
-        clearTimeout(deadline);
-        clearTimeout(forceKill);
-        if (timedOut) reject(new Error("Codex image generation timed out after 10 minutes."));
-        else if (spawnError) reject(new Error(`codex-imagegen spawn failed: ${spawnError.message} — is it installed and on PATH?`));
-        else resolve({ exitCode: code ?? -1, stderr: err });
-      });
-    });
+    const { exitCode, stderr } = await runCodexImageCommand(args);
 
     if (exitCode !== 0) {
       // The useful part — codex-imagegen's final `Error: ...` line — is at the
@@ -333,7 +312,10 @@ export async function POST(req: NextRequest) {
 
   let r2ImageUrls: string[] = [];
   try {
-    r2ImageUrls = await resolveImages(imageUrls);
+    // Codex resolves references inside its queue slot with a download deadline,
+    // rather than performing unbounded mirroring before returning the task ID.
+    r2ImageUrls = codexProvider && !(azureBaseUrl && azureDeployment)
+      ? imageUrls.slice(0, 5) : await resolveImages(imageUrls);
   } catch {
     // image mirroring failures are non-fatal — proceed without reference images
   }
@@ -468,7 +450,7 @@ export async function POST(req: NextRequest) {
   // session on this host — so there's no key lookup here, unlike the other branches.
   if (codexProvider) {
     const codexTaskId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+    jobStore.set(codexTaskId, { status: "pending", phase: "queued", type: "image", userId: currentUserId ?? undefined });
 
     const codexUserId = currentUserId;
     const size = CODEX_SIZE_MAP[aspectRatio] ?? "auto";
@@ -486,13 +468,16 @@ export async function POST(req: NextRequest) {
 
     void enqueueCodexImage(async () => {
       try {
+        jobStore.set(codexTaskId, { status: "pending", phase: "generating" });
         const images: Array<{ buf: Buffer; ext: string }> = [];
         const downloadSignal = AbortSignal.timeout(60_000);
         try {
           for (const url of r2ImageUrls.slice(0, 5)) {
-            const buf = await fetchBuffer(url, 5, downloadSignal);
-            const raw = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
-            const ext = raw === "jpg" ? "jpeg" : raw;
+            downloadSignal.throwIfAborted();
+            const data = url.match(/^data:image\/([^;]+);base64,([\s\S]+)$/);
+            const buf = data ? Buffer.from(data[2], "base64") : await fetchBuffer(url, 5, downloadSignal);
+            const raw = data?.[1] ?? url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
+            const ext = ["png", "jpeg", "webp", "gif"].includes(raw) ? raw : raw === "jpg" ? "jpeg" : "png";
             images.push({ buf, ext });
           }
         } catch (error) {
