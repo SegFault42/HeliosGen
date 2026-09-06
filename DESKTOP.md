@@ -142,18 +142,29 @@ are not automatically deleted. If startup verification fails, the prior bundle
 and database remain available for manual recovery; no database rollback is done
 automatically. Normal release builds omit the local checkout configuration.
 
-## Prompt expansion
+## Prompt enhancement
 
-In the image or video gallery composer, type `/prompt <idea>` and press Enter
-(Shift+Enter inserts a newline), or click **Expand prompt**. The command replaces
-the idea with an editable expanded prompt and does not generate media. It also
-works on individual blocks in multi-prompt mode. Video prompts include motion
-and camera direction; image prompts describe a still composition.
+The **Enhance** switch beside JSON/YAML starts off and remembers its setting per
+image/video tab and folder. When on, the composer action is **Enhance prompt**.
+Submit to enhance, review the inserted text, then press **Generate** to generate
+with the unchanged result. Editing it enables enhancement again; switch Enhance
+off to generate exact edited text. Typing/toggling never calls a model.
 
-Expansion uses Kie's `gpt-5-6-luna` via `/codex/v1/responses`, with low reasoning
-effort and the API key in Settings. It consumes Kie text-model credits and does
-not change the selected media provider. Failed requests preserve the original
-text, and changing tab/folder aborts the request. There is no fallback provider.
+`/prompt <idea>` plus Enter remains an explicit shortcut regardless of the switch;
+Shift+Enter inserts a newline. Multi-prompt enhancement processes nonempty blocks
+sequentially and replaces the draft only after all succeed. Video enhancement
+includes motion and camera direction. Errors preserve the original text, and
+changing tab/folder cancels the request. Enhancement never creates generation tiles.
+
+The backend checks the actual `codex` CLI and ChatGPT login, then uses
+`gpt-5.6-luna` with low reasoning in an ephemeral, read-only session that ignores
+the user's model configuration. Only missing Codex/ChatGPT setup allows fallback
+to Kie's `gpt-5-6-luna` via `/codex/v1/responses` and the saved Settings API key.
+The fallback consumes Kie text credits and is identified by a brief toast.
+Configured Codex errors, timeouts, model-access failures and limits do not trigger
+paid fallback. The selected image/video generation provider is never changed.
+
+Provider-boundary checks: `node --experimental-strip-types --test lib/codexPrompt.test.mjs`.
 
 ## Local data store
 
