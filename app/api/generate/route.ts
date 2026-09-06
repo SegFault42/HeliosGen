@@ -251,7 +251,15 @@ async function runCodexImagegen(opts: {
     });
 
     if (exitCode !== 0) {
-      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-2000) || "no stderr output"}`);
+      // The useful part — codex-imagegen's final `Error: ...` line — is at the
+      // *tail* of stderr, after any retry `Warning:` lines. Those warnings
+      // (now including a raw failed-item dump per retry, see cli.py's
+      // item_failed_no_detail handling) can push well past a head-truncated
+      // slice, which cuts the real error off before cleanCodexError() ever
+      // sees it. Log the untruncated stream for debugging and only cap what
+      // gets wrapped into the thrown Error as a sane upper bound.
+      console.error("[codex-imagegen] full stderr:", stderr || "(empty)");
+      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`);
     }
 
     return await readFile(outPath);

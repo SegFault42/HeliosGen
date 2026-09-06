@@ -23,6 +23,7 @@ export interface NodeData extends Record<string, unknown> {
   status?: NodeStatus;
   // shared
   prompt?: string;
+  textMode?: "text" | "json" | "yaml"; // initial JSON/YAML toggle state for promptNode (seeded on creation)
   // comment / sticky-note node
   comment?: string;
   // generate node
