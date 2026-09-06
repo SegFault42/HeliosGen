@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -711,8 +711,14 @@ function GalleryInner() {
     original: string; mode: "text" | "json" | "yaml"; enhanced: string;
   } | null>(null);
   const promptExpansion = useRef<AbortController | null>(null);
+  const latestPromptDraft = useRef({ prompt, tab, folderId: selectedFolderId });
   // An edit (even one later undone) invalidates an in-flight enhancement.
-  useEffect(() => () => { promptExpansion.current?.abort(); }, [tab, selectedFolderId, prompt]);
+  // Layout cleanup runs synchronously with the committed change, before a late
+  // response can insert its result while passive effects are still pending.
+  useLayoutEffect(() => {
+    latestPromptDraft.current = { prompt, tab, folderId: selectedFolderId };
+    return () => { promptExpansion.current?.abort(); };
+  }, [tab, selectedFolderId, prompt]);
   useEffect(() => {
     setPromptUndo(current => current?.enhanced === prompt ? current : null);
     setReviewedPrompt(current => current === prompt ? current : null);
@@ -1837,8 +1843,10 @@ function GalleryInner() {
         originalBlocks[blockIndex] = enhanced;
         enhanced = originalBlocks.join("\n\n");
       }
-      // No await between the abort check and insertion: draft/context changes
-      // abort the request, so review and undo belong only to an applied result.
+      const latest = latestPromptDraft.current;
+      if (latest.prompt !== snapshot || latest.tab !== tab || latest.folderId !== selectedFolderId) return;
+      // Guard all insertion-related state together, not only the text setter.
+      // There is no await between the latest-draft check and these updates.
       setPrompt(enhanced);
       setPromptUndo({ original: snapshot, mode: promptTextMode, enhanced });
       setReviewedPrompt(allBlocks || !multiPromptMode ? enhanced : null);
