@@ -25,6 +25,7 @@ import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
 import { sha256Hex } from "@/lib/assetHash";
+import { detectTextMode } from "@/lib/textFormat";
 
 import { motion } from "motion/react";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
@@ -715,77 +716,104 @@ export default function WorkflowCanvas() {
       }
       if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); handleRedo(); }
       if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
-      if (mod && e.key === "v") {
-        e.preventDefault();
-        // OS clipboard text takes priority — if it has content, create a prompt node.
-        // Fall back to internal node clipboard only when the OS clipboard is empty.
-        navigator.clipboard.readText?.().then((raw) => {
-          const text = raw.trim();
-          // If the OS clipboard contains our node-copy sentinel, paste nodes.
-          // Otherwise treat non-empty text as external content → prompt node.
-          if (text && text !== nodeSentinelRef.current) {
-            const currentState = useWorkflowStore.getState();
-            const currentNodes = currentState.nodes;
-            const currentEdges = currentState.edges;
-            const size = getDefaultNodeSize("promptNode", currentState.lastNodeSize);
-
-            // If exactly one node is selected, and it has an unconnected "prompt"
-            // input handle, drop the new text node next to it and wire it in.
-            const selected = currentNodes.filter((n) => n.selected);
-            const target = selected.length === 1 ? selected[0] : null;
-            const targetAcceptsPrompt = target ? nodeAcceptsPromptInput(target, currentEdges) : false;
-
-            const newId = `promptNode-${uid()}`;
-            let position: { x: number; y: number };
-            const gap = 60;
-            if (target && targetAcceptsPrompt) {
-              const targetSize = {
-                w: target.measured?.width ?? (typeof target.style?.width === "number" ? target.style.width : undefined) ?? NODE_SIZE[target.type ?? ""]?.w ?? FALLBACK_SIZE.w,
-                h: target.measured?.height ?? (typeof target.style?.height === "number" ? target.style.height : undefined) ?? NODE_SIZE[target.type ?? ""]?.h ?? FALLBACK_SIZE.h,
-              };
-              position = {
-                x: target.position.x - size.w - gap,
-                y: target.position.y + (targetSize.h - size.h) / 2,
-              };
-            } else {
-              const rect = wrapperRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const { x: panX, y: panY, zoom } = viewportRef.current;
-              const cx = (mousePosRef.current.x - rect.left - panX) / zoom;
-              const cy = (mousePosRef.current.y - rect.top - panY) / zoom;
-              position = { x: cx - size.w / 2, y: cy - size.h / 2 };
-            }
-
-            addNode({
-              id: newId,
-              type: "promptNode",
-              position,
-              style: { width: size.w, height: size.h },
-              data: { label: nodeLabel("promptNode", currentNodes), prompt: text },
-            });
-
-            if (target && targetAcceptsPrompt) {
-              insertEdge({
-                id: `edge-${uid()}`,
-                source: newId,
-                target: target.id,
-                targetHandle: "prompt",
-                animated: false,
-                style: edgeStyle("prompt"),
-              });
-            }
-          } else if (clipboardRef.current) {
-            handlePaste();
-          }
-        }).catch(() => {
-          // Clipboard read denied (e.g. no permission) — fall back to node paste
-          if (clipboardRef.current) handlePaste();
-        });
-      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [handleCopy, handlePaste, handleUndo, handleRedo, addNode, insertEdge]);
+  }, [handleCopy, handleUndo, handleRedo]);
+
+  // Native `paste` event, not navigator.clipboard.readText() — reading clipboardData
+  // off the event is treated as a direct user gesture, so it pastes immediately
+  // instead of popping the browser's "Paste" permission button.
+  useEffect(() => {
+    const onPasteEvent = (e: ClipboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      const raw = e.clipboardData?.getData("text/plain") ?? "";
+      const text = raw.trim();
+      // If the OS clipboard contains our node-copy sentinel, paste nodes.
+      // Otherwise treat non-empty text as external content → prompt node(s).
+      if (text && text !== nodeSentinelRef.current) {
+        e.preventDefault();
+        const currentState = useWorkflowStore.getState();
+        const currentNodes = currentState.nodes;
+        const currentEdges = currentState.edges;
+        const size = getDefaultNodeSize("promptNode", currentState.lastNodeSize);
+
+        // A blank line separates distinct blocks of text — paste each as its own node.
+        const blocks = text.split(/\n\s*\n+/).map((b) => b.trim()).filter(Boolean);
+        if (blocks.length === 0) return;
+
+        // If exactly one node is selected, and it has an unconnected "prompt"
+        // input handle, drop the new text node(s) next to it and wire the first in.
+        const selected = currentNodes.filter((n) => n.selected);
+        const target = selected.length === 1 ? selected[0] : null;
+        const targetAcceptsPrompt = target ? nodeAcceptsPromptInput(target, currentEdges) : false;
+
+        const gap = 60;
+        let basePosition: { x: number; y: number };
+        let targetSize = { w: 0, h: 0 };
+        if (target && targetAcceptsPrompt) {
+          targetSize = {
+            w: target.measured?.width ?? (typeof target.style?.width === "number" ? target.style.width : undefined) ?? NODE_SIZE[target.type ?? ""]?.w ?? FALLBACK_SIZE.w,
+            h: target.measured?.height ?? (typeof target.style?.height === "number" ? target.style.height : undefined) ?? NODE_SIZE[target.type ?? ""]?.h ?? FALLBACK_SIZE.h,
+          };
+          basePosition = {
+            x: target.position.x - size.w - gap,
+            y: target.position.y + (targetSize.h - size.h) / 2,
+          };
+        } else {
+          const rect = wrapperRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const { x: panX, y: panY, zoom } = viewportRef.current;
+          const cx = (mousePosRef.current.x - rect.left - panX) / zoom;
+          const cy = (mousePosRef.current.y - rect.top - panY) / zoom;
+          basePosition = { x: cx - size.w / 2, y: cy - size.h / 2 };
+        }
+
+        // Stack multiple blocks vertically, growing evenly around the base position.
+        const totalHeight = blocks.length * size.h + (blocks.length - 1) * gap;
+        const startY = basePosition.y - (totalHeight - size.h) / 2;
+
+        blocks.forEach((block, i) => {
+          const newId = `promptNode-${uid()}`;
+          const label = nodeLabel("promptNode", useWorkflowStore.getState().nodes);
+
+          // Detect JSON/YAML so the node opens straight into that mode; JSON also
+          // gets pretty-printed, matching the manual JSON/YAML toggle's behavior.
+          const detected = detectTextMode(block);
+          let prompt = block;
+          if (detected === "json") {
+            try { prompt = JSON.stringify(JSON.parse(block), null, 2); } catch { /* unreachable */ }
+          }
+
+          addNode({
+            id: newId,
+            type: "promptNode",
+            position: { x: basePosition.x, y: startY + i * (size.h + gap) },
+            style: { width: size.w, height: size.h },
+            data: detected === "text" ? { label, prompt } : { label, prompt, textMode: detected },
+          });
+
+          if (i === 0 && target && targetAcceptsPrompt) {
+            insertEdge({
+              id: `edge-${uid()}`,
+              source: newId,
+              target: target.id,
+              targetHandle: "prompt",
+              animated: false,
+              style: edgeStyle("prompt"),
+            });
+          }
+        });
+      } else if (clipboardRef.current) {
+        e.preventDefault();
+        handlePaste();
+      }
+    };
+    document.addEventListener("paste", onPasteEvent);
+    return () => document.removeEventListener("paste", onPasteEvent);
+  }, [handlePaste, addNode, insertEdge]);
 
   // ── Auto-trim + frame-extract on new connections ─────────────────────────────
   const handleConnect = useCallback((connection: Connection) => {

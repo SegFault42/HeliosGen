@@ -9,6 +9,7 @@ import { useWorkflowStore, NodeData } from "@/lib/store";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { thumbSrc } from "@/lib/galleryUtils";
 import { useReadOnly } from "@/lib/readOnlyContext";
+import { detectTextMode } from "@/lib/textFormat";
 import CornerResizer from "./CornerResizer";
 
 
@@ -102,7 +103,11 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
   const selectedRef = useRef(selected);
   const prevSelectedRef = useRef(selected);
 
-  const [textMode, setTextModeState] = useState<"text" | "json" | "yaml">(loadLastTextMode);
+  // A node created with an explicit data.textMode (e.g. paste auto-detected JSON/YAML)
+  // starts there; otherwise fall back to whatever mode was last used.
+  const [textMode, setTextModeState] = useState<"text" | "json" | "yaml">(
+    () => (data.textMode as "text" | "json" | "yaml" | undefined) ?? loadLastTextMode()
+  );
   const setTextMode = useCallback((mode: "text" | "json" | "yaml") => {
     setTextModeState(mode);
     saveLastTextMode(mode);
@@ -768,18 +773,25 @@ export default function PromptNode({ id, data, selected }: NodeProps<PromptNodeT
               defaultValue={storePrompt}
               readOnly={readOnly}
               onChange={handleChange}
-              onPaste={textMode === "json" ? () => {  // auto-format only for JSON
+              onPaste={() => {
                 requestAnimationFrame(() => {
                   const ta = textareaRef.current;
                   if (!ta) return;
-                  try {
-                    const formatted = JSON.stringify(JSON.parse(ta.value), null, 2);
-                    ta.value = formatted;
-                    setLocalText(formatted);
-                    updateNodeData(id, { prompt: formatted });
-                  } catch { /* invalid JSON */ }
+                  const detected = detectTextMode(ta.value);
+                  if (detected === "json") {
+                    try {
+                      const formatted = JSON.stringify(JSON.parse(ta.value), null, 2);
+                      ta.value = formatted;
+                      setLocalText(formatted);
+                      updateNodeData(id, { prompt: formatted });
+                    } catch { /* unreachable — detectTextMode already validated */ }
+                    if (textMode !== "json") setTextMode("json");
+                  } else if (detected === "yaml" && textMode === "text") {
+                    // Only auto-switch text → yaml; never override an existing json/yaml choice.
+                    setTextMode("yaml");
+                  }
                 });
-              } : undefined}
+              }}
               onBlur={() => {
                 if (textMode !== "json") return;
                 const ta = textareaRef.current;
