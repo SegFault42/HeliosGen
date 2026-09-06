@@ -703,6 +703,9 @@ function GalleryInner() {
     }
   }, []);
   const [submitting, setSubmitting] = useState(false);
+  const [expandingPrompt, setExpandingPrompt] = useState(false);
+  const promptExpansion = useRef<AbortController | null>(null);
+  useEffect(() => () => { promptExpansion.current?.abort(); }, [tab, selectedFolderId]);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
   const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab, selectedFolderId)?.promptTextMode ?? "text");
   const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.multiPromptMode ?? false);
@@ -1783,7 +1786,51 @@ function GalleryInner() {
     throw new Error("Timed out");
   };
 
+  const expandPrompt = async (source: string, blockIndex?: number) => {
+    if (promptExpansion.current || submitting) return;
+    const idea = source.trim().replace(/^\/prompt(?:\s+|$)/i, "").trim();
+    if (!idea) { setGenError("Add an idea after /prompt."); return; }
+    const snapshot = prompt;
+    const controller = new AbortController();
+    promptExpansion.current = controller;
+    setExpandingPrompt(true);
+    setGenError("");
+    try {
+      const response = await fetch("/api/expand-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-helios-prompt": "1" },
+        body: JSON.stringify({ idea, kind: isVideo ? "video" : "image" }),
+        signal: controller.signal,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not expand prompt.");
+      if (controller.signal.aborted) return;
+      const blocks = snapshot.split(/\n\n+/);
+      if (blockIndex !== undefined) blocks[blockIndex] = result.prompt;
+      setPrompt(current => current === snapshot ? (blockIndex === undefined ? result.prompt : blocks.join("\n\n")) : current);
+      setPromptTextMode("text");
+      requestAnimationFrame(() => {
+        if (inputRef.current && !multiPromptMode && !controller.signal.aborted) {
+          resizeTextarea(inputRef.current, promptExpanded ? window.innerHeight * 0.75 - 220 : 264);
+          inputRef.current.focus();
+        }
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) setGenError((error as Error).message);
+    } finally {
+      promptExpansion.current = null;
+      setExpandingPrompt(false);
+    }
+  };
+
   const generate = async () => {
+    if (expandingPrompt) return;
+    const blocks = multiPromptMode ? prompt.split(/\n\n+/) : [prompt];
+    const commandIndex = blocks.findIndex(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+    if (commandIndex >= 0) {
+      await expandPrompt(blocks[commandIndex], multiPromptMode ? commandIndex : undefined);
+      return; // Expanding text never starts media generation or creates a tile.
+    }
     if (kieKeySet === false) return;
     if (!prompt.trim() && !isVideo) return;
     requestNotificationPermission();
@@ -2198,7 +2245,8 @@ function GalleryInner() {
   const displayVidRefAudios = getDisplayOrder(vidRefAudios, draggingId, reorderOverId);
 
   const vidRequiresPrompt = isVideo && !!(vidModel?.apiInput.promptMaxLength);
-  const canGenerate = kieKeySet === false ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const hasPromptCommand = (multiPromptMode ? prompt.split(/\n\n+/) : [prompt]).some(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+  const canGenerate = expandingPrompt || submitting ? false : hasPromptCommand ? true : kieKeySet === false ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
@@ -3633,6 +3681,9 @@ function GalleryInner() {
                     overlayInnerRef.current.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`;
                 }}
                 onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(prompt.trim())) {
+                    e.preventDefault(); void expandPrompt(prompt); return;
+                  }
                   if (atMenuOpen) {
                     if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                     if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3641,7 +3692,7 @@ function GalleryInner() {
                   }
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); }
                 }}
-                disabled={submitting}
+                disabled={submitting || expandingPrompt}
                 style={{
                   position: "relative",
                   display: "block",
@@ -3876,6 +3927,9 @@ function GalleryInner() {
                             }
                           }}
                           onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(block.trim())) {
+                              e.preventDefault(); void expandPrompt(block, blockIdx); return;
+                            }
                             if (atMenuOpen) {
                               if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                               if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3914,7 +3968,7 @@ function GalleryInner() {
                               });
                             }
                           }}
-                          disabled={submitting}
+                          disabled={submitting || expandingPrompt}
                           style={{
                             display: "block", width: "100%",
                             background: "transparent", border: "none", outline: "none",
@@ -4433,11 +4487,12 @@ function GalleryInner() {
                 <Button
                   onClick={generate}
                   disabled={!canGenerate}
+                  aria-label={hasPromptCommand ? "Expand prompt" : "Generate"}
                   variant="outline"
                   size="sm"
                   className="border-none bg-[rgba(45,212,191,0.25)] text-[rgba(45,212,191,0.9)] hover:bg-[rgba(45,212,191,0.38)] hover:text-[rgba(45,212,191,0.9)] disabled:bg-[rgba(45,212,191,0.1)] disabled:text-[rgba(45,212,191,0.3)]"
                 >
-                  {submitting ? (
+                  {submitting || expandingPrompt ? (
                     <span style={{
                       width: "11px", height: "11px", borderRadius: "50%",
                       border: "2px solid rgba(45,212,191,0.25)", borderTopColor: "rgba(45,212,191,0.9)",
@@ -4449,12 +4504,13 @@ function GalleryInner() {
                       <path d="m21.854 2.147-10.94 10.939" />
                     </svg>
                   )}
-                  {!submitting && (
+                  {expandingPrompt && <span role="status">Expanding…</span>}
+                  {!submitting && !expandingPrompt && (hasPromptCommand ? <span>Expand prompt</span> : (
                     <KbdGroup data-icon="inline-end" className="gap-0.5">
                       <Kbd>⌘</Kbd>
                       <Kbd>↵</Kbd>
                     </KbdGroup>
-                  )}
+                  ))}
                 </Button>
               </div>
             </div>{/* end bottom row */}

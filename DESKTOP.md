@@ -111,6 +111,50 @@ spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → acce
 xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_1.2.0_aarch64.dmg"
 ```
 
+## Updates from Settings
+
+Settings includes **Check for updates**, linking to the official release page.
+Published/downloaded bundles do not self-install unsigned releases.
+
+For a local macOS source installation, opt in at build time:
+
+```bash
+HELIOS_LOCAL_UPDATER=1 pnpm desktop:build --bundles app
+```
+
+Install the resulting bundle at `/Applications/HeliosGen.app` and keep this Git
+checkout plus Node, pnpm, Rust, and Xcode tools available. Settings then offers
+**Update HeliosGen**: confirm to fetch the latest official stable release, merge
+it into the current branch, build, install, and restart. This can take several
+minutes. The checkout must be clean and on a branch; conflicts abort the merge
+and leave the installed app untouched. Nothing is pushed to any Git remote.
+
+The installer stages the build before quitting the app, moves Next's writable
+cache into app data, applies a local ad-hoc signature, and verifies the bundle.
+It backs up and checks SQLite before replacing the application, then checks the
+restarted server. Save work and finish any generations before updating.
+The bundle identifier, localhost port preference, saved media, and WebKit storage
+are retained. This is not a signed/notarized binary auto-update mechanism.
+
+Previous apps stay under `/Applications/.HeliosGen-backups/`. Database backups,
+progress, and `update.log` stay in the app-data `app-updater/` directory. Backups
+are not automatically deleted. If startup verification fails, the prior bundle
+and database remain available for manual recovery; no database rollback is done
+automatically. Normal release builds omit the local checkout configuration.
+
+## Prompt expansion
+
+In the image or video gallery composer, type `/prompt <idea>` and press Enter
+(Shift+Enter inserts a newline), or click **Expand prompt**. The command replaces
+the idea with an editable expanded prompt and does not generate media. It also
+works on individual blocks in multi-prompt mode. Video prompts include motion
+and camera direction; image prompts describe a still composition.
+
+Expansion uses Kie's `gpt-5-6-luna` via `/codex/v1/responses`, with low reasoning
+effort and the API key in Settings. It consumes Kie text-model credits and does
+not change the selected media provider. Failed requests preserve the original
+text, and changing tab/folder aborts the request. There is no fallback provider.
+
 ## Local data store
 
 `lib/guest/sqlite.ts` (SQLite via `node:sqlite`, built into Node 22 — no native
