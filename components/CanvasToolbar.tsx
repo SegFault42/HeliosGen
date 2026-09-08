@@ -127,7 +127,7 @@ export default function CanvasToolbar({
         <MousePointer2 size={15} strokeWidth={1.8} />
       </Btn>
 
-      <Btn id="toolbar-hand" title="Hand (H)" active={activeTool === "hand"} activeStyle="circle" onClick={() => selectTool("hand")}>
+      <Btn id="toolbar-hand" title="Hand (H, or hold Space)" active={activeTool === "hand"} activeStyle="circle" onClick={() => selectTool("hand")}>
         <Hand size={15} strokeWidth={1.8} />
       </Btn>
 

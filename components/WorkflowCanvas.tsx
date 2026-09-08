@@ -661,15 +661,31 @@ export default function WorkflowCanvas() {
     }
   }, [addNode, insertEdge]);
 
+  // Tool the canvas returns to when the space bar is released (null = not held).
+  const toolBeforeSpaceRef = useRef<"select" | "hand" | null>(null);
+
   useEffect(() => {
+    const isTyping = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    };
+
     const onKey = (e: KeyboardEvent) => {
-      // Ignore when typing in an input / textarea
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
 
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         if (e.key === "v" || e.key === "V") setActiveTool("select");
         if (e.key === "h" || e.key === "H") setActiveTool("hand");
+        // Hold space to pan, like Photoshop and Figma: the tool snaps back on
+        // release. preventDefault stops the browser from scrolling the page.
+        if (e.code === "Space") {
+          e.preventDefault();
+          if (toolBeforeSpaceRef.current === null) {
+            setActiveTool((t) => { toolBeforeSpaceRef.current = t; return "hand"; });
+          }
+        }
       }
 
       const mod = e.ctrlKey || e.metaKey;
@@ -680,8 +696,23 @@ export default function WorkflowCanvas() {
       if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); handleRedo(); }
       if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
     };
+
+    const releaseSpace = () => {
+      if (toolBeforeSpaceRef.current === null) return;
+      setActiveTool(toolBeforeSpaceRef.current);
+      toolBeforeSpaceRef.current = null;
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") releaseSpace(); };
+
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keyup", onKeyUp);
+    // Alt-tabbing away while space is held would otherwise strand the hand tool.
+    window.addEventListener("blur", releaseSpace);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releaseSpace);
+    };
   }, [handleCopy, handleUndo, handleRedo]);
 
   // Native `paste` event, not navigator.clipboard.readText() — reading clipboardData
