@@ -408,11 +408,28 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
     }
   }, [id, updateNodeData]);
 
+  // Drop on the node (empty or filled) replaces its video in place: same node
+  // id, so every edge and downstream generator keeps pointing at it.
+  // stopPropagation keeps WorkflowCanvas.onDrop from also spawning a new node.
+  const [fileOver, setFileOver] = useState(false);
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith("video/")) loadFile(file);
+    e.stopPropagation();
+    setFileOver(false);
+    const file = [...e.dataTransfer.files].find((f) => f.type.startsWith("video/"));
+    if (file) loadFile(file);
   }, [loadFile]);
+  const onDragOverFile = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setFileOver(true);
+  }, []);
+  const onDragLeaveFile = useCallback((e: React.DragEvent) => {
+    // Ignore leaves onto a child element
+    if (e.relatedTarget instanceof globalThis.Node && e.currentTarget.contains(e.relatedTarget)) return;
+    setFileOver(false);
+  }, []);
 
   const onHoverPlay  = useCallback(() => setHovering(true), []);
   const onHoverPause = useCallback(() => setHovering(false), []);
@@ -631,9 +648,25 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
         className={`node-card group${hasError ? " node-error-blink" : ""}`}
         style={{ width: "100%", aspectRatio }}
         onAnimationEnd={handleAnimEnd}
+        onDrop={onDrop}
+        onDragOver={onDragOverFile}
+        onDragLeave={onDragLeaveFile}
       >
         <CornerResizer minWidth={160} minHeight={80} keepAspectRatio />
         <NodeLabel id={id} label={data.label as string} />
+
+        {fileOver && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+              display: "grid", placeItems: "center",
+              background: "var(--scrim)", border: "2px solid var(--accent)", borderRadius: 7,
+            }}
+          >
+            <span className="label" style={{ color: "var(--accent)", fontSize: 12 }}>Drop to replace</span>
+          </div>
+        )}
 
         {/* Decorative input handles — purely visual, no effect on the node */}
         <Handle
@@ -1369,7 +1402,8 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div
           onDrop={onDrop}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={onDragOverFile}
+          onDragLeave={onDragLeaveFile}
           onClick={() => { fileRef.current?.click(); }}
           className="border border-dashed border-[var(--accent-hover)]/20 hover:border-[var(--accent-hover)]/40 rounded-md cursor-pointer transition-colors py-8 text-center"
         >
