@@ -156,7 +156,7 @@ plus every referenced image/video — portable and shareable as a file
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
       actually run.
-- [x] Update check — `app/api/update-check/route.ts` asks the GitHub Releases
+- [ ] Update check (removed in the ANVIL fork; no banner, no GitHub poll) — `app/api/update-check/route.ts` asks the GitHub Releases
       API (`repos/SegFault42/HeliosGen/releases/latest`, cached ~1 h) whether
       `tag_name` is newer than `NEXT_PUBLIC_APP_VERSION` (baked from
       `tauri.conf.json` by `build-server.mjs` / `dev.mjs`). When it is,

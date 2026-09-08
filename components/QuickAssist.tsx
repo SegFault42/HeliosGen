@@ -7,6 +7,7 @@ import { useChatSessionStore } from "@/lib/chatSessionStore";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { useWorkflowStore } from "@/lib/store";
 import { loadAzureBaseUrl, loadAzureTextDeployment, loadAzureTextModelName } from "@/components/SettingsModal";
+import { Sparkles, RotateCcw, X, ChevronUp, ArrowRight } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
@@ -183,20 +184,18 @@ export function QuickAssist() {
         style={{
           position: "fixed", bottom: "8px", right: "24px", zIndex: 1000,
           display: "flex", alignItems: "center", gap: "8px",
-          padding: "0 16px 0 12px", height: "40px", borderRadius: "999px",
-          background: "rgba(22,24,27,0.95)", border: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.3)",
-          backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-          color: "rgba(255,255,255,0.88)", fontSize: "13.5px", fontWeight: 500,
-          fontFamily: "inherit", letterSpacing: "-0.01em", cursor: "pointer",
-          transition: "background 150ms",
+          padding: "0 16px 0 12px", height: "40px", borderRadius: "var(--r-pill)",
+          background: "var(--surface)", border: "1px solid var(--border-2)",
+          color: "var(--text-1)", fontSize: "var(--fs-3)", fontWeight: 500,
+          fontFamily: "var(--font-ui)", cursor: "pointer",
+          transition: "border-color var(--dur-1)",
         }}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(32,35,40,0.98)"; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(22,24,27,0.95)"; }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--text-2)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-2)"; }}
       >
-        <SpinnerIcon />
+        <Sparkles size={14} color="var(--text-2)" strokeWidth={2} />
         <span>Assistant</span>
-        <span style={{ marginLeft: "2px", padding: "2px 6px", borderRadius: "6px", background: "rgba(255,255,255,0.08)", fontSize: "11px", color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>⌘K</span>
+        <span className="label" style={{ marginLeft: "2px", padding: "2px 6px", borderRadius: "var(--r-1)", background: "var(--bg-2)", color: "var(--text-3)" }}>⌘K</span>
       </button>
 
       {/* Panel */}
@@ -205,35 +204,33 @@ export function QuickAssist() {
           position: "fixed", bottom: "56px", right: "24px", zIndex: 1001,
           width: "380px", maxHeight: "600px",
           display: "flex", flexDirection: "column",
-          borderRadius: "20px", background: "rgba(14,16,18,0.97)",
-          border: "1px solid rgba(255,255,255,0.09)",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 4px 24px rgba(0,0,0,0.5)",
-          backdropFilter: "blur(40px)", WebkitBackdropFilter: "blur(40px)",
-          overflow: "hidden", animation: "qaSlideUp 180ms cubic-bezier(0.16,1,0.3,1)",
+          borderRadius: "var(--r-3)", background: "var(--bg-1)",
+          border: "1px solid var(--border-1)",
+          overflow: "hidden", animation: "qaSlideUp 180ms var(--ease)",
         }}>
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", padding: "14px 16px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-            <SpinnerIcon color="rgba(45,212,191,0.85)" />
-            <span style={{ marginLeft: "8px", fontSize: "14px", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>Assistant</span>
+          <div style={{ display: "flex", alignItems: "center", padding: "var(--sp-4)", borderBottom: "1px solid var(--border-1)", flexShrink: 0 }}>
+            <Sparkles size={16} color="var(--text-2)" strokeWidth={2} />
+            <span style={{ marginLeft: "8px", fontSize: "var(--fs-5)", fontWeight: 600, color: "var(--text-1)" }}>Assistant</span>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
               {!isEmpty && (
                 <button
                   onClick={resetChat}
                   title="New chat"
-                  style={{ width: "28px", height: "28px", borderRadius: "8px", border: "none", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "background 120ms, color 120ms" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.11)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.9)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)"; }}
+                  style={{ width: "30px", height: "30px", borderRadius: "50%", border: "1px solid var(--border-2)", background: "transparent", color: "var(--text-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "border-color var(--dur-1), color var(--dur-1)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--text-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-1)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)"; }}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5H9a7 7 0 1 0 6.928 8" /><path d="M15 2l4 3-4 3" /></svg>
+                  <RotateCcw size={13} strokeWidth={2} />
                 </button>
               )}
               <button
                 onClick={() => setOpen(false)}
-                style={{ width: "28px", height: "28px", borderRadius: "8px", border: "none", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "background 120ms, color 120ms" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.11)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.9)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)"; }}
+                style={{ width: "30px", height: "30px", borderRadius: "50%", border: "1px solid var(--border-2)", background: "transparent", color: "var(--text-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, transition: "border-color var(--dur-1), color var(--dur-1)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--text-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-1)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)"; }}
               >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                <X size={14} strokeWidth={2} />
               </button>
             </div>
           </div>
@@ -242,23 +239,41 @@ export function QuickAssist() {
           <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: isEmpty ? "32px 24px 16px" : "16px", display: "flex", flexDirection: "column", gap: isEmpty ? "0" : "12px", minHeight: 0 }}>
             {isEmpty ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-                <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: "rgba(45,212,191,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
-                  <SpinnerIcon size={22} color="rgba(45,212,191,0.85)" />
+                <div style={{ width: "52px", height: "52px", borderRadius: "var(--r-2)", background: "var(--bg-2)", border: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
+                  <Sparkles size={22} color="var(--text-2)" strokeWidth={2} />
                 </div>
-                <p style={{ margin: "0 0 8px", fontSize: "16px", fontWeight: 700, color: "#fff", letterSpacing: "-0.02em" }}>How can I help you?</p>
-                <p style={{ margin: "0", fontSize: "13px", color: "rgba(255,255,255,0.4)", lineHeight: 1.5, letterSpacing: "-0.01em" }}>Give me a prompt, I will make it better.</p>
+                <p style={{ margin: "0 0 8px", fontSize: "var(--fs-5)", fontWeight: 600, color: "var(--text-1)" }}>How can I help you?</p>
+                <p style={{ margin: "0", fontSize: "var(--fs-3)", color: "var(--text-3)", lineHeight: "var(--lh-body)" }}>Give me a prompt, I will make it better.</p>
               </div>
             ) : (
               messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
-                  <div style={{ maxWidth: "85%", padding: "9px 13px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: m.role === "user" ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)", border: m.role === "user" ? "1px solid rgba(45,212,191,0.25)" : "1px solid rgba(255,255,255,0.07)", fontSize: "13px", color: m.role === "user" ? "#FFFFFF" : "rgba(255,255,255,0.85)", lineHeight: 1.55, letterSpacing: "-0.01em", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {m.content}
-                    {m.streaming && (
-                      m.content
-                        ? <span style={{ display: "inline-block", width: "2px", height: "13px", background: "rgba(255,255,255,0.6)", borderRadius: "1px", marginLeft: "2px", verticalAlign: "text-bottom", animation: "qaCursorBlink 0.8s ease-in-out infinite" }} />
-                        : <span style={{ display: "inline-flex", gap: "3px", alignItems: "center" }}>
-                            {[0,1,2].map(d => <span key={d} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)", animation: `qaDot 1s ${d * 0.2}s infinite` }} />)}
-                          </span>
+                  {m.role === "assistant" && (
+                    <span className="label" style={{ color: "var(--text-3)", marginBottom: "4px" }}>
+                      {MODELS.find(mm => mm.id === model)?.label ?? "ASSISTANT"}
+                    </span>
+                  )}
+                  <div style={{
+                    maxWidth: "85%", padding: "9px 13px",
+                    borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                    background: m.role === "user" ? "var(--surface)" : "var(--bg-2)",
+                    border: m.role === "user" ? "1px solid var(--border-2)" : "none",
+                    fontSize: "var(--fs-4)",
+                    color: m.role === "user" ? "var(--text-1)" : "var(--text-2)",
+                    lineHeight: "var(--lh-body)", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {m.streaming && !m.content ? (
+                      <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                        <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: "2px solid var(--border-2)", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
+                        <span className="label" style={{ color: "var(--text-3)" }}>Thinking</span>
+                      </span>
+                    ) : (
+                      <>
+                        {m.content}
+                        {m.streaming && (
+                          <span style={{ display: "inline-block", width: "2px", height: "13px", background: "var(--text-2)", borderRadius: "1px", marginLeft: "2px", verticalAlign: "text-bottom", animation: "qaCursorBlink 0.8s ease-in-out infinite" }} />
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -267,41 +282,49 @@ export function QuickAssist() {
           </div>
 
           {/* ── Input ── */}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "12px", padding: "8px 8px 8px 12px" }}>
-              <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} placeholder="Describe your idea…" rows={1} disabled={streaming} style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "rgba(255,255,255,0.88)", fontSize: "13.5px", fontFamily: "inherit", letterSpacing: "-0.01em", lineHeight: "22px", maxHeight: "96px", overflowY: "auto", padding: 0, cursor: streaming ? "not-allowed" : "text" }}
+          <div style={{ borderTop: "1px solid var(--border-1)", padding: "12px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg-2)", border: "1px solid var(--border-2)", borderRadius: "var(--r-pill)", padding: "8px 8px 8px 16px", minHeight: "44px" }}>
+              <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey} placeholder="Describe your idea…" rows={1} disabled={streaming} style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--text-1)", fontSize: "var(--fs-3)", fontFamily: "var(--font-ui)", lineHeight: "22px", maxHeight: "96px", overflowY: "auto", padding: 0, cursor: streaming ? "not-allowed" : "text" }}
                 onInput={e => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 96) + "px"; }} />
-              <button onClick={() => send(input)} disabled={!input.trim() || streaming || disabledIds.includes(model)} style={{ width: "32px", height: "32px", borderRadius: "8px", border: "none", background: input.trim() && !streaming && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && !streaming && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && !streaming && !disabledIds.includes(model) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0, transition: "background 150ms, color 150ms" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+              <button onClick={() => send(input)} disabled={!input.trim() || streaming || disabledIds.includes(model)} style={{
+                width: "32px", height: "32px", borderRadius: "50%", border: "none",
+                background: "var(--accent)", color: "var(--on-accent)",
+                boxShadow: "0 2px 0 var(--accent-edge)",
+                opacity: input.trim() && !streaming && !disabledIds.includes(model) ? 1 : 0.4,
+                cursor: input.trim() && !streaming && !disabledIds.includes(model) ? "pointer" : "not-allowed",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0,
+              }}>
+                <ArrowRight size={14} strokeWidth={2.5} />
               </button>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px", padding: "0 2px" }}>
               {/* Model picker */}
               <div data-model-picker="" style={{ position: "relative" }}>
-                <button onClick={() => setModelOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "2px 7px 2px 8px", borderRadius: "6px", background: modelOpen ? "rgba(255,255,255,0.09)" : "transparent", border: "1px solid transparent", fontSize: "10px", color: "rgba(255,255,255,0.35)", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit", transition: "background 120ms, color 120ms" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.65)"; }}
-                  onMouseLeave={e => { if (!modelOpen) { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.35)"; } }}>
+                <button onClick={() => setModelOpen(o => !o)} className="label" style={{ display: "flex", alignItems: "center", gap: "5px", padding: "3px 8px", borderRadius: "var(--r-1)", background: modelOpen ? "var(--bg-2)" : "transparent", border: "none", color: "var(--text-3)", cursor: "pointer", transition: "background var(--dur-1), color var(--dur-1)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-2)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)"; }}
+                  onMouseLeave={e => { if (!modelOpen) { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-3)"; } }}>
                   {MODELS.find(m => m.id === model)?.label}
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity: 0.6 }}><path d="m6 15 6-6 6 6" /></svg>
+                  <ChevronUp size={11} strokeWidth={2.5} style={{ opacity: 0.7 }} />
                 </button>
                 {modelOpen && (
-                  <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, minWidth: "180px", background: "rgba(18,20,23,0.98)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px", boxShadow: "0 -8px 32px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.4)", overflow: "hidden", zIndex: 10, animation: "qaSlideDown 120ms cubic-bezier(0.16,1,0.3,1)" }}>
-                    <div style={{ padding: "4px" }}>
+                  <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, minWidth: "180px", background: "var(--surface)", border: "1px solid var(--border-2)", borderRadius: "var(--r-2)", overflow: "hidden", zIndex: 10, animation: "qaSlideDown 120ms var(--ease)" }}>
+                    <div style={{ padding: "6px" }}>
                       {MODEL_GROUPS.map((group, gi) => (
                         <div key={group.label}>
-                          {gi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />}
-                          <div style={{ padding: "4px 8px 2px", fontSize: "10px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>{group.label}</div>
+                          {gi > 0 && <div style={{ height: "1px", background: "var(--border-1)", margin: "4px 0" }} />}
+                          <div className="label" style={{ padding: "4px 8px 2px", color: "var(--text-3)" }}>{group.label}</div>
                           {group.models.map(m => {
                             const isDisabled = disabledIds.includes(m.id);
+                            const isSelected = model === m.id;
                             return (
                             <button key={m.id}
                               onClick={() => { if (!isDisabled) { setModel(m.id); setPreferredModel(m.id); setModelOpen(false); } }}
                               title={isDisabled ? "Configure Azure in Settings → API Keys" : undefined}
-                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none", background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent", color: isDisabled ? "rgba(255,255,255,0.25)" : model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)", fontSize: "13px", fontFamily: "inherit", cursor: isDisabled ? "not-allowed" : "pointer", textAlign: "left", transition: "background 100ms", opacity: isDisabled ? 0.5 : 1 }}
-                              onMouseEnter={e => { if (!isDisabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
-                              onMouseLeave={e => { if (!isDisabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
+                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "7px 8px", borderRadius: "var(--r-1)", border: "none", background: isSelected ? "var(--text-1)" : "transparent", color: isDisabled ? "var(--text-3)" : isSelected ? "var(--on-accent)" : "var(--text-2)", fontSize: "var(--fs-3)", fontFamily: "var(--font-ui)", fontWeight: isSelected ? 600 : 400, cursor: isDisabled ? "not-allowed" : "pointer", textAlign: "left", transition: "background var(--dur-1)", opacity: isDisabled ? 0.4 : 1 }}
+                              onMouseEnter={e => { if (!isDisabled && !isSelected) (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-2)"; }}
+                              onMouseLeave={e => { if (!isDisabled && !isSelected) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}>
                               <span>{m.label}</span>
-                              <span style={{ fontSize: "10px", color: isDisabled ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.28)", marginLeft: "8px" }}>{isDisabled ? "needs Azure key" : m.desc}</span>
+                              <span className="label" style={{ color: isSelected ? "var(--on-accent)" : "var(--text-3)", marginLeft: "8px", opacity: 0.8 }}>{isDisabled ? "needs key" : m.desc}</span>
                             </button>
                             );
                           })}
@@ -311,14 +334,14 @@ export function QuickAssist() {
                   </div>
                 )}
               </div>
-              <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", letterSpacing: "0.03em", display: "flex", gap: "8px", alignItems: "center" }}>
+              <span className="label" style={{ color: "var(--text-3)", display: "flex", gap: "8px", alignItems: "center" }}>
                 <span style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                  <kbd style={{ padding: "1px 4px", borderRadius: "4px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>↵</kbd>
+                  <kbd style={{ padding: "1px 4px", borderRadius: "4px", background: "var(--bg-2)", border: "1px solid var(--border-1)", fontSize: "var(--fs-2)", color: "var(--text-3)" }}>↵</kbd>
                   SEND
                 </span>
                 <span>·</span>
                 <span style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                  <kbd style={{ padding: "1px 4px", borderRadius: "4px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>ESC</kbd>
+                  <kbd style={{ padding: "1px 4px", borderRadius: "4px", background: "var(--bg-2)", border: "1px solid var(--border-1)", fontSize: "var(--fs-2)", color: "var(--text-3)" }}>ESC</kbd>
                   CLOSE
                 </span>
               </span>
@@ -337,23 +360,11 @@ export function QuickAssist() {
           from { opacity: 0; transform: translateY(6px) scale(0.97); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-        @keyframes qaDot {
-          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1); }
-        }
         @keyframes qaCursorBlink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
       `}</style>
     </div>
-  );
-}
-
-function SpinnerIcon({ size = 14, color = "rgba(255,255,255,0.7)" }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round">
-      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-    </svg>
   );
 }

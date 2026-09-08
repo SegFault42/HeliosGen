@@ -91,68 +91,20 @@ export function saveAzureTextModelName(name: string) {
   } catch { /* noop */ }
 }
 
-/* ─── Nav items ─────────────────────────────────────────────────────────────── */
+/* ─── Tabs ──────────────────────────────────────────────────────────────────── */
 
 const IS_DEBUG = process.env.NEXT_PUBLIC_DEBUG === "true";
 
 type NavId = "api-keys" | "image-models" | "video-models" | "text-models" | "debug";
 
-const NAV_BASE: { id: NavId; label: string; icon: React.ReactNode }[] = [
-  {
-    id: "api-keys",
-    label: "API Keys",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="8" cy="15" r="4" />
-        <path d="m11.31 11.31 5.19-5.19" />
-        <path d="m17 5 1.5 1.5" />
-        <path d="m14 8 1.5 1.5" />
-      </svg>
-    ),
-  },
-  {
-    id: "image-models",
-    label: "Image Models",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="m21 15-5-5L5 21" />
-      </svg>
-    ),
-  },
-  {
-    id: "video-models",
-    label: "Video Models",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m22 8-6 4 6 4V8z" />
-        <rect x="2" y="6" width="14" height="12" rx="2" />
-      </svg>
-    ),
-  },
-  {
-    id: "text-models",
-    label: "Text Models",
-    icon: (
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    ),
-  },
+const NAV_BASE: { id: NavId; label: string }[] = [
+  { id: "api-keys", label: "API Keys" },
+  { id: "image-models", label: "Image Models" },
+  { id: "video-models", label: "Video Models" },
+  { id: "text-models", label: "Text Models" },
 ];
 
-const DEBUG_NAV_ITEM: { id: NavId; label: string; icon: React.ReactNode } = {
-  id: "debug",
-  label: "Debug",
-  icon: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-      <path d="M12 8v4" />
-      <path d="M12 16h.01" />
-    </svg>
-  ),
-};
+const DEBUG_NAV_ITEM: { id: NavId; label: string } = { id: "debug", label: "Debug" };
 
 const NAV = IS_DEBUG ? [...NAV_BASE, DEBUG_NAV_ITEM] : NAV_BASE;
 
@@ -162,34 +114,155 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-/* ─── Provider brand icons (kie/azure/codex backend pills) ───────────────────── */
+/* ─── Shared style helpers ────────────────────────────────────────────────── */
 
-function ProviderBrandIcon({ id, size = 12 }: { id: ProviderId; size?: number }) {
-  if (id === "kie") {
-    return (
-      <span className="text-[#2DD4BF] shrink-0" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.83)}px`, fontWeight: 700 }}>
-        K
-      </span>
-    );
-  }
-  if (id === "codex") {
-    return (
-      <svg className="text-[#2DD4BF] shrink-0" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd">
-        <path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z" />
-      </svg>
-    );
-  }
-  if (id === "azure") {
-    return (
-      <svg className="shrink-0" width={size} height={size} viewBox="0 0 256 199">
-        <path d="M118.432 187.698c32.89-5.81 60.055-10.618 60.367-10.684l.568-.12l-31.052-36.935c-17.078-20.314-31.051-37.014-31.051-37.11c0-.182 32.063-88.477 32.243-88.792c.06-.105 21.88 37.567 52.893 91.32c29.035 50.323 52.973 91.815 53.195 92.203l.405.707l-98.684-.012l-98.684-.013l59.8-10.564zM0 176.435c0-.052 14.631-25.451 32.514-56.442l32.514-56.347l37.891-31.799C123.76 14.358 140.867.027 140.935.001c.069-.026-.205.664-.609 1.534s-18.919 40.582-41.145 88.25l-40.41 86.67l-29.386.037c-16.162.02-29.385-.005-29.385-.057z" fill="#0089D6" fillRule="nonzero" />
-      </svg>
-    );
-  }
-  return null;
+/** Pill input, h-10, per components.md > Input. `mono` for key/URL values. */
+function inputStyle(mono: boolean): React.CSSProperties {
+  return {
+    height: "40px",
+    width: "100%",
+    padding: "0 14px",
+    background: "var(--bg-2)",
+    border: "1px solid var(--border-2)",
+    borderRadius: "var(--r-pill)",
+    color: "var(--text-1)",
+    fontSize: mono ? "13px" : "14px",
+    fontFamily: mono ? "var(--font-mono)" : "inherit",
+    outline: "none",
+  };
 }
 
-/* ─── Toggle ─────────────────────────────────────────────────────────────────── */
+function focusInput(e: React.FocusEvent<HTMLInputElement>) {
+  e.target.style.borderColor = "var(--accent)";
+  e.target.style.outline = "2px solid var(--focus-ring)";
+  e.target.style.outlineOffset = "2px";
+}
+function blurInput(e: React.FocusEvent<HTMLInputElement>) {
+  e.target.style.borderColor = "var(--border-2)";
+  e.target.style.outline = "none";
+}
+
+/** Primary sm pill — Save / Connect actions. */
+function PrimaryButtonSm({ children, disabled, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...rest}
+      disabled={disabled}
+      style={{
+        height: "32px",
+        padding: "0 14px",
+        borderRadius: "var(--r-pill)",
+        border: "none",
+        background: "var(--accent)",
+        color: "var(--on-accent)",
+        fontSize: "13px",
+        fontWeight: 600,
+        fontFamily: "inherit",
+        cursor: disabled ? "default" : "pointer",
+        whiteSpace: "nowrap",
+        boxShadow: "0 2px 0 var(--accent-edge)",
+        opacity: disabled ? 0.4 : 1,
+        transition: "transform 120ms, box-shadow 120ms",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Secondary sm pill. */
+function SecondaryButtonSm({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...rest}
+      style={{
+        height: "32px",
+        padding: "0 14px",
+        borderRadius: "var(--r-pill)",
+        border: "1px solid var(--border-2)",
+        background: "var(--surface)",
+        color: "var(--text-1)",
+        fontSize: "13px",
+        fontWeight: 500,
+        fontFamily: "inherit",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--text-2)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-2)"; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Danger sm pill — Remove key. */
+function DangerButtonSm({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...rest}
+      style={{
+        height: "32px",
+        padding: "0 14px",
+        borderRadius: "var(--r-pill)",
+        border: "1px solid var(--error)",
+        background: "transparent",
+        color: "var(--error)",
+        fontSize: "13px",
+        fontWeight: 500,
+        fontFamily: "inherit",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        transition: "background 120ms, color 120ms",
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--error)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--on-accent)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; (e.currentTarget as HTMLButtonElement).style.color = "var(--error)"; }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Badge per components.md > Badge. `filled` = SAVED/READY, otherwise outlined NOT CONFIGURED. */
+function StatusBadge({ filled, children }: { filled: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className="label"
+      style={{
+        padding: "4px 10px",
+        borderRadius: "var(--r-pill)",
+        fontWeight: filled ? 700 : 500,
+        background: filled ? "var(--accent)" : "transparent",
+        color: filled ? "var(--on-accent)" : "var(--text-2)",
+        border: filled ? "none" : "1px solid var(--border-2)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Section card — bg-2, 1px border-1, radius 16, padding 16, per components.md > Modal. */
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "12px",
+        padding: "16px",
+        background: "var(--bg-2)",
+        border: "1px solid var(--border-1)",
+        borderRadius: "16px",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ─── Segmented control — per-model provider selection ───────────────────────── */
 
 function ProviderToggle({
   modelId,
@@ -203,13 +276,13 @@ function ProviderToggle({
   return (
     <div
       style={{
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        background: "rgba(255,255,255,0.04)",
-        borderRadius: "8px",
+        background: "var(--bg-2)",
+        border: "1px solid var(--border-1)",
+        borderRadius: "var(--r-pill)",
         padding: "3px",
         gap: "2px",
-        border: "1px solid rgba(255,255,255,0.07)",
         flexShrink: 0,
       }}
     >
@@ -221,23 +294,19 @@ function ProviderToggle({
             id={`provider-${modelId}-${p.id}`}
             onClick={() => onChange(p.id)}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "5px",
-              padding: "4px 10px",
-              borderRadius: "6px",
+              padding: "6px 12px",
+              borderRadius: "var(--r-pill)",
               border: "none",
               cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: 500,
-              letterSpacing: "0.01em",
-              transition: "background 140ms ease, color 140ms ease",
-              background: active ? "rgba(255,255,255,0.1)" : "transparent",
-              color: active ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.32)",
+              fontSize: "13px",
+              fontWeight: 600,
+              fontFamily: "inherit",
+              transition: "background 120ms, color 120ms",
+              background: active ? "var(--text-1)" : "transparent",
+              color: active ? "var(--on-accent)" : "var(--text-2)",
               whiteSpace: "nowrap",
             }}
           >
-            <ProviderBrandIcon id={p.id} />
             {p.label}
           </button>
         );
@@ -256,6 +325,7 @@ function ModelRow({
   value,
   onChange,
   azureSupported,
+  isLast,
 }: {
   id: string;
   name: string;
@@ -264,6 +334,7 @@ function ModelRow({
   value: ProviderId;
   onChange: (v: ProviderId) => void;
   azureSupported: boolean;
+  isLast: boolean;
 }) {
   return (
     <div
@@ -271,19 +342,16 @@ function ModelRow({
         display: "flex",
         alignItems: "center",
         gap: "14px",
-        padding: "11px 16px",
-        borderRadius: "10px",
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.05)",
+        padding: "12px 0",
+        borderBottom: isLast ? "none" : "1px solid var(--border-1)",
       }}
     >
-      {/* Labels */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: "13px",
+            fontSize: "14px",
             fontWeight: 500,
-            color: "rgba(255,255,255,0.85)",
+            color: "var(--text-1)",
             lineHeight: 1.3,
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -292,13 +360,7 @@ function ModelRow({
         >
           {name}
         </div>
-        <div
-          style={{
-            fontSize: "11px",
-            color: "rgba(255,255,255,0.28)",
-            marginTop: "2px",
-          }}
-        >
+        <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
           {providerLabel} · {category}
         </div>
       </div>
@@ -313,7 +375,6 @@ function ModelRow({
 
 function ModelGroup({
   title,
-  accent,
   models,
   providers,
   onProviderChange,
@@ -321,7 +382,6 @@ function ModelGroup({
   onDeploymentChange,
 }: {
   title: string;
-  accent: string;
   models: { id: string; name: string; provider: string; category: string; hasAzureDeployment?: boolean }[];
   providers: Record<string, ProviderId>;
   onProviderChange: (modelId: string, v: ProviderId) => void;
@@ -332,16 +392,14 @@ function ModelGroup({
     <div>
       {/* Group header */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-        <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: accent, flexShrink: 0 }} />
-        <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>
-          {title}
-        </span>
+        <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
+        <span className="label" style={{ color: "var(--text-3)" }}>{title}</span>
       </div>
 
       {/* Rows */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {models.map((m) => (
-          <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {models.map((m, i) => (
+          <div key={m.id} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <ModelRow
               id={m.id}
               name={m.name}
@@ -350,49 +408,29 @@ function ModelGroup({
               value={providers[m.id] ?? "kie"}
               onChange={(v) => onProviderChange(m.id, v)}
               azureSupported={!!m.hasAzureDeployment}
+              isLast={i === models.length - 1 && (providers[m.id] ?? "kie") !== "azure"}
             />
             {/* Deployment name — shown only for Azure-capable models when Azure is selected */}
             {m.hasAzureDeployment && (providers[m.id] ?? "kie") === "azure" && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                  padding: "10px 14px",
-                  background: "rgba(96,165,250,0.04)",
-                  border: "1px solid rgba(96,165,250,0.12)",
-                  borderRadius: "10px",
-                }}
-              >
-                <label
-                  htmlFor={`azure-deploy-${m.id}`}
-                  style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
-                >
-                  Deployment Name
-                </label>
-                <input
-                  id={`azure-deploy-${m.id}`}
-                  type="text"
-                  placeholder={`e.g. ${m.id}`}
-                  value={azureDeployments[m.id] ?? ""}
-                  onChange={(e) => onDeploymentChange(m.id, e.target.value)}
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: "7px",
-                    padding: "7px 11px",
-                    fontSize: "12px",
-                    color: "rgba(255,255,255,0.8)",
-                    outline: "none",
-                    fontFamily: "inherit",
-                    fontFeatureSettings: "\"tnum\"",
-                  }}
-                  onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
-                  onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
-                />
-                <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
-                  The deployment name within your Azure resource. Combined with the global base URL above.
-                </p>
+              <div style={{ paddingBottom: "12px", borderBottom: i === models.length - 1 ? "none" : "1px solid var(--border-1)" }}>
+                <SectionCard>
+                  <label htmlFor={`azure-deploy-${m.id}`} className="label" style={{ color: "var(--text-3)" }}>
+                    Deployment Name
+                  </label>
+                  <input
+                    id={`azure-deploy-${m.id}`}
+                    type="text"
+                    placeholder={`e.g. ${m.id}`}
+                    value={azureDeployments[m.id] ?? ""}
+                    onChange={(e) => onDeploymentChange(m.id, e.target.value)}
+                    style={inputStyle(true)}
+                    onFocus={focusInput}
+                    onBlur={blurInput}
+                  />
+                  <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+                    The deployment name within your Azure resource. Combined with the global base URL above.
+                  </p>
+                </SectionCard>
               </div>
             )}
           </div>
@@ -403,18 +441,6 @@ function ModelGroup({
 }
 
 /* ─── API Keys panel ─────────────────────────────────────────────────────────── */
-
-const INPUT_STYLE: React.CSSProperties = {
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: "7px",
-  padding: "7px 11px",
-  fontSize: "12px",
-  color: "rgba(255,255,255,0.8)",
-  outline: "none",
-  fontFamily: "inherit",
-  width: "100%",
-};
 
 function ApiKeysPanel({
   azureBaseUrl,
@@ -534,91 +560,35 @@ function ApiKeysPanel({
     }
   };
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-      {/* Header */}
-      <div>
-        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
-          API Keys
-        </h2>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Your Kie.ai key is stored securely on the server — it is never exposed to the browser.
-        </p>
-      </div>
+  const codexBadgeFilled = codexStatus.kind === "ready";
 
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {/* ──── Kie.ai API key ──────────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          padding: "16px",
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: "12px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span
-            style={{
-              width: "28px", height: "28px", borderRadius: "7px",
-              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <ProviderBrandIcon id="kie" size={16} />
-          </span>
+      <SectionCard>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Kie.ai</div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-1)" }}>Kie.ai</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
               Used for all image &amp; video generation
             </div>
           </div>
-          {kieKeyStatus === "set" && (
-            <span
-              style={{
-                marginLeft: "auto", fontSize: "10px", fontWeight: 600,
-                color: "rgba(74,222,128,0.8)", background: "rgba(74,222,128,0.08)",
-                border: "1px solid rgba(74,222,128,0.2)", borderRadius: "5px",
-                padding: "2px 7px", letterSpacing: "0.04em",
-              }}
-            >
-              SAVED
-            </span>
+          {kieKeyStatus !== "unknown" && (
+            <StatusBadge filled={kieKeyStatus === "set"}>
+              {kieKeyStatus === "set" ? "SAVED" : "NOT CONFIGURED"}
+            </StatusBadge>
           )}
         </div>
 
         {kieKeyStatus === "unknown" ? (
           <div style={{ display: "flex", gap: "8px" }}>
-            <div style={{
-              flex: 1, height: "31px", borderRadius: "7px",
-              background: "rgba(255,255,255,0.05)",
-              animation: "skeleton-pulse 1.4s ease-in-out infinite",
-            }} />
-            <div style={{
-              width: "72px", height: "31px", borderRadius: "7px",
-              background: "rgba(255,255,255,0.05)",
-              animation: "skeleton-pulse 1.4s ease-in-out infinite 0.2s",
-            }} />
+            <div style={{ flex: 1, height: "40px", borderRadius: "var(--r-pill)", background: "var(--border-1)", animation: "skeleton-pulse 1.4s ease-in-out infinite" }} />
+            <div style={{ width: "80px", height: "40px", borderRadius: "var(--r-pill)", background: "var(--border-1)", animation: "skeleton-pulse 1.4s ease-in-out infinite 0.2s" }} />
           </div>
         ) : kieKeyStatus === "set" ? (
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <input
-              type="password"
-              value="placeholdertoken"
-              readOnly
-              style={{ ...INPUT_STYLE, flex: 1, cursor: "default", color: "rgba(255,255,255,0.3)" }}
-            />
-            <button
-              onClick={onKieKeyDelete}
-              style={{
-                padding: "7px 12px", borderRadius: "7px", border: "1px solid rgba(239,68,68,0.3)",
-                background: "rgba(239,68,68,0.06)", color: "rgba(239,68,68,0.7)",
-                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-              }}
-            >
-              Remove
-            </button>
+            <input type="password" value="placeholdertoken" readOnly style={{ ...inputStyle(true), flex: 1, cursor: "default", color: "var(--text-3)" }} />
+            <DangerButtonSm onClick={onKieKeyDelete}>Remove</DangerButtonSm>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -629,113 +599,52 @@ function ApiKeysPanel({
                 value={kieInput}
                 onChange={(e) => setKieInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleKieSave(); }}
-                style={{ ...INPUT_STYLE, flex: 1 }}
-                onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.2)"; }}
-                onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+                style={{ ...inputStyle(true), flex: 1 }}
+                onFocus={focusInput}
+                onBlur={blurInput}
               />
-              <button
-                onClick={handleKieSave}
-                disabled={!kieInput.trim() || kieSaving}
-                style={{
-                  padding: "7px 14px", borderRadius: "7px", border: "none",
-                  background: kieInput.trim() ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
-                  color: kieInput.trim() ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)",
-                  cursor: kieInput.trim() ? "pointer" : "default",
-                  fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-                  transition: "background 140ms ease, color 140ms ease",
-                }}
-              >
+              <PrimaryButtonSm onClick={handleKieSave} disabled={!kieInput.trim() || kieSaving}>
                 {kieSaving ? "Saving…" : "Save"}
-              </button>
+              </PrimaryButtonSm>
             </div>
-            {kieError && (
-              <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0 }}>{kieError}</p>
-            )}
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+            {kieError && <p style={{ fontSize: "12px", color: "var(--error)", margin: 0 }}>{kieError}</p>}
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
               Get your token at{" "}
-              <a href="https://kie.ai/api-key" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>
+              <a href="https://kie.ai/api-key" target="_blank" rel="noreferrer" style={{ color: "var(--text-2)" }}>
                 kie.ai/api-key
               </a>
             </p>
           </div>
         )}
-      </div>
+      </SectionCard>
 
       {/* ──── Azure Foundry API key + endpoint ────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          padding: "16px",
-          background: "rgba(96,165,250,0.04)",
-          border: "1px solid rgba(96,165,250,0.14)",
-          borderRadius: "12px",
-        }}
-      >
-        {/* Azure logo/title row */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span
-            style={{
-              width: "28px", height: "28px", borderRadius: "7px",
-              background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <ProviderBrandIcon id="azure" size={16} />
-          </span>
+      <SectionCard>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
           <div>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Azure Foundry</div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-1)" }}>Azure Foundry</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
               API key &amp; base URL — used by all Azure-routed models
             </div>
           </div>
-          {azureKeyStatus === "set" && (
-            <span
-              style={{
-                marginLeft: "auto", fontSize: "10px", fontWeight: 600,
-                color: "rgba(74,222,128,0.8)", background: "rgba(74,222,128,0.08)",
-                border: "1px solid rgba(74,222,128,0.2)", borderRadius: "5px",
-                padding: "2px 7px", letterSpacing: "0.04em",
-              }}
-            >
-              SAVED
-            </span>
+          {azureKeyStatus !== "unknown" && (
+            <StatusBadge filled={azureKeyStatus === "set"}>
+              {azureKeyStatus === "set" ? "SAVED" : "NOT CONFIGURED"}
+            </StatusBadge>
           )}
         </div>
 
         {/* API Key */}
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-          <label
-            htmlFor="azure-api-key"
-            style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
-          >
+          <label htmlFor="azure-api-key" className="label" style={{ color: "var(--text-3)" }}>
             API Key
           </label>
           {azureKeyStatus === "unknown" ? (
-            <div style={{
-              height: "31px", borderRadius: "7px",
-              background: "rgba(255,255,255,0.05)",
-              animation: "skeleton-pulse 1.4s ease-in-out infinite",
-            }} />
+            <div style={{ height: "40px", borderRadius: "var(--r-pill)", background: "var(--border-1)", animation: "skeleton-pulse 1.4s ease-in-out infinite" }} />
           ) : azureKeyStatus === "set" ? (
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <input
-                type="password"
-                value="placeholdertoken"
-                readOnly
-                style={{ ...INPUT_STYLE, flex: 1, cursor: "default", color: "rgba(255,255,255,0.3)" }}
-              />
-              <button
-                onClick={onAzureKeyDelete}
-                style={{
-                  padding: "7px 12px", borderRadius: "7px", border: "1px solid rgba(239,68,68,0.3)",
-                  background: "rgba(239,68,68,0.06)", color: "rgba(239,68,68,0.7)",
-                  cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-                }}
-              >
-                Remove
-              </button>
+              <input type="password" value="placeholdertoken" readOnly style={{ ...inputStyle(true), flex: 1, cursor: "default", color: "var(--text-3)" }} />
+              <DangerButtonSm onClick={onAzureKeyDelete}>Remove</DangerButtonSm>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -747,38 +656,22 @@ function ApiKeysPanel({
                   value={azureInput}
                   onChange={(e) => setAzureInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleAzureSave(); }}
-                  style={{ ...INPUT_STYLE, flex: 1 }}
-                  onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
-                  onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+                  style={{ ...inputStyle(true), flex: 1 }}
+                  onFocus={focusInput}
+                  onBlur={blurInput}
                 />
-                <button
-                  onClick={handleAzureSave}
-                  disabled={!azureInput.trim() || azureSaving}
-                  style={{
-                    padding: "7px 14px", borderRadius: "7px", border: "none",
-                    background: azureInput.trim() ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)",
-                    color: azureInput.trim() ? "rgba(96,165,250,0.9)" : "rgba(255,255,255,0.25)",
-                    cursor: azureInput.trim() ? "pointer" : "default",
-                    fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-                    transition: "background 140ms ease, color 140ms ease",
-                  }}
-                >
+                <PrimaryButtonSm onClick={handleAzureSave} disabled={!azureInput.trim() || azureSaving}>
                   {azureSaving ? "Saving…" : "Save"}
-                </button>
+                </PrimaryButtonSm>
               </div>
-              {azureError && (
-                <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0 }}>{azureError}</p>
-              )}
+              {azureError && <p style={{ fontSize: "12px", color: "var(--error)", margin: 0 }}>{azureError}</p>}
             </div>
           )}
         </div>
 
         {/* Base URL */}
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-          <label
-            htmlFor="azure-global-base-url"
-            style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
-          >
+          <label htmlFor="azure-global-base-url" className="label" style={{ color: "var(--text-3)" }}>
             Base URL
           </label>
           <input
@@ -787,55 +680,28 @@ function ApiKeysPanel({
             placeholder="https://<resource>.cognitiveservices.azure.com"
             value={azureBaseUrl}
             onChange={(e) => onBaseUrlChange(e.target.value)}
-            style={INPUT_STYLE}
-            onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
-            onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+            style={inputStyle(true)}
+            onFocus={focusInput}
+            onBlur={blurInput}
           />
-          <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
             Combined with per-model deployment names below.
           </p>
         </div>
-      </div>
+      </SectionCard>
 
       {/* ──── Codex CLI status ─────────────────────────────────────────── */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          padding: "16px",
-          background: "rgba(74,222,128,0.04)",
-          border: "1px solid rgba(74,222,128,0.14)",
-          borderRadius: "12px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span
-            style={{
-              width: "28px", height: "28px", borderRadius: "7px",
-              background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <ProviderBrandIcon id="codex" size={16} />
-          </span>
-          <div>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Codex CLI</div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
-              Uses the server&apos;s local <code style={{ fontFamily: "monospace" }}>codex login</code> session — no per-user key
+      <SectionCard>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-1)" }}>Codex CLI</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
+              Uses the server&apos;s local <code style={{ fontFamily: "var(--font-mono)" }}>codex login</code> session — no per-user key
             </div>
           </div>
-          <span
-            style={{
-              marginLeft: "auto", fontSize: "10px", fontWeight: 600,
-              color: codexStatus.kind === "ready" ? "rgba(74,222,128,0.8)" : "rgba(251,146,60,0.8)",
-              background: codexStatus.kind === "ready" ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)",
-              border: `1px solid ${codexStatus.kind === "ready" ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`,
-              borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap",
-            }}
-          >
-            {codexStatus.kind === "unknown" ? "CHECKING…" : codexStatus.kind === "ready" ? "READY" : "NOT CONFIGURED"}
-          </span>
+          <StatusBadge filled={codexBadgeFilled}>
+            {codexStatus.kind === "unknown" ? "CHECKING" : codexStatus.kind === "ready" ? "READY" : "NOT CONFIGURED"}
+          </StatusBadge>
         </div>
 
         {/* auth.json can exist but hold a stale/invalidated refresh token (e.g. the
@@ -843,19 +709,10 @@ function ApiKeysPanel({
             there, so it still reports READY. Offer a manual reauth escape hatch. */}
         {codexStatus.kind === "ready" && loginFlow.status === "idle" && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5, flex: 1 }}>
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5, flex: 1 }}>
               Getting a &quot;session has ended&quot; or 401 error? Reauth below.
             </p>
-            <button
-              onClick={handleConnectCodex}
-              style={{
-                padding: "7px 14px", borderRadius: "7px", border: "1px solid rgba(74,222,128,0.3)",
-                background: "rgba(74,222,128,0.1)", color: "rgba(74,222,128,0.9)",
-                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-              }}
-            >
-              Reauth
-            </button>
+            <PrimaryButtonSm onClick={handleConnectCodex}>Reauth</PrimaryButtonSm>
           </div>
         )}
 
@@ -865,37 +722,28 @@ function ApiKeysPanel({
             actually missing; a missing binary alone shouldn't risk a working login. */}
         {codexStatus.kind === "not_ready" && !codexStatus.authFound && loginFlow.status === "idle" && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5, flex: 1 }}>
-              Requires <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>codex-imagegen-cli</a> installed on this server. Sign in below.
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5, flex: 1 }}>
+              Requires <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "var(--text-2)" }}>codex-imagegen-cli</a> installed on this server. Sign in below.
             </p>
-            <button
-              onClick={handleConnectCodex}
-              style={{
-                padding: "7px 14px", borderRadius: "7px", border: "1px solid rgba(74,222,128,0.3)",
-                background: "rgba(74,222,128,0.1)", color: "rgba(74,222,128,0.9)",
-                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-              }}
-            >
-              Connect Codex
-            </button>
+            <PrimaryButtonSm onClick={handleConnectCodex}>Connect Codex</PrimaryButtonSm>
           </div>
         )}
 
         {codexStatus.kind === "not_ready" && codexStatus.authFound && !codexStatus.installed && loginFlow.status === "idle" && (
-          <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
-            Signed in, but <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>codex-imagegen-cli</a> isn&apos;t installed on this server yet — image generation will fail until it is.
+          <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+            Signed in, but <a href="https://github.com/jdmnk/codex-imagegen-cli" target="_blank" rel="noreferrer" style={{ color: "var(--text-2)" }}>codex-imagegen-cli</a> isn&apos;t installed on this server yet — image generation will fail until it is.
           </p>
         )}
 
         {loginFlow.status === "starting" && (
-          <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", margin: 0 }}>Starting login…</p>
+          <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0 }}>Starting login…</p>
         )}
 
         {loginFlow.status === "pending" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "8px" }}>
-            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.55)", margin: 0, lineHeight: 1.6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "12px", background: "var(--bg-1)", border: "1px solid var(--border-1)", borderRadius: "12px" }}>
+            <p style={{ fontSize: "13px", color: "var(--text-2)", margin: 0, lineHeight: 1.6 }}>
               1. Open{" "}
-              <a href={loginFlow.url} target="_blank" rel="noreferrer" style={{ color: "rgba(74,222,128,0.85)" }}>
+              <a href={loginFlow.url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
                 {loginFlow.url}
               </a>
               <br />
@@ -903,26 +751,20 @@ function ApiKeysPanel({
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span
+                className="tabular"
                 style={{
-                  fontFamily: "monospace", fontSize: "15px", fontWeight: 700, letterSpacing: "0.06em",
-                  color: "rgba(74,222,128,0.9)", background: "rgba(74,222,128,0.08)",
-                  border: "1px solid rgba(74,222,128,0.2)", borderRadius: "6px", padding: "6px 12px",
+                  fontFamily: "var(--font-mono)", fontSize: "15px", fontWeight: 700, letterSpacing: "var(--tracking-mono)",
+                  color: "var(--on-accent)", background: "var(--accent)",
+                  borderRadius: "var(--r-pill)", padding: "6px 12px",
                 }}
               >
                 {loginFlow.code}
               </span>
-              <button
-                onClick={() => handleCopyCode(loginFlow.code)}
-                style={{
-                  padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)",
-                  cursor: "pointer", fontSize: "11px", fontWeight: 500,
-                }}
-              >
+              <SecondaryButtonSm onClick={() => handleCopyCode(loginFlow.code)}>
                 {codeCopied ? "Copied" : "Copy"}
-              </button>
+              </SecondaryButtonSm>
             </div>
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.25)", margin: 0 }}>
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0 }}>
               Waiting for confirmation… the code expires in 15 minutes.
             </p>
           </div>
@@ -930,38 +772,11 @@ function ApiKeysPanel({
 
         {loginFlow.status === "error" && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0, flex: 1 }}>{loginFlow.error}</p>
-            <button
-              onClick={handleConnectCodex}
-              style={{
-                padding: "6px 12px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)",
-                cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
-              }}
-            >
-              Try again
-            </button>
+            <p style={{ fontSize: "13px", color: "var(--error)", margin: 0, flex: 1 }}>{loginFlow.error}</p>
+            <SecondaryButtonSm onClick={handleConnectCodex}>Try again</SecondaryButtonSm>
           </div>
         )}
-      </div>
-
-    </div>
-  );
-}
-
-/* ─── Provider legend (shared) ───────────────────────────────────────────────── */
-
-function ProviderLegend() {
-  return (
-    <div style={{ display: "flex", gap: "12px", padding: "12px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px" }}>
-      {PROVIDERS.map((p) => (
-        <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ width: "24px", height: "24px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.02em" }}>
-            <ProviderBrandIcon id={p.id} />
-          </span>
-          <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>{p.label}</span>
-        </div>
-      ))}
+      </SectionCard>
     </div>
   );
 }
@@ -988,26 +803,19 @@ function ImageModelsPanel({
   }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-      <div>
-        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
-          Image Models
-        </h2>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Choose which provider serves each image model. Azure-capable models show a deployment name field when Azure is selected.
-        </p>
-      </div>
-      <ProviderLegend />
+    <SectionCard>
+      <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+        Choose which provider serves each image model. Azure-capable models show a deployment name field when Azure is selected.
+      </p>
       <ModelGroup
         title="Image Models"
-        accent="#fb923c"
         models={models}
         providers={providers}
         onProviderChange={onProviderChange}
         azureDeployments={azureDeployments}
         onDeploymentChange={onDeploymentChange}
       />
-    </div>
+    </SectionCard>
   );
 }
 
@@ -1033,26 +841,19 @@ function VideoModelsPanel({
   }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-      <div>
-        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
-          Video Models
-        </h2>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Choose which provider serves each video model.
-        </p>
-      </div>
-      <ProviderLegend />
+    <SectionCard>
+      <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+        Choose which provider serves each video model.
+      </p>
       <ModelGroup
         title="Video Models"
-        accent="#5EEAD4"
         models={models}
         providers={providers}
         onProviderChange={onProviderChange}
         azureDeployments={azureDeployments}
         onDeploymentChange={onDeploymentChange}
       />
-    </div>
+    </SectionCard>
   );
 }
 
@@ -1077,119 +878,61 @@ function TextModelsPanel({
   const kieGroups = MODEL_GROUPS.filter(g => g.label !== "Azure");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-      {/* Header */}
-      <div>
-        <h2 style={{ fontSize: "17px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, lineHeight: 1.2 }}>
-          Text Models
-        </h2>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Kie.ai models */}
+      <SectionCard>
+        <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
           Configure AI text models for chat. Azure Auto uses your Azure Foundry credentials from the API Keys tab.
         </p>
-      </div>
-
-      {/* Kie.ai models */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {kieGroups.map((group) => (
-          <div key={group.label}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-              <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: "#e5e5e5", flexShrink: 0 }} />
-              <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", color: "rgba(255,255,255,0.35)", textTransform: "uppercase" }}>
-                {group.label}
-              </span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {group.models.map((m) => (
-                <div
-                  key={m.id}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "14px",
-                    padding: "11px 16px", borderRadius: "10px",
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {m.label}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {kieGroups.map((group) => (
+            <div key={group.label}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
+                <span className="label" style={{ color: "var(--text-3)" }}>{group.label}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {group.models.map((m, i) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "14px",
+                      padding: "12px 0",
+                      borderBottom: i === group.models.length - 1 ? "none" : "1px solid var(--border-1)",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-1)", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {m.label}
+                      </div>
+                      <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
+                        Kie.ai · {m.desc}
+                      </div>
                     </div>
-                    <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.28)", marginTop: "2px" }}>
-                      Kie.ai · {m.desc}
-                    </div>
+                    <span className="label" style={{ color: "var(--text-2)" }}>Kie.ai</span>
                   </div>
-                  <span style={{
-                    display: "flex", alignItems: "center", gap: "5px",
-                    padding: "3px 8px", borderRadius: "6px",
-                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-                    fontSize: "11px", fontWeight: 500, color: "rgba(255,255,255,0.4)",
-                    whiteSpace: "nowrap",
-                  }}>
-                    <span style={{ fontWeight: 700, color: "rgba(255,255,255,0.55)" }}>K</span>
-                    Kie.ai
-                  </span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </SectionCard>
 
       {/* Azure Auto card */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "14px",
-          padding: "16px",
-          background: "rgba(96,165,250,0.04)",
-          border: "1px solid rgba(96,165,250,0.14)",
-          borderRadius: "12px",
-        }}
-      >
-        {/* Header row */}
+      <SectionCard>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span
-            style={{
-              width: "28px", height: "28px", borderRadius: "7px",
-              background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "11px", fontWeight: 700, color: "rgba(96,165,250,0.85)",
-            }}
-          >
-            Az
-          </span>
-          <div>
-            <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Azure Auto</div>
-            <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-1)" }}>Azure Auto</div>
+            <div style={{ fontSize: "13px", color: "var(--text-3)", marginTop: "2px" }}>
               Model-router — automatically selects the best model for each request
             </div>
           </div>
-          <span
-            style={{
-              marginLeft: "auto", fontSize: "10px", fontWeight: 600,
-              color: azureReady ? "rgba(74,222,128,0.8)" : "rgba(251,146,60,0.8)",
-              background: azureReady ? "rgba(74,222,128,0.08)" : "rgba(251,146,60,0.08)",
-              border: `1px solid ${azureReady ? "rgba(74,222,128,0.2)" : "rgba(251,146,60,0.2)"}`,
-              borderRadius: "5px", padding: "2px 7px", letterSpacing: "0.04em", whiteSpace: "nowrap",
-            }}
-          >
-            {azureReady ? "READY" : "NOT CONFIGURED"}
-          </span>
+          <StatusBadge filled={azureReady}>{azureReady ? "READY" : "NOT CONFIGURED"}</StatusBadge>
         </div>
 
         {/* Status notice if not ready */}
         {!azureReady && (
-          <div
-            style={{
-              padding: "10px 12px",
-              background: "rgba(251,146,60,0.05)",
-              border: "1px solid rgba(251,146,60,0.15)",
-              borderRadius: "8px",
-              fontSize: "11px",
-              color: "rgba(251,146,60,0.7)",
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={{ padding: "10px 12px", background: "var(--bg-1)", border: "1px solid var(--border-1)", borderRadius: "12px", fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
             {azureKeyStatus !== "set"
               ? "Add your Azure Foundry API key in the API Keys tab to enable this model."
               : "Add your Azure Foundry Base URL in the API Keys tab to enable this model."}
@@ -1200,10 +943,7 @@ function TextModelsPanel({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
           {/* Model Name */}
           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-            <label
-              htmlFor="azure-text-model-name"
-              style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
-            >
+            <label htmlFor="azure-text-model-name" className="label" style={{ color: "var(--text-3)" }}>
               Model Name
             </label>
             <input
@@ -1212,30 +952,18 @@ function TextModelsPanel({
               placeholder="model-router"
               value={azureTextModelName}
               onChange={(e) => onModelNameChange(e.target.value)}
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "7px",
-                padding: "7px 11px",
-                fontSize: "12px",
-                color: "rgba(255,255,255,0.8)",
-                outline: "none",
-                fontFamily: "inherit",
-              }}
-              onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
-              onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+              style={inputStyle(true)}
+              onFocus={focusInput}
+              onBlur={blurInput}
             />
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
-              Passed as <code style={{ fontFamily: "monospace" }}>model</code> in the request body.
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+              Passed as <code style={{ fontFamily: "var(--font-mono)" }}>model</code> in the request body.
             </p>
           </div>
 
           {/* Deployment */}
           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-            <label
-              htmlFor="azure-text-deployment"
-              style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}
-            >
+            <label htmlFor="azure-text-deployment" className="label" style={{ color: "var(--text-3)" }}>
               Deployment
             </label>
             <input
@@ -1244,36 +972,61 @@ function TextModelsPanel({
               placeholder="auto-model"
               value={azureTextDeployment}
               onChange={(e) => onDeploymentChange(e.target.value)}
-              style={{
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "7px",
-                padding: "7px 11px",
-                fontSize: "12px",
-                color: "rgba(255,255,255,0.8)",
-                outline: "none",
-                fontFamily: "inherit",
-              }}
-              onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(96,165,250,0.4)"; }}
-              onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+              style={inputStyle(true)}
+              onFocus={focusInput}
+              onBlur={blurInput}
             />
-            <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
-              Used in the URL path <code style={{ fontFamily: "monospace" }}>/deployments/{"{deployment}"}</code>.
+            <p style={{ fontSize: "12px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+              Used in the URL path <code style={{ fontFamily: "var(--font-mono)" }}>/deployments/{"{deployment}"}</code>.
             </p>
           </div>
         </div>
 
         {/* API version (read-only) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(96,165,250,0.7)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            API Version
-          </span>
-          <div style={{ padding: "7px 11px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "7px", fontSize: "12px", color: "rgba(255,255,255,0.4)", fontFamily: "monospace" }}>
+          <span className="label" style={{ color: "var(--text-3)" }}>API Version</span>
+          <div style={{ padding: "0 14px", height: "40px", display: "flex", alignItems: "center", background: "var(--bg-1)", border: "1px solid var(--border-1)", borderRadius: "var(--r-pill)", fontSize: "13px", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
             2024-04-01-preview
           </div>
         </div>
-      </div>
+      </SectionCard>
     </div>
+  );
+}
+
+/* ─── Toggle — per components.md > Toggle ────────────────────────────────────── */
+
+function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flexShrink: 0,
+        width: "42px",
+        height: "24px",
+        borderRadius: "var(--r-pill)",
+        border: on ? "none" : "1px solid var(--border-2)",
+        cursor: "pointer",
+        padding: 0,
+        position: "relative",
+        background: on ? "var(--accent)" : "var(--bg-2)",
+        transition: "background var(--dur-1)",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: "3px",
+          left: on ? "auto" : "2px",
+          right: on ? "3px" : "auto",
+          width: "18px",
+          height: "18px",
+          borderRadius: "50%",
+          background: on ? "var(--on-accent)" : "var(--border-2)",
+          transition: "left var(--dur-1), right var(--dur-1)",
+        }}
+      />
+    </button>
   );
 }
 
@@ -1284,50 +1037,22 @@ function DebugPanel() {
   const toggleDebug   = useWorkflowStore((s) => s.toggleDebug);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div>
-        <h2 style={{ fontSize: "15px", fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0, marginBottom: "4px" }}>Debug</h2>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.35)", margin: 0 }}>
-          Only visible when <code style={{ fontFamily: "monospace", color: "rgba(251,146,60,0.8)" }}>NEXT_PUBLIC_DEBUG=true</code>
-        </p>
-      </div>
+    <SectionCard>
+      <p style={{ fontSize: "13px", color: "var(--text-3)", margin: 0, lineHeight: 1.5 }}>
+        Only visible when <code style={{ fontFamily: "var(--font-mono)", color: "var(--warning)" }}>NEXT_PUBLIC_DEBUG=true</code>
+      </p>
 
       {/* Simulate generation */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "14px 16px", borderRadius: "10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", padding: "12px 0" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-          <span style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)" }}>Simulate generation</span>
-          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", lineHeight: 1.5 }}>
+          <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-1)" }}>Simulate generation</span>
+          <span style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.5 }}>
             Skip the real API call — fake a 5-second generation and log the payload to the server console.
           </span>
         </div>
-        <button
-          onClick={toggleDebug}
-          style={{
-            flexShrink: 0,
-            width: "40px",
-            height: "22px",
-            borderRadius: "11px",
-            border: "none",
-            cursor: "pointer",
-            padding: "2px",
-            background: debugMode ? "rgba(251,146,60,0.8)" : "rgba(255,255,255,0.12)",
-            transition: "background 200ms",
-            display: "flex",
-            alignItems: "center",
-          }}
-        >
-          <div style={{
-            width: "18px",
-            height: "18px",
-            borderRadius: "50%",
-            background: "#fff",
-            transform: debugMode ? "translateX(18px)" : "translateX(0px)",
-            transition: "transform 200ms cubic-bezier(0.34,1.56,0.64,1)",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
-          }} />
-        </button>
+        <Toggle on={debugMode} onClick={toggleDebug} />
       </div>
-    </div>
+    </SectionCard>
   );
 }
 
@@ -1473,8 +1198,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           to   { opacity: 1; }
         }
         @keyframes settingsModalIn {
-          from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
-          to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+          to   { opacity: 1; transform: translate(-50%, -50%); }
         }
         @keyframes skeleton-pulse {
           0%, 100% { opacity: 1; }
@@ -1482,7 +1207,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         }
       `}</style>
 
-      {/* ── Backdrop ── */}
+      {/* ── Scrim — the only translucent surface in the system ── */}
       <div
         ref={overlayRef}
         onClick={handleOverlayClick}
@@ -1490,14 +1215,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           position: "fixed",
           inset: 0,
           zIndex: 9999,
-          background: "rgba(0, 0, 0, 0.65)",
-          backdropFilter: "blur(4px)",
-          WebkitBackdropFilter: "blur(4px)",
-          animation: "settingsOverlayIn 180ms ease both",
+          background: "var(--scrim)",
+          animation: "settingsOverlayIn var(--dur-2) var(--ease) both",
         }}
       />
 
-      {/* ── Modal shell ── */}
+      {/* ── Modal shell — 920px, per components.md > Modal ── */}
       <div
         id="settings-modal"
         style={{
@@ -1506,43 +1229,63 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           top: "50%",
           transform: "translate(-50%, -50%)",
           zIndex: 10000,
-          width: "min(75vw, 960px)",
-          height: "min(75vh, 680px)",
+          width: "920px",
+          maxWidth: "calc(100vw - 40px)",
+          maxHeight: "calc(100vh - 40px)",
           display: "flex",
-          borderRadius: "18px",
-          background: "rgba(10, 11, 14, 0.98)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 4px 20px rgba(0,0,0,0.5)",
+          flexDirection: "column",
+          borderRadius: "var(--r-3)",
+          background: "var(--bg-1)",
+          border: "1px solid var(--border-2)",
           overflow: "hidden",
-          animation: "settingsModalIn 220ms cubic-bezier(0.22,1,0.36,1) both",
+          animation: "settingsModalIn var(--dur-2) var(--ease) both",
         }}
       >
-        {/* ── Left sidebar ── */}
+        {/* Header */}
         <div
           style={{
-            width: "200px",
-            flexShrink: 0,
-            borderRight: "1px solid rgba(255,255,255,0.06)",
             display: "flex",
-            flexDirection: "column",
-            padding: "20px 12px",
-            gap: "2px",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "18px 20px",
+            flexShrink: 0,
           }}
         >
-          {/* Title */}
-          <div
+          <span style={{ fontSize: "20px", fontWeight: 600, color: "var(--text-1)" }}>Settings</span>
+          <button
+            id="settings-close"
+            onClick={onClose}
+            title="Close (Esc)"
             style={{
-              fontSize: "14px",
-              fontWeight: 600,
-              color: "rgba(255,255,255,0.6)",
-              padding: "4px 10px 14px",
-              letterSpacing: "0.01em",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "34px",
+              height: "34px",
+              borderRadius: "var(--r-pill)",
+              border: "1px solid var(--border-2)",
+              cursor: "pointer",
+              background: "transparent",
+              color: "var(--text-2)",
+              transition: "color 120ms, border-color 120ms",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-1)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--text-1)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-2)";
             }}
           >
-            Settings
-          </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-          {/* Nav items */}
+        {/* Underline tabs, per components.md > Tabs */}
+        <div style={{ display: "flex", gap: "4px", padding: "0 20px", borderBottom: "1px solid var(--border-1)", flexShrink: 0 }}>
           {NAV.map((item) => {
             const isActive = activeNav === item.id;
             return (
@@ -1551,144 +1294,70 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 id={`settings-nav-${item.id}`}
                 onClick={() => setActiveNav(item.id)}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "9px",
-                  padding: "8px 10px",
-                  borderRadius: "8px",
+                  padding: isActive ? "8px 12px 12px" : "8px 12px 12px",
+                  marginBottom: isActive ? "-1px" : 0,
                   border: "none",
+                  borderBottom: isActive ? "2px solid var(--text-1)" : "2px solid transparent",
+                  background: "transparent",
                   cursor: "pointer",
-                  background: isActive ? "rgba(255,255,255,0.07)" : "transparent",
-                  color: isActive ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.4)",
-                  fontSize: "13px",
-                  fontWeight: isActive ? 500 : 400,
-                  textAlign: "left",
-                  transition: "background 130ms ease, color 130ms ease",
-                  width: "100%",
+                  fontSize: "14px",
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? "var(--text-1)" : "var(--text-3)",
+                  fontFamily: "inherit",
+                  transition: "color 120ms",
                 }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)";
-                    (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.6)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                    (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)";
-                  }
-                }}
+                onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = "var(--text-1)"; }}
+                onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.color = "var(--text-3)"; }}
               >
-                <span style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0 }}>{item.icon}</span>
                 {item.label}
               </button>
             );
           })}
         </div>
 
-        {/* ── Right content ── */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            minWidth: 0,
-            overflow: "hidden",
-          }}
-        >
-          {/* Top bar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "flex-end",
-              padding: "16px 20px",
-              borderBottom: "1px solid rgba(255,255,255,0.05)",
-              flexShrink: 0,
-            }}
-          >
-            <button
-              id="settings-close"
-              onClick={onClose}
-              title="Close (Esc)"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "7px",
-                border: "none",
-                cursor: "pointer",
-                background: "rgba(255,255,255,0.05)",
-                color: "rgba(255,255,255,0.4)",
-                transition: "background 130ms ease, color 130ms ease",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)";
-                (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.8)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
-                (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)";
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Scrollable body */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "28px 28px 40px",
-            }}
-          >
-            {activeNav === "api-keys" && (
-              <ApiKeysPanel
-                azureBaseUrl={azureBaseUrl}
-                onBaseUrlChange={handleBaseUrlChange}
-                kieKeyStatus={kieKeyStatus}
-                onKieKeySave={handleKieKeySave}
-                onKieKeyDelete={handleKieKeyDelete}
-                azureKeyStatus={azureKeyStatus}
-                onAzureKeySave={handleAzureKeySave}
-                onAzureKeyDelete={handleAzureKeyDelete}
-                codexStatus={codexStatus}
-                onCodexLoginSuccess={refreshCodexStatus}
-              />
-            )}
-            {activeNav === "image-models" && (
-              <ImageModelsPanel
-                providers={modelProviders}
-                onProviderChange={handleProviderChange}
-                azureDeployments={azureDeployments}
-                onDeploymentChange={handleDeploymentChange}
-              />
-            )}
-            {activeNav === "video-models" && (
-              <VideoModelsPanel
-                providers={modelProviders}
-                onProviderChange={handleProviderChange}
-                azureDeployments={azureDeployments}
-                onDeploymentChange={handleDeploymentChange}
-              />
-            )}
-            {activeNav === "text-models" && (
-              <TextModelsPanel
-                azureKeyStatus={azureKeyStatus}
-                azureBaseUrl={azureBaseUrl}
-                azureTextDeployment={azureTextDeployment}
-                azureTextModelName={azureTextModelName}
-                onDeploymentChange={handleAzureTextDeploymentChange}
-                onModelNameChange={handleAzureTextModelNameChange}
-              />
-            )}
-            {activeNav === "debug" && IS_DEBUG && <DebugPanel />}
-          </div>
+        {/* Scrollable body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px" }}>
+          {activeNav === "api-keys" && (
+            <ApiKeysPanel
+              azureBaseUrl={azureBaseUrl}
+              onBaseUrlChange={handleBaseUrlChange}
+              kieKeyStatus={kieKeyStatus}
+              onKieKeySave={handleKieKeySave}
+              onKieKeyDelete={handleKieKeyDelete}
+              azureKeyStatus={azureKeyStatus}
+              onAzureKeySave={handleAzureKeySave}
+              onAzureKeyDelete={handleAzureKeyDelete}
+              codexStatus={codexStatus}
+              onCodexLoginSuccess={refreshCodexStatus}
+            />
+          )}
+          {activeNav === "image-models" && (
+            <ImageModelsPanel
+              providers={modelProviders}
+              onProviderChange={handleProviderChange}
+              azureDeployments={azureDeployments}
+              onDeploymentChange={handleDeploymentChange}
+            />
+          )}
+          {activeNav === "video-models" && (
+            <VideoModelsPanel
+              providers={modelProviders}
+              onProviderChange={handleProviderChange}
+              azureDeployments={azureDeployments}
+              onDeploymentChange={handleDeploymentChange}
+            />
+          )}
+          {activeNav === "text-models" && (
+            <TextModelsPanel
+              azureKeyStatus={azureKeyStatus}
+              azureBaseUrl={azureBaseUrl}
+              azureTextDeployment={azureTextDeployment}
+              azureTextModelName={azureTextModelName}
+              onDeploymentChange={handleAzureTextDeploymentChange}
+              onModelNameChange={handleAzureTextModelNameChange}
+            />
+          )}
+          {activeNav === "debug" && IS_DEBUG && <DebugPanel />}
         </div>
       </div>
     </>

@@ -30,7 +30,12 @@ export function getSpaces(): GuestSpace[] {
     .filter((s): s is GuestSpace => s !== null);
 }
 
-export function saveSpaces(spaces: GuestSpace[]): void {
+/**
+ * `partial: true` upserts only the given spaces and leaves the rest alone —
+ * the client sends just the spaces that changed. A full save (default) also
+ * deletes every space not in the list, which is how deletions propagate.
+ */
+export function saveSpaces(spaces: GuestSpace[], opts: { partial?: boolean } = {}): void {
   const d = db();
   d.exec("BEGIN");
   const keep = new Set(spaces.map((s) => s.id));
@@ -41,8 +46,10 @@ export function saveSpaces(spaces: GuestSpace[]): void {
   for (const s of spaces) {
     upsert.run(s.id, s.name ?? "Untitled", JSON.stringify(s), Number(s.updatedAt ?? s.createdAt ?? Date.now()));
   }
-  const existing = d.prepare("SELECT id FROM spaces").all() as { id: string }[];
-  const del = d.prepare("DELETE FROM spaces WHERE id = ?");
-  for (const { id } of existing) if (!keep.has(id)) del.run(id);
+  if (!opts.partial) {
+    const existing = d.prepare("SELECT id FROM spaces").all() as { id: string }[];
+    const del = d.prepare("DELETE FROM spaces WHERE id = ?");
+    for (const { id } of existing) if (!keep.has(id)) del.run(id);
+  }
   d.exec("COMMIT");
 }

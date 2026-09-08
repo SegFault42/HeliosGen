@@ -1,0 +1,103 @@
+<!--CSS-->
+.main{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0}
+.stage{flex:1;display:flex;flex-direction:column;gap:12px;min-height:0}
+.stage .frame{flex:1;background:var(--card);box-shadow:inset 0 1px 0 var(--hi),0 24px 64px rgba(0,0,0,.45);border:1px solid var(--rule);border-radius:10px;display:grid;place-items:center;overflow:hidden;position:relative}
+.stage .frame img{height:100%;max-height:100%;width:auto;display:block}
+.stage .frame .corner{position:absolute;top:12px;left:12px;color:var(--ash)}
+.stage .frame .acts{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+.stage .frame .acts .btn{background:rgba(11,10,9,.7);border-color:var(--rule2);color:var(--ink)}
+.stage .plateline{display:flex;justify-content:space-between;color:var(--graphite)}
+.bench{display:flex;flex-direction:column;gap:12px}
+.bench .row{display:flex;gap:12px;align-items:flex-end}
+.bench .row .s{flex:1}
+.bench .row .s.w{flex:1.6}
+.bench .row .s.n{flex:.6}
+.bench .strike{width:180px;height:40px;font-size:14px;letter-spacing:.14em}
+.rack{display:flex;gap:12px;align-items:flex-end;overflow:hidden}
+.rack .p{display:flex;flex-direction:column;gap:6px;color:var(--ash)}
+.rack .p .thumb{width:72px;height:72px}
+.rack .p.on .thumb{border-color:var(--ink)}
+.rack .p.on{color:var(--ink)}
+.rack .more{color:var(--ash);height:72px;display:flex;align-items:center;padding-left:8px}
+.ledger{width:320px;display:flex;flex-direction:column;gap:16px}
+.ledger .panel{padding:20px;display:flex;flex-direction:column;gap:16px}
+.ledger .big{font-family:var(--mono);font-size:40px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.ledger .kv{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-top:1px solid var(--rule)}
+.ledger .kv .v{font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.bars{display:flex;flex-direction:column;gap:10px}
+.bars .b{display:grid;grid-template-columns:96px 1fr 52px;align-items:center;gap:10px;color:var(--graphite)}
+.bars .b i{display:block;height:2px;background:var(--rule2)}
+.bars .b i.e{background:var(--ember);box-shadow:0 0 8px var(--glow)}
+.bars .b .v{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.wallet{display:flex;justify-content:space-between;align-items:center}
+.wallet .v{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+<!--/CSS-->
+<div class="app">
+  <!--RAIL bench-->
+  <section class="main">
+    <div class="notice"><span class="mono">Notice</span><span style="font-size:13px">Codex CLI image quota resets at 02:10. kie.ai wallet is funded.</span><span class="x mono">Dismiss</span></div>
+    <div class="stage">
+      <div class="frame">
+        <span class="corner mono">Latest piece</span>
+        <div class="acts"><span class="btn sm secondary">Open</span><span class="btn sm secondary">Reforge</span></div>
+        <img src="piece-apple.jpg" alt="">
+      </div>
+      <div class="plateline"><span class="mono">Piece 0142 · Nano Banana · 2K · $0.04 · 6.2s</span><span class="mono">1:1 · PNG · seed 88213</span></div>
+    </div>
+    <div class="bench">
+      <div class="field"><span class="ph">Describe the piece</span></div>
+      <div class="row">
+        <div class="s w"><span class="lbl mono">Model</span><div class="sel">Nano Banana<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <div class="s"><span class="lbl mono">Provider</span><div class="sel">kie.ai<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <div class="s"><span class="lbl mono">Quality</span><div class="sel">2K<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <div class="s n"><span class="lbl mono">Ratio</span><div class="sel">1:1<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <div class="s n"><span class="lbl mono">Count</span><div class="sel">1<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <div class="s n"><span class="lbl mono">Format</span><div class="sel">PNG<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div></div>
+        <span class="btn primary strike">Strike · $0.04</span>
+      </div>
+    </div>
+    <div class="rack">
+      <div class="p on"><div class="thumb"><img src="piece-apple.jpg" alt=""></div><span class="mono">0142</span></div>
+      <div class="p"><div class="thumb"><img src="piece-flash.jpg" alt=""></div><span class="mono">0141</span></div>
+      <div class="p"><div class="thumb"><img src="piece-lemon.jpg" alt=""></div><span class="mono">0140</span></div>
+      <div class="p"><div class="thumb"><img src="piece-pear.jpg" alt=""></div><span class="mono">0139</span></div>
+      <div class="p"><div class="thumb"><img src="piece-apple.jpg" alt="" style="filter:grayscale(1)"></div><span class="mono">0138</span></div>
+      <div class="p"><div class="thumb"><img src="piece-lemon.jpg" alt="" style="filter:grayscale(1)"></div><span class="mono">0137</span></div>
+      <div class="p"><div class="thumb"><img src="piece-pear.jpg" alt="" style="filter:grayscale(1)"></div><span class="mono">0136</span></div>
+      <div class="p"><div class="thumb"><img src="piece-flash.jpg" alt="" style="filter:grayscale(1)"></div><span class="mono">0135</span></div>
+      <div class="p"><div class="thumb"></div><span class="mono">0134</span></div>
+      <div class="p"><div class="thumb"></div><span class="mono">0133</span></div>
+      <div class="p"><div class="thumb"></div><span class="mono">0132</span></div>
+      <div class="more mono">+131</div>
+    </div>
+  </section>
+  <aside class="ledger">
+    <div class="panel">
+      <div><span class="mono muted">This strike</span><div class="big" style="margin-top:8px">$0.04</div></div>
+      <div>
+        <div class="kv"><span class="mono muted">Today</span><span class="v">$1.12 · 28</span></div>
+        <div class="kv"><span class="mono muted">Month</span><span class="v">$23.40 · 612</span></div>
+        <div class="kv"><span class="mono muted">Avg per piece</span><span class="v">$0.038</span></div>
+      </div>
+      <div>
+        <span class="mono muted">Spend by model · Sep</span>
+        <div class="bars" style="margin-top:12px">
+          <div class="b"><span class="mono">Nano Banana</span><i class="e" style="width:88%"></i><span class="v">$11.20</span></div>
+          <div class="b"><span class="mono">GPT Image 2</span><i style="width:52%"></i><span class="v">$6.60</span></div>
+          <div class="b"><span class="mono">Flux 2</span><i style="width:16%"></i><span class="v">$2.00</span></div>
+          <div class="b"><span class="mono">Veo 3.1</span><i style="width:14%"></i><span class="v">$1.80</span></div>
+          <div class="b"><span class="mono">Kling 3</span><i style="width:14%"></i><span class="v">$1.80</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="gap:12px">
+      <div class="wallet"><span class="mono muted">Wallet</span><span class="v">$46.60</span></div>
+      <div class="wallet" style="border-top:1px solid var(--rule);padding-top:12px"><span style="font-size:13px;color:var(--graphite)">≈ 1,165 strikes at this rate</span><span class="btn sm secondary">Top up</span></div>
+    </div>
+    <div class="panel" style="gap:8px">
+      <span class="mono muted">Assistant</span>
+      <div class="serif" style="font-size:20px;color:var(--graphite);font-weight:400">“Try <em>hard flash, tiled floor,</em> and keep the apple centred.”</div>
+      <div style="display:flex;gap:8px;margin-top:4px"><span class="btn sm secondary">Use</span><span class="btn sm ghost">Open assistant</span></div>
+    </div>
+  </aside>
+</div>

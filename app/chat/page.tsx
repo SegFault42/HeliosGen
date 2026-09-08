@@ -9,7 +9,7 @@ import { MODEL_GROUPS, MODELS, type ModelId } from "@/lib/models";
 import { SYSTEM_PROMPT } from "@/lib/systemPrompt";
 import { Send, ChevronUp, Copy, Check } from "lucide-react";
 import { motion } from "motion/react";
-import Image from "next/image";
+import { BrandMark } from "@/components/BrandLogo";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 import TypewriterHeading from "@/components/ui/TypewriterHeading";
 import { useWorkflowStore } from "@/lib/store";
@@ -18,7 +18,7 @@ import { loadAzureBaseUrl, loadAzureTextDeployment, loadAzureTextModelName } fro
 // ── Logo ──────────────────────────────────────────────────────────────────────
 
 function LogoIcon({ size = 40 }: { size?: number }) {
-  return <Image src="/HG.svg" alt="Logo" width={size} height={size} />;
+  return <BrandMark size={size} />;
 }
 
 // ── Model picker ──────────────────────────────────────────────────────────────
@@ -51,44 +51,46 @@ function ModelPicker({
     <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
+        className="label"
         style={{
           display: "flex", alignItems: "center", gap: "5px",
-          padding: "0 8px", height: "32px", borderRadius: "8px",
-          background: open ? "rgba(255,255,255,0.09)" : "transparent",
+          padding: "0 8px", height: "32px", borderRadius: "var(--r-1)",
+          background: open ? "var(--bg-2)" : "transparent",
           border: "1px solid transparent",
-          color: "rgba(255,255,255,0.5)", fontSize: "12px",
-          fontFamily: "inherit", cursor: "pointer",
-          transition: "background 120ms, color 120ms", whiteSpace: "nowrap",
+          color: "var(--text-3)",
+          cursor: "pointer",
+          transition: "background var(--dur-1), color var(--dur-1)", whiteSpace: "nowrap",
         }}
       >
         {current?.label}
         <ChevronUp
           size={12}
           style={{
-            opacity: 0.5,
+            opacity: 0.7,
             transform: direction === "up"
               ? (open ? "rotate(180deg)" : "none")
               : (open ? "none" : "rotate(180deg)"),
-            transition: "transform 120ms",
+            transition: "transform var(--dur-1)",
           }}
         />
       </button>
       {open && (
         <div style={{
           position: "absolute", right: 0, ...dropPos,
-          minWidth: "180px", background: "rgba(14,16,18,0.98)",
-          border: "1px solid rgba(255,255,255,0.1)", borderRadius: "12px",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.6)", overflow: "hidden", zIndex: 100,
+          minWidth: "180px", background: "var(--surface)",
+          border: "1px solid var(--border-2)", borderRadius: "var(--r-2)",
+          overflow: "hidden", zIndex: 100,
         }}>
-          <div style={{ padding: "4px" }}>
+          <div style={{ padding: "6px" }}>
             {MODEL_GROUPS.map((group, gi) => (
               <div key={group.label}>
-                {gi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />}
-                <div style={{ padding: "4px 8px 2px", fontSize: "10px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>
+                {gi > 0 && <div style={{ height: "1px", background: "var(--border-1)", margin: "4px 0" }} />}
+                <div className="label" style={{ padding: "4px 8px 2px", color: "var(--text-3)" }}>
                   {group.label}
                 </div>
                 {group.models.map(m => {
                   const disabled = disabledIds.includes(m.id);
+                  const selected = model === m.id;
                   return (
                     <button
                       key={m.id}
@@ -96,20 +98,20 @@ function ModelPicker({
                       title={disabled ? "Configure Azure in Settings → API Keys" : undefined}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                        width: "100%", padding: "7px 8px", borderRadius: "7px", border: "none",
-                        background: model === m.id ? "rgba(45,212,191,0.12)" : "transparent",
-                        color: disabled ? "rgba(255,255,255,0.25)" : model === m.id ? "rgba(94,234,212,0.95)" : "rgba(255,255,255,0.7)",
-                        fontSize: "13px", fontFamily: "inherit",
+                        width: "100%", padding: "7px 8px", borderRadius: "var(--r-1)", border: "none",
+                        background: selected ? "var(--text-1)" : "transparent",
+                        color: disabled ? "var(--text-3)" : selected ? "var(--on-accent)" : "var(--text-2)",
+                        fontSize: "var(--fs-3)", fontFamily: "var(--font-ui)", fontWeight: selected ? 600 : 400,
                         cursor: disabled ? "not-allowed" : "pointer",
-                        textAlign: "left", transition: "background 100ms",
-                        opacity: disabled ? 0.5 : 1,
+                        textAlign: "left", transition: "background var(--dur-1)",
+                        opacity: disabled ? 0.4 : 1,
                       }}
-                      onMouseEnter={e => { if (!disabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
-                      onMouseLeave={e => { if (!disabled && model !== m.id) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                      onMouseEnter={e => { if (!disabled && !selected) (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-2)"; }}
+                      onMouseLeave={e => { if (!disabled && !selected) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                     >
                       <span>{m.label}</span>
-                      <span style={{ fontSize: "10px", color: disabled ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.28)", marginLeft: "8px" }}>
-                        {disabled ? "needs Azure key" : m.desc}
+                      <span className="label" style={{ color: selected ? "var(--on-accent)" : "var(--text-3)", marginLeft: "8px", opacity: 0.8 }}>
+                        {disabled ? "needs key" : m.desc}
                       </span>
                     </button>
                   );
@@ -222,10 +224,10 @@ function LandingView({
       {/* Title */}
       <TypewriterHeading text="I'm here to help you make better prompts." onDone={() => setHeadingDone(true)} />
       <motion.p
-        initial={{ filter: "blur(10px)", opacity: 0 }}
-        animate={{ filter: "blur(0px)", opacity: 1 }}
-        transition={{ duration: 1 }}
-        style={{ color: "rgba(255,255,255,0.4)", fontSize: "15px", marginBottom: "40px", textAlign: "center" }}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.42 }}
+        style={{ color: "var(--text-2)", fontSize: "var(--fs-5)", marginBottom: "40px", textAlign: "center" }}
       >
         Give me a prompt and I&apos;ll make it better.
       </motion.p>
@@ -235,12 +237,11 @@ function LandingView({
         {/* Input bar */}
         <div style={{
           display: "flex", alignItems: "center",
-          background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: "18px",
+          background: "var(--bg-2)",
+          border: "1px solid var(--border-2)",
+          borderRadius: "var(--r-2)",
           padding: "10px 10px 10px 20px",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.03) inset",
-          transition: "border-color 150ms",
+          transition: "border-color var(--dur-1)",
         }}>
           <textarea
             ref={inputRef}
@@ -251,8 +252,8 @@ function LandingView({
             rows={1}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
-              resize: "none", color: "rgba(255,255,255,0.88)", fontSize: "15px",
-              fontFamily: "inherit", lineHeight: "24px", maxHeight: "120px",
+              resize: "none", color: "var(--text-1)", fontSize: "var(--fs-5)",
+              fontFamily: "var(--font-ui)", lineHeight: "24px", maxHeight: "120px",
               overflowY: "auto", padding: 0,
             }}
             onInput={e => {
@@ -267,12 +268,14 @@ function LandingView({
               onClick={() => submit(input)}
               disabled={!input.trim() || kieKeySet === false || disabledIds.includes(model)}
               style={{
-                width: "36px", height: "36px", borderRadius: "50%", border: "none",
-                background: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                width: "40px", height: "40px", borderRadius: "50%", border: "none",
+                background: "var(--accent)",
+                color: "var(--on-accent)",
+                boxShadow: "0 3px 0 var(--accent-edge)",
+                opacity: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? 1 : 0.4,
                 cursor: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0, transition: "background 150ms, color 150ms",
+                flexShrink: 0, transition: "background var(--dur-1), opacity var(--dur-1)",
               }}
             >
               <Send size={15} />
@@ -446,7 +449,7 @@ function ChatWindow({
         <LogoIcon size={48} />
         <TypewriterHeading text="I'm here to help you make better prompts." />
         <div style={{ width: "100%", maxWidth: "680px" }}>
-          <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "18px", padding: "10px 10px 10px 20px", transition: "border-color 150ms" }}>
+          <div style={{ display: "flex", alignItems: "center", background: "var(--bg-2)", border: "1px solid var(--border-2)", borderRadius: "var(--r-2)", padding: "10px 10px 10px 20px", transition: "border-color var(--dur-1)" }}>
             <textarea
               ref={inputRef}
               value={input}
@@ -454,12 +457,12 @@ function ChatWindow({
               onKeyDown={onKey}
               placeholder="Describe your image or video idea…"
               rows={1}
-              style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "rgba(255,255,255,0.88)", fontSize: "15px", fontFamily: "inherit", lineHeight: "24px", maxHeight: "120px", overflowY: "auto", padding: 0 }}
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "var(--text-1)", fontSize: "var(--fs-5)", fontFamily: "var(--font-ui)", lineHeight: "24px", maxHeight: "120px", overflowY: "auto", padding: 0 }}
               onInput={e => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 120) + "px"; }}
             />
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "12px", flexShrink: 0 }}>
               <ModelPicker model={model} onChange={handleModelChange} direction="down" disabledIds={disabledIds} />
-              <button onClick={() => send(input)} disabled={!input.trim() || kieKeySet === false || disabledIds.includes(model)} style={{ width: "36px", height: "36px", borderRadius: "50%", border: "none", background: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)", color: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)", cursor: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms, color 150ms" }}>
+              <button onClick={() => send(input)} disabled={!input.trim() || kieKeySet === false || disabledIds.includes(model)} style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", background: "var(--accent)", color: "var(--on-accent)", boxShadow: "0 3px 0 var(--accent-edge)", opacity: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? 1 : 0.4, cursor: input.trim() && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background var(--dur-1), opacity var(--dur-1)" }}>
                 <Send size={15} />
               </button>
             </div>
@@ -474,8 +477,8 @@ function ChatWindow({
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, minWidth: 0 }}>
       {/* Header */}
-      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-        <h2 style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>
+      <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid var(--border-1)", flexShrink: 0 }}>
+        <h2 style={{ margin: 0, fontSize: "var(--fs-4)", fontWeight: 600, color: "var(--text-1)" }}>
           {session.title}
         </h2>
       </div>
@@ -485,24 +488,32 @@ function ChatWindow({
         {messages.map((m, i) => (
           <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "72%" }}>
+              {m.role === "assistant" && (
+                <span className="label" style={{ color: "var(--text-3)", marginBottom: "4px" }}>
+                  {MODELS.find(mm => mm.id === model)?.label ?? "Assistant"}
+                </span>
+              )}
               <div style={{
                 padding: "10px 14px",
                 borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                background: m.role === "user" ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)",
-                border: m.role === "user" ? "1px solid rgba(45,212,191,0.25)" : "1px solid rgba(255,255,255,0.07)",
-                fontSize: "14px", lineHeight: 1.6,
-                color: m.role === "user" ? "#FFFFFF" : "rgba(255,255,255,0.88)",
+                background: m.role === "user" ? "var(--surface)" : "var(--bg-2)",
+                border: m.role === "user" ? "1px solid var(--border-2)" : "none",
+                fontSize: "var(--fs-4)", lineHeight: "var(--lh-body)",
+                color: m.role === "user" ? "var(--text-1)" : "var(--text-2)",
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
-                {m.content}
-                {m.streaming && (
-                  m.content
-                    ? <span style={{ display: "inline-block", width: "2px", height: "14px", background: "rgba(255,255,255,0.6)", borderRadius: "1px", marginLeft: "2px", verticalAlign: "text-bottom", animation: "cursorBlink 0.8s ease-in-out infinite" }} />
-                    : <span style={{ display: "inline-flex", gap: "3px", alignItems: "center" }}>
-                        {[0, 1, 2].map(d => (
-                          <span key={d} style={{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)", animation: `chatDot 1s ${d * 0.2}s infinite` }} />
-                        ))}
-                      </span>
+                {m.streaming && !m.content ? (
+                  <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+                    <span style={{ width: "10px", height: "10px", borderRadius: "50%", border: "2px solid var(--border-2)", borderTopColor: "transparent", animation: "spin 1s linear infinite" }} />
+                    <span className="label" style={{ color: "var(--text-3)" }}>Thinking</span>
+                  </span>
+                ) : (
+                  <>
+                    {m.content}
+                    {m.streaming && (
+                      <span style={{ display: "inline-block", width: "2px", height: "14px", background: "var(--text-2)", borderRadius: "1px", marginLeft: "2px", verticalAlign: "text-bottom", animation: "cursorBlink 0.8s ease-in-out infinite" }} />
+                    )}
+                  </>
                 )}
               </div>
               {m.role === "assistant" && !m.streaming && m.content && (
@@ -513,16 +524,17 @@ function ChatWindow({
                     setTimeout(() => setCopiedIdx(null), 1500);
                   }}
                   title="Copy response"
+                  className="label"
                   style={{
                     marginTop: "4px",
                     display: "flex", alignItems: "center", gap: "4px",
-                    padding: "3px 8px", borderRadius: "6px", border: "none",
-                    background: "transparent", color: copiedIdx === i ? "rgba(45,212,191,0.8)" : "rgba(255,255,255,0.25)",
-                    fontSize: "11px", fontFamily: "inherit", cursor: "pointer",
-                    transition: "color 150ms, background 150ms",
+                    padding: "3px 8px", borderRadius: "var(--r-1)", border: "none",
+                    background: "transparent", color: copiedIdx === i ? "var(--accent)" : "var(--text-3)",
+                    cursor: "pointer",
+                    transition: "color var(--dur-1), background var(--dur-1)",
                   }}
-                  onMouseEnter={e => { if (copiedIdx !== i) (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.55)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = copiedIdx === i ? "rgba(45,212,191,0.8)" : "rgba(255,255,255,0.25)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                  onMouseEnter={e => { if (copiedIdx !== i) (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)"; (e.currentTarget as HTMLButtonElement).style.background = "var(--bg-2)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = copiedIdx === i ? "var(--accent)" : "var(--text-3)"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                 >
                   {copiedIdx === i ? <Check size={11} /> : <Copy size={11} />}
                   {copiedIdx === i ? "Copied" : "Copy"}
@@ -534,14 +546,15 @@ function ChatWindow({
       </div>
 
       {/* Input bar */}
-      <div style={{ padding: "16px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+      <div style={{ padding: "16px", borderTop: "1px solid var(--border-1)", flexShrink: 0 }}>
         <div style={{
           display: "flex", alignItems: "center",
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: "12px",
-          padding: "8px 8px 8px 14px",
-          transition: "border-color 150ms",
+          background: "var(--bg-2)",
+          border: "1px solid var(--border-2)",
+          borderRadius: "var(--r-pill)",
+          padding: "8px 8px 8px 16px",
+          minHeight: "44px",
+          transition: "border-color var(--dur-1)",
         }}>
           <textarea
             ref={inputRef}
@@ -553,8 +566,8 @@ function ChatWindow({
             disabled={isStreaming}
             style={{
               flex: 1, background: "transparent", border: "none", outline: "none",
-              resize: "none", color: "rgba(255,255,255,0.88)", fontSize: "14px",
-              fontFamily: "inherit", lineHeight: "22px", maxHeight: "120px",
+              resize: "none", color: "var(--text-1)", fontSize: "var(--fs-4)",
+              fontFamily: "var(--font-ui)", lineHeight: "22px", maxHeight: "120px",
               overflowY: "auto", padding: 0,
             }}
             onInput={e => {
@@ -569,12 +582,14 @@ function ChatWindow({
               onClick={() => send(input)}
               disabled={!input.trim() || isStreaming || kieKeySet === false || disabledIds.includes(model)}
               style={{
-                width: "32px", height: "32px", borderRadius: "8px", border: "none",
-                background: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.25)" : "rgba(255,255,255,0.07)",
-                color: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "rgba(45,212,191,0.9)" : "rgba(255,255,255,0.25)",
+                width: "36px", height: "36px", borderRadius: "50%", border: "none",
+                background: "var(--accent)",
+                color: "var(--on-accent)",
+                boxShadow: "0 2px 0 var(--accent-edge)",
+                opacity: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? 1 : 0.4,
                 cursor: input.trim() && !isStreaming && kieKeySet !== false && !disabledIds.includes(model) ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                flexShrink: 0, transition: "background 150ms, color 150ms",
+                flexShrink: 0, transition: "background var(--dur-1), opacity var(--dur-1)",
               }}
             >
               <Send size={14} />
@@ -628,7 +643,7 @@ function ChatInner() {
 
   if (!hydrated) {
     return (
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.3)", fontSize: "14px" }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-3)", fontSize: "var(--fs-4)" }}>
         Loading…
       </div>
     );

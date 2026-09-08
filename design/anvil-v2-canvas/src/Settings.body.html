@@ -1,0 +1,57 @@
+<!--CSS-->
+.wrap{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0;align-items:center}
+.wrap .notice{align-self:stretch}
+.panel.set{width:880px;flex:1;display:grid;grid-template-columns:200px 1fr;overflow:hidden}
+.idx{border-right:1px solid var(--rule);padding:32px 0}
+.idx .t{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em;padding:0 24px 24px}
+.idx a{display:block;padding:10px 24px;color:var(--graphite);font-size:14px;font-weight:500}
+.idx a.on{color:var(--ink);box-shadow:inset 2px 0 0 var(--ember)}
+.body{padding:32px 40px;display:flex;flex-direction:column;gap:32px;overflow:hidden}
+.body h2{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em;margin:0}
+.body .desc{color:var(--graphite);font-size:14px;margin:6px 0 0}
+.prov{display:grid;grid-template-columns:150px 90px 1fr auto;gap:16px;align-items:center;padding:16px 0;border-top:1px solid var(--rule)}
+.prov:last-child{border-bottom:1px solid var(--rule)}
+.prov .n{font-weight:500}
+.prov .n small{display:block;color:var(--ash);font-weight:400;font-size:13px}
+.key{height:40px;background:var(--linen);border-radius:6px;display:flex;align-items:center;padding:0 12px;font-family:var(--mono);font-size:13px;color:var(--graphite);letter-spacing:.06em}
+.key.empty{color:var(--ash);letter-spacing:0;font-family:var(--sans);font-size:14px}
+.st{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.st.ok{color:var(--ok)}.st.no{color:var(--ash)}.st.wait{color:var(--wait)}
+.tog{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid var(--rule)}
+.tog:last-child{border-bottom:1px solid var(--rule)}
+.tog .l{font-size:14px;font-weight:500}
+.tog .l small{display:block;color:var(--ash);font-weight:400;font-size:13px}
+<!--/CSS-->
+<div class="app">
+  <!--RAIL settings-->
+  <section class="wrap">
+    <div class="notice warn"><span class="mono" style="color:var(--wait)">Warning</span><span style="font-size:13px">OpenAI direct key is not set. GPT Image 2 runs through Codex CLI only.</span><span class="x mono">Set key</span></div>
+    <div class="panel set">
+      <nav class="idx">
+        <div class="t">Settings</div>
+        <a class="on">Providers</a><a>Models</a><a>Storage</a><a>Motion</a><a>About</a>
+      </nav>
+      <div class="body">
+        <div>
+          <h2>Providers</h2>
+          <p class="desc">Keys stay on this machine. Each provider bills per strike in dollars.</p>
+        </div>
+        <div>
+          <div class="prov"><div class="n">kie.ai<small>Images and video</small></div><span class="st ok">Ready</span><div class="key">kie_••••••••••••••••••••7f2a</div><span class="btn sm secondary">Save</span></div>
+          <div class="prov"><div class="n">Codex CLI<small>GPT Image 2 via ChatGPT Plus</small></div><span class="st ok">Ready</span><div class="key">~/.codex/auth.json · 0.153.4</div><span class="btn sm secondary">Reconnect</span></div>
+          <div class="prov"><div class="n">OpenAI<small>Direct API</small></div><span class="st no">Not set</span><div class="key empty">sk-…</div><span class="btn sm secondary">Save</span></div>
+          <div class="prov"><div class="n">Replicate<small>Open models</small></div><span class="st wait">Checking</span><div class="key">r8_••••••••••••••••••••c19d</div><span class="btn sm secondary">Save</span></div>
+        </div>
+        <div>
+          <h2>Motion</h2>
+          <p class="desc">GSAP layer. Reduced motion sets every duration to zero and freezes dashes.</p>
+        </div>
+        <div>
+          <div class="tog"><div class="l">Reduced motion<small>Follows the OS setting unless overridden here.</small></div><span class="sw"><i></i></span></div>
+          <div class="tog"><div class="l">Strike effects<small>Spark burst, ledger tick, rack drop-in.</small></div><span class="sw on"><i></i></span></div>
+          <div class="tog"><div class="l">Magnetic primary button<small>Within 12px of the cursor.</small></div><span class="sw on"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

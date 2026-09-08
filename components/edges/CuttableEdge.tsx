@@ -41,7 +41,7 @@ export default function CuttableEdge({
     (sourceHandleId === "startFrameOut" || sourceHandleId === "endFrameOut" || sourceHandleId === "imagePickOut");
 
   const tgtStyle   = edgeStyle(colorKey ?? targetHandleId);
-  const tgtColor   = (tgtStyle.stroke as string) ?? "#555";
+  const tgtColor   = (tgtStyle.stroke as string) ?? "var(--border-2)";
   const srcColor   = getSourceHandleColor(srcNode?.type, sourceHandleId);
   const strokeWidth = (tgtStyle.strokeWidth as number) ?? 2;
 
@@ -178,14 +178,13 @@ export default function CuttableEdge({
             width: 28,
             height: 28,
             borderRadius: "50%",
-            background: "#0B0E14",
+            background: "var(--bg-0)",
             border: `2px solid ${badgeColor}`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
-            boxShadow: `0 2px 12px rgba(0,0,0,0.6), 0 0 8px ${badgeColor}44`,
-          }}>
+            }}>
             <ScissorIcon color={badgeColor} />
           </div>
         </div>

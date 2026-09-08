@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dlog } from "@/lib/debugLog";
 import https from "node:https";
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -15,6 +16,7 @@ import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { orderedCodexAuthFiles, markCodexLimited, isUsageLimitError } from "@/lib/codexAccounts";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -138,7 +140,7 @@ async function curlMultipartPost(
       args.push("-F", `${k}=${v}`);
     }
 
-    console.log("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
+    dlog("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
 
     const runCurl = () => new Promise<{ statusStr: string; stderr: string; exitCode: number }>((resolve, reject) => {
       let out = "";
@@ -153,8 +155,8 @@ async function curlMultipartPost(
     let statusStr: string = "", stderr: string = "", exitCode: number = -1;
     for (let attempt = 1; attempt <= 3; attempt++) {
       ({ statusStr, stderr, exitCode } = await runCurl());
-      console.log(`[azure/edits/curl] attempt ${attempt} exit code:`, exitCode);
-      if (stderr) console.log("[azure/edits/curl] stderr:", stderr);
+      dlog(`[azure/edits/curl] attempt ${attempt} exit code:`, exitCode);
+      if (stderr) dlog("[azure/edits/curl] stderr:", stderr);
       if (exitCode !== 35) break; // 35 = SSL handshake failure — retry
       if (attempt < 3) await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
@@ -166,7 +168,7 @@ async function curlMultipartPost(
 
     const status = parseInt(statusStr, 10) || 0;
     const body   = await readFile(bodyPath, "utf-8").catch(() => "");
-    console.log("[azure/edits/curl] status:", status, "body:", body.slice(0, 1000));
+    dlog("[azure/edits/curl] status:", status, "body:", body.slice(0, 1000));
     return { ok: status >= 200 && status < 300, status, body };
   } finally {
     for (const f of [...tmpFiles, bodyPath]) unlink(f).catch(() => {});
@@ -243,27 +245,38 @@ async function runCodexImagegen(opts: {
       ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"]
       : ["generate", "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"];
 
-    const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
+    const runOnce = (authFile: string) => new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
       let err = "";
-      const proc = spawn("codex-imagegen", args);
+      const proc = spawn("codex-imagegen", [...args, "--auth-file", authFile]);
       proc.stderr.on("data", (d: Buffer) => err += d.toString());
       proc.on("close", (code) => resolve({ exitCode: code ?? -1, stderr: err }));
       proc.on("error", (e) => reject(new Error(`codex-imagegen spawn failed: ${e.message} — is it installed and on PATH?`)));
     });
 
-    if (exitCode !== 0) {
+    // Try each ChatGPT account in turn (see lib/codexAccounts.ts). A usage-limit
+    // failure puts that account on cooldown and moves on; any other failure is
+    // the caller's problem and throws immediately.
+    const authFiles = orderedCodexAuthFiles();
+    if (authFiles.length === 0) throw new Error("No Codex auth.json found. Run `codex login` and choose ChatGPT.");
+
+    for (const authFile of authFiles) {
+      const { exitCode, stderr } = await runOnce(authFile);
+      if (exitCode === 0) return await readFile(outPath);
+
+      if (isUsageLimitError(stderr)) {
+        console.warn(`[codex-imagegen] usage limit on ${authFile}; trying next account`);
+        markCodexLimited(authFile);
+        continue;
+      }
+
       // The useful part — codex-imagegen's final `Error: ...` line — is at the
-      // *tail* of stderr, after any retry `Warning:` lines. Those warnings
-      // (now including a raw failed-item dump per retry, see cli.py's
-      // item_failed_no_detail handling) can push well past a head-truncated
-      // slice, which cuts the real error off before cleanCodexError() ever
-      // sees it. Log the untruncated stream for debugging and only cap what
-      // gets wrapped into the thrown Error as a sane upper bound.
+      // *tail* of stderr, after any retry `Warning:` lines. Log the untruncated
+      // stream for debugging and only cap what gets wrapped into the thrown Error.
       console.error("[codex-imagegen] full stderr:", stderr || "(empty)");
       throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`);
     }
 
-    return await readFile(outPath);
+    throw new Error(`Error: All ${authFiles.length} Codex account(s) hit the ChatGPT usage limit; try again later or add another with CODEX_HOME=~/.codex/profiles/<name> codex login --device-auth.`);
   } finally {
     for (const f of [...tmpFiles, outPath]) unlink(f).catch(() => {});
   }
@@ -304,7 +317,7 @@ export async function POST(req: NextRequest) {
 
   if (debugOnly) {
     const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution, azureCustomWidth, azureCustomHeight };
-    console.log("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
+    dlog("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
     return NextResponse.json({ ok: true });
   }
 
@@ -388,7 +401,7 @@ export async function POST(req: NextRequest) {
           };
           if (size && size !== "auto") body.size = size;
 
-          console.log("[azure/generations] request →", {
+          dlog("[azure/generations] request →", {
             url:    azureUrl,
             method: "POST",
             body,
@@ -402,7 +415,7 @@ export async function POST(req: NextRequest) {
         }
 
         const txt = await res.text();
-        console.log("[azure] raw response body:", txt.slice(0, 1000));
+        dlog("[azure] raw response body:", txt.slice(0, 1000));
         if (!res.ok) {
           let displayError = `Azure error ${res.status}`;
           try {

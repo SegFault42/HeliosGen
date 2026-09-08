@@ -17,6 +17,11 @@ function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" 
     jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
     return "error";
   }
+  // Server restarted mid-job: jobStore forgot it but the DB still says pending.
+  // Re-arm the poller so the result can still land instead of hanging forever.
+  const kind = gen.generation_type === "video" ? "video" : "image";
+  jobStore.set(taskId, { status: "pending", type: kind });
+  resumeKieJob(taskId, kind);
   return "pending";
 }
 

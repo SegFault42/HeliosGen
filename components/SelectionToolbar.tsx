@@ -1,4 +1,5 @@
 "use client";
+import { useSelectedNodes } from "@/lib/nodeSelectors";
 import React, { useCallback, useEffect, useState } from "react";
 import { useReactFlow, Node } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
@@ -33,8 +34,8 @@ function Btn({
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={title}
       className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors duration-150 ${
-        danger ? "text-white hover:text-red-400 hover:bg-red-400/10"
-               : "text-white hover:bg-white/10"
+        danger ? "text-[var(--text-1)] hover:text-red-400 hover:bg-red-400/10"
+               : "text-[var(--text-1)] hover:bg-[var(--bg-2)]"
       }`}
     >
       {children}
@@ -43,14 +44,13 @@ function Btn({
 }
 
 function Sep() {
-  return <span className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0" />;
+  return <span className="w-px h-4 bg-[var(--bg-2)] mx-0.5 shrink-0" />;
 }
 
 // Runs inside the ReactFlow provider
 export default function SelectionToolbar() {
   const { flowToScreenPosition } = useReactFlow();
-  const nodes      = useWorkflowStore((s) => s.nodes);
-  const edges      = useWorkflowStore((s) => s.edges);
+  const nodes      = useSelectedNodes(); // only the selected ones — that is all this toolbar reads
   const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const addNode    = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
@@ -107,7 +107,7 @@ export default function SelectionToolbar() {
       type:     "groupNode",
       position: { x: gx, y: gy },
       style:    { width: gw, height: gh, zIndex: -1 },
-      data:     { label: `Group #${groupCount}`, color: "#3b82f6", locked: false, memberIds } as NodeData,
+      data:     { label: `Group #${groupCount}`, color: "var(--accent)", locked: false, memberIds } as NodeData,
       selected: true,
       zIndex:   -1,
     };
@@ -186,10 +186,9 @@ export default function SelectionToolbar() {
         className="flex items-center gap-0.5 px-1.5 py-1"
         style={{
           borderRadius: 999,
-          background:   "rgba(16, 16, 16, 0.96)",
-          backdropFilter: "blur(12px)",
-          border:       "1px solid rgba(255,255,255,0.07)",
-          boxShadow:    "0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)",
+          background:   "var(--scrim)",
+          border:       "1px solid var(--border-1)",
+          boxShadow:    "0 4px 24px var(--scrim), 0 1px 4px var(--scrim)",
           whiteSpace:   "nowrap",
         }}
       >

@@ -1,5 +1,9 @@
 "use client";
+import { memo } from "react";
+import { useNodeEdges, useNeighborNodes } from "@/lib/nodeSelectors";
 import React, { useCallback, useEffect, useRef, useState, Fragment } from "react";
+import NodeLabel, { requestRename } from "@/components/nodes/NodeLabel";
+import { resolveMentions } from "@/lib/mentions";
 import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import { createPortal } from "react-dom";
 import GenerateButton from "@/components/nodes/GenerateButton";
@@ -43,19 +47,19 @@ const CONNECTABLE_FOR_TYPE: Record<string, Set<string>> = {
 const HANDLE_SPACING = 38; // px between handles
 
 const HANDLE_COLORS: Record<string, string> = {
-  prompt: "#2DD4BF",
-  startFrame: "#2DD4BF",
-  endFrame: "#2DD4BF",
-  resource: "#fb923c",
-  videoRef: "#22d3ee",
-  referenceVideo: "#38bdf8",
-  audioRef: "#5EEAD4",
+  prompt: "var(--accent)",
+  startFrame: "var(--accent)",
+  endFrame: "var(--accent)",
+  resource: "var(--warning)",
+  videoRef: "var(--accent-hover)",
+  referenceVideo: "var(--warning)",
+  audioRef: "var(--accent-hover)",
 };
 
 const SOURCE_HANDLE_COLORS: Record<string, string> = {
-  image: "#2DD4BF",
-  video: "#22d3ee",
-  audio: "#5EEAD4",
+  image: "var(--accent)",
+  video: "var(--accent-hover)",
+  audio: "var(--accent-hover)",
 };
 
 const SOURCE_HANDLES = [
@@ -71,93 +75,16 @@ const SOURCE_HANDLE_SPACING = 32; // px between source handles
 const sourceHandleCenterOffset = (i: number) => (i - (SOURCE_HANDLES.length - 1) / 2) * SOURCE_HANDLE_SPACING;
 
 const STATUS_DOT: Record<string, string> = {
-  idle: "bg-[#1E1E1E]",
+  idle: "bg-[var(--bg-0)]",
   running: "bg-amber-400 animate-pulse",
-  done: "bg-[#34d399]",
+  done: "bg-[var(--success)]",
   error: "bg-red-500",
 };
 
-// ── @mention → <<<image N>>> replacement (same logic as GenerateNode) ─────────
-
-function resolveMentions(
-  prompt: string,
-  labels: string[],
-  imageUrls: string[],
-  tagFormat: "default" | "grok" = "default",
-): { resolvedPrompt: string; orderedUrls: string[] } {
-  if (!labels.length) return { resolvedPrompt: prompt, orderedUrls: imageUrls };
-
-  type Span = { start: number; end: number; labelIdx: number | null };
-  const spans: Span[] = [];
-  const claimed = new Set<number>();
-
-  const sortedLabels = labels
-    .map((label, i) => ({ label, i }))
-    .filter(({ label }) => !!label)
-    .sort((a, b) => b.label.length - a.label.length);
-
-  for (const { label, i } of sortedLabels) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(`@${escaped}`, "gi");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(prompt)) !== null) {
-      if (!claimed.has(m.index)) {
-        spans.push({ start: m.index, end: m.index + m[0].length, labelIdx: i });
-        claimed.add(m.index);
-      }
-    }
-  }
-
-  const fallback = /@\S+(?:\s+#\d+)?/g;
-  let fm: RegExpExecArray | null;
-  while ((fm = fallback.exec(prompt)) !== null) {
-    if (!claimed.has(fm.index)) {
-      spans.push({ start: fm.index, end: fm.index + fm[0].length, labelIdx: null });
-      claimed.add(fm.index);
-    }
-  }
-
-  spans.sort((a, b) => a.start - b.start);
-  if (spans.length === 0) return { resolvedPrompt: prompt, orderedUrls: imageUrls };
-
-  const spanUrls: (string | null)[] = [];
-  const usedIdxs = new Set<number>();
-
-  for (const span of spans) {
-    let url: string | null = null;
-    if (span.labelIdx !== null && !usedIdxs.has(span.labelIdx) && imageUrls[span.labelIdx]) {
-      url = imageUrls[span.labelIdx];
-      usedIdxs.add(span.labelIdx);
-    } else {
-      const next = imageUrls.findIndex((_, j) => !usedIdxs.has(j));
-      if (next !== -1) { url = imageUrls[next]; usedIdxs.add(next); }
-      // No fallback to imageUrls[0] — unresolvable @mentions stay as plain text
-    }
-    spanUrls.push(url);
-  }
-
-  const orderedUrls = spanUrls.filter((u): u is string => u !== null);
-
-  let resolvedPrompt = "";
-  let lastEnd = 0;
-  let imageNum = 1;
-  for (let i = 0; i < spans.length; i++) {
-    resolvedPrompt += prompt.slice(lastEnd, spans[i].start);
-    if (spanUrls[i] !== null) {
-      resolvedPrompt += tagFormat === "grok" ? `@image${imageNum++} ` : `<<<image ${imageNum++}>>>`;
-    } else {
-      resolvedPrompt += prompt.slice(spans[i].start, spans[i].end);
-    }
-    lastEnd = spans[i].end;
-  }
-  resolvedPrompt += prompt.slice(lastEnd);
-
-  return { resolvedPrompt, orderedUrls };
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNodeType>) {
+function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNodeType>) {
   const readOnly = useReadOnly();
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize = useWorkflowStore((s) => s.updateNodeSize);
@@ -170,8 +97,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const onEdgesChange = useWorkflowStore((s) => s.onEdgesChange);
   const addNode = useWorkflowStore((s) => s.addNode);
   const insertEdge = useWorkflowStore((s) => s.insertEdge);
-  const nodes = useWorkflowStore((s) => s.nodes);
-  const edges = useWorkflowStore((s) => s.edges);
+  const nodes = useNeighborNodes(id);
+  const edges = useNodeEdges(id);
   const debugMode = useWorkflowStore((s) => s.debugMode);
   const connectingHandleType = useWorkflowStore((s) => s.connectingHandleType);
   const parentGroupSelected = useWorkflowStore((s) => {
@@ -778,7 +705,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   const generate = useCallback(async () => {
     const accessToken = "guest";
 
-    const upstream = resolveInputs(id, nodes as Node<NodeData>[], edges);
+    const upstream = resolveInputs(id, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
     const maxRes = cfg.maxResources ?? 3;
     const maxRefVideos = cfg.maxReferenceVideos ?? 3;
     const maxRefAudios = cfg.maxReferenceAudios ?? 3;
@@ -1161,11 +1088,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         onDelete={handleDelete}
         onSave={handleSave}
         onDuplicate={handleDuplicate}
+        onRename={() => requestRename(id)}
       />
       {data.locked && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ borderRadius: 8 }}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--bg-0)] ">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
@@ -1173,10 +1101,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         </div>
       )}
 
-      <span className="node-above-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <NodeLabel id={id} label={data.label as string} style={{ display: "flex", alignItems: "center", gap: 4 }}>
         <VideoNodeIcon />
-        {data.label as string}
-      </span>
+      </NodeLabel>
       {(!connectedHandles.has("prompt") && !cfg.promptOptional || hasFailedMediaInput) && status !== "running" && !data.locked && (
         <MissingInputWarning messages={[
           ...(!connectedHandles.has("prompt") && !cfg.promptOptional ? ["A text node is required"] : []),
@@ -1212,14 +1139,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         const color = SOURCE_HANDLE_COLORS[def.type];
         return (
           <div
-            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            className="absolute pointer-events-none z-[1001] text-[12px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
             style={{
               top: `calc(50% + ${sourceHandleCenterOffset(idx)}px)`,
               right: 0,
               transform: "translate(calc(100% + 34px), -50%)",
-              background: "#1A1A1A",
+              background: "var(--bg-0)",
               border: `1px solid ${color}33`,
-              color: "#CCCCCC",
+              color: "var(--text-2)",
             }}
           >
             <span style={{ color }} className="mr-1.5">●</span>
@@ -1267,18 +1194,18 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         const centerOffset = handleCenterOffsetMap.get(hoveredDef.id) ?? 0;
         const tooltipColor =
           hoveredDef.id === "startFrame" && cfg.apiInput.useMotionControl
-            ? "#f472b6"
-            : HANDLE_COLORS[hoveredDef.id] ?? "#888";
+            ? "var(--accent)"
+            : HANDLE_COLORS[hoveredDef.id] ?? "var(--text-3)";
         return (
           <div
-            className="absolute pointer-events-none z-[1001] text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
+            className="absolute pointer-events-none z-[1001] text-[12px] px-2.5 py-1 rounded-lg whitespace-nowrap shadow-xl"
             style={{
               top: `calc(50% + ${centerOffset}px)`,
               left: 0,
               transform: "translate(calc(-100% - 34px), -50%)",
-              background: "#1A1A1A",
+              background: "var(--bg-0)",
               border: `1px solid ${tooltipColor}33`,
-              color: "#CCCCCC",
+              color: "var(--text-2)",
             }}
           >
             <span style={{ color: tooltipColor }} className="mr-1.5">●</span>
@@ -1289,7 +1216,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
 
       {/* ── Full-card media container — all controls overlaid inside ── */}
       <div
-        className="relative bg-[#2a2d35] group/player group/gen"
+        className="relative bg-[var(--bg-2)] group/player group/gen"
         style={{
           aspectRatio: (data.imageNaturalRatio as string | undefined) ?? aspectRatio.replace(":", " / "),
           width: "100%",
@@ -1311,29 +1238,29 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               }}
             >
               {generations.map((entry, i) => (
-                <div key={i} style={{ minWidth: "100%", height: "100%", flexShrink: 0, position: "relative", background: "#2a2d35" }}>
+                <div key={i} style={{ minWidth: "100%", height: "100%", flexShrink: 0, position: "relative", background: "var(--bg-2)" }}>
                   {entry === null ? (
-                    <div className="absolute inset-0" style={{ background: "#2a2d35" }} />
+                    <div className="absolute inset-0" style={{ background: "var(--bg-2)" }} />
                   ) : typeof entry === "object" ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20" style={{ background: "#2a2427" }}>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center z-20" style={{ background: "var(--bg-0)" }}>
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                        <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                        <circle cx="12" cy="16" r="1" fill="#c04040" />
+                        <circle cx="12" cy="12" r="10" fill="var(--bg-0)" stroke="var(--bg-2)" strokeWidth="1.5" />
+                        <path d="M12 7v5" stroke="var(--border-2)" strokeWidth="2" strokeLinecap="round" />
+                        <circle cx="12" cy="16" r="1" fill="var(--border-2)" />
                       </svg>
                       {(entry.error === "moderation_blocked" || entry.error?.includes?.("moderation_blocked") || entry.error?.includes?.("flagged as sensitive")) ? (
-                        <div className="flex items-center justify-center gap-1.5 text-[10px] text-[#f87171]">
+                        <div className="flex items-center justify-center gap-1.5 text-[12px] text-[var(--error)]">
                           <ShieldBan size={12} strokeWidth={1.5} className="shrink-0" />
                           <span>NSFW content detected</span>
                         </div>
                       ) : (
-                        <p className="text-[10px] text-[#f87171] leading-snug break-words w-full">{entry.error}</p>
+                        <p className="text-[12px] text-[var(--error)] leading-snug break-words w-full">{entry.error}</p>
                       )}
                       <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); deleteGen(i); }}
                         className="flex items-center gap-1.5 h-7 px-3 rounded-full transition-all hover:bg-red-900/60"
-                        style={{ background: "rgba(40,0,0,0.7)", backdropFilter: "blur(10px)", border: "1px solid rgba(200,50,50,0.35)" }}
+                        style={{ background: "var(--bg-2)", border: "1px solid var(--bg-2)" }}
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-red-400">
                           <polyline points="3 6 5 6 21 6" />
@@ -1341,7 +1268,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                           <path d="M10 11v6M14 11v6" />
                           <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
                         </svg>
-                        <span className="text-[11px] font-medium text-red-400">Delete</span>
+                        <span className="text-[12px] font-medium text-red-400">Delete</span>
                       </button>
                     </div>
                   ) : (
@@ -1374,25 +1301,25 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             <div className="absolute inset-0 flex flex-col items-center justify-center px-5 gap-2.5 text-center">
               <div className="flex items-center gap-2.5">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                  <circle cx="12" cy="12" r="10" fill="#1a0a0a" stroke="#5a1a1a" strokeWidth="1.5" />
-                  <path d="M12 7v5" stroke="#c04040" strokeWidth="2" strokeLinecap="round" />
-                  <circle cx="12" cy="16" r="1" fill="#c04040" />
+                  <circle cx="12" cy="12" r="10" fill="var(--bg-0)" stroke="var(--bg-2)" strokeWidth="1.5" />
+                  <path d="M12 7v5" stroke="var(--border-2)" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="12" cy="16" r="1" fill="var(--border-2)" />
                 </svg>
-                <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid rgba(74,222,128,0.2)", color: "#4ade80", background: "rgba(74,222,128,0.07)" }}>
+                <span className="text-[12px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid var(--bg-2)", color: "var(--success)", background: "var(--bg-2)" }}>
                   Credits refunded
                 </span>
               </div>
-              <p className="text-white text-[12px] font-semibold leading-snug">Oops! Something went wrong.</p>
+              <p className="text-[var(--text-1)] text-[12px] font-semibold leading-snug">Oops! Something went wrong.</p>
               {(() => {
                 const msg = (data.errorMsg as string) ?? "Generation failed";
                 const isNsfw = msg === "moderation_blocked" || msg.includes("moderation_blocked") || msg.includes("flagged as sensitive");
                 return isNsfw ? (
-                  <div className="flex items-center gap-1.5 text-[#f87171] text-[10px]">
+                  <div className="flex items-center gap-1.5 text-[var(--error)] text-[12px]">
                     <ShieldBan size={12} strokeWidth={1.5} className="shrink-0" />
                     <span>NSFW content detected</span>
                   </div>
                 ) : (
-                  <p className="text-[#f87171] text-[10px] leading-[1.5] break-words">{msg}</p>
+                  <p className="text-[var(--error)] text-[12px] leading-[1.5] break-words">{msg}</p>
                 );
               })()}
             </div>
@@ -1400,8 +1327,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             <div className="w-full h-full">
               {textNode && (
                 <div className="absolute bottom-12 left-4 flex items-center gap-1.5 z-10">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2DD4BF] shrink-0" />
-                  <span className="text-[11px] text-[#555]">{textNode.data.label as string}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] shrink-0" />
+                  <span className="text-[12px] text-[var(--border-2)]">{textNode.data.label as string}</span>
                 </div>
               )}
             </div>
@@ -1426,7 +1353,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             {!busy && displayFrameUrl && (
               <div
                 className="absolute top-2 left-2 z-10 flex items-center p-1 rounded-full gap-0.5 opacity-0 group-hover/player:opacity-100 transition-opacity node-slide-reveal"
-                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)" }}
+                style={{ background: "var(--bg-0)", }}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 {/* Sliding active indicator */}
@@ -1435,8 +1362,8 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   top: 4, left: 4,
                   width: 28, height: 28,
                   borderRadius: "50%",
-                  background: viewMode === "frame" ? "transparent" : "rgba(255,255,255,0.18)",
-                  border: "1.5px solid rgba(255,255,255,0.45)",
+                  background: viewMode === "frame" ? "transparent" : "var(--text-3)",
+                  border: "1.5px solid var(--text-2)",
                   transform: `translateX(${viewMode === "frame" ? 30 : 0}px)`,
                   transition: "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
                   pointerEvents: "none",
@@ -1447,7 +1374,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   className="w-7 h-7 rounded-full flex items-center justify-center relative z-10"
                   title="Show video"
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={viewMode === "video" ? "white" : "#777"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke 220ms" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={viewMode === "video" ? "var(--text-1)" : "var(--text-3)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: "stroke 220ms" }}>
                     <rect width="15" height="14" x="2" y="5" rx="2" />
                     <path d="m17 8 5-3v14l-5-3V8Z" />
                   </svg>
@@ -1462,7 +1389,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                     backgroundImage: `url(${displayFrameUrl})`,
                     backgroundSize: "cover", backgroundPosition: "center",
                     flexShrink: 0,
-                    border: "1px solid rgba(255,255,255,0.15)",
+                    border: "1px solid var(--text-3)",
                   }} />
                 </button>
               </div>
@@ -1473,17 +1400,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); setGlobalMuted(!muted); }}
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-20 node-slide-reveal"
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[var(--bg-0)]  flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-20 node-slide-reveal"
                 title={muted ? "Unmute" : "Mute"}
               >
                 {muted ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                     <line x1="23" y1="9" x2="17" y2="15" />
                     <line x1="17" y1="9" x2="23" y2="15" />
                   </svg>
                 ) : (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11 5L6 9H2V15H6L11 19V5Z" />
                     <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
                   </svg>
@@ -1497,7 +1424,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 {generations.map((_, i) => (
                   <div
                     key={i}
-                    className={`h-1 rounded-full transition-all duration-300 ${i === currentGenIdx ? "w-4 bg-white" : "w-1 bg-white/30"}`}
+                    className={`h-1 rounded-full transition-all duration-300 ${i === currentGenIdx ? "w-4 bg-[var(--text-1)]" : "w-1 bg-[var(--bg-2)]"}`}
                   />
                 ))}
               </div>
@@ -1515,10 +1442,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             {/* Scrubber + time */}
             <div className="mt-auto px-3 pb-3 flex flex-col gap-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-white font-mono tabular-nums">{fmtTime(currentSec)}</span>
+                <span className="text-[12px] text-[var(--text-1)] font-mono tabular-nums">{fmtTime(currentSec)}</span>
                 {captureErr
-                  ? <span className="text-[10px] text-red-400">{captureErr}</span>
-                  : <span className="text-[10px] text-white/40">drag to seek</span>
+                  ? <span className="text-[12px] text-red-400">{captureErr}</span>
+                  : <span className="text-[12px] text-[var(--text-3)]">drag to seek</span>
                 }
               </div>
               <input
@@ -1540,13 +1467,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); captureFrame(); }}
                   disabled={capturing}
-                  className="nodrag flex-1 h-7 rounded-full bg-white/90 text-black text-[11px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="nodrag flex-1 h-7 rounded-full bg-[var(--bg-2)] text-[var(--on-accent)] text-[12px] font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   {capturing ? (
                     <>
                       <svg width="11" height="11" viewBox="0 0 22 22" fill="none" style={{ animation: "spin 0.9s linear infinite" }}>
-                        <circle cx="11" cy="11" r="8" stroke="#333" strokeWidth="2.5" />
-                        <path d="M11 3A8 8 0 0 1 19 11" stroke="#000" strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx="11" cy="11" r="8" stroke="var(--border-2)" strokeWidth="2.5" />
+                        <path d="M11 3A8 8 0 0 1 19 11" stroke="var(--bg-0)" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
                       Capturing…
                     </>
@@ -1569,7 +1496,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                     setPickerOpen(false);
                     lastEdgeIdRef.current = null;
                   }}
-                  className="nodrag h-7 px-3 rounded-full bg-white/10 text-white text-[11px] flex items-center justify-center cursor-pointer"
+                  className="nodrag h-7 px-3 rounded-full bg-[var(--bg-2)] text-[var(--text-1)] text-[12px] flex items-center justify-center cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1582,13 +1509,13 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         {isQueued && (
           <div
             className="absolute top-2 left-2 flex items-center gap-1.5 h-7 px-3 rounded-full z-20 pointer-events-none select-none"
-            style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(148,163,184,0.2)" }}
+            style={{ background: "var(--bg-0)", border: "1px solid var(--bg-2)" }}
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(148,163,184,0.65)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--bg-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7v5l3 3" />
             </svg>
-            <span className="text-[11px] font-medium" style={{ color: "rgba(148,163,184,0.8)" }}>Queued</span>
+            <span className="text-[12px] font-medium" style={{ color: "var(--bg-2)" }}>Queued</span>
           </div>
         )}
 
@@ -1597,20 +1524,20 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <div className="absolute top-2 left-2 right-2 flex flex-wrap gap-1.5 z-20" style={{ alignItems: "flex-start" }}>
             <div
               className="flex items-center gap-1.5 h-7 px-3 rounded-full pointer-events-none select-none"
-              style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: isPending ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(45,212,191,0.25)", flexShrink: 0 }}
+              style={{ background: "var(--bg-0)", border: isPending ? "1px solid var(--border-1)" : "1px solid var(--accent)", flexShrink: 0 }}
             >
               {isPending ? (
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-                  <circle cx="5" cy="5" r="4" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="5" cy="5" r="4" stroke="var(--text-3)" strokeWidth="1.5" />
+                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="var(--text-2)" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               ) : (
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ animation: "spin 0.9s linear infinite", flexShrink: 0 }}>
-                  <circle cx="5" cy="5" r="4" stroke="rgba(45,212,191,0.25)" strokeWidth="1.5" />
-                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="#2DD4BF" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="5" cy="5" r="4" stroke="var(--accent)" strokeWidth="1.5" />
+                  <path d="M5 1 A4 4 0 0 1 9 5" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               )}
-              <span className="text-[11px] font-medium" style={{ color: isPending ? "#888" : "#2DD4BF" }}>
+              <span className="text-[12px] font-medium" style={{ color: isPending ? "var(--text-3)" : "var(--accent)" }}>
                 {isPending ? "Pending" : "Generating…"}
               </span>
             </div>
@@ -1618,14 +1545,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); handleCancel(); }}
-                className="ml-auto flex items-center gap-1.5 h-7 px-3 rounded-full transition-colors hover:bg-white/10"
-                style={{ background: "rgba(0,0,0,0.58)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}
+                className="ml-auto flex items-center gap-1.5 h-7 px-3 rounded-full transition-colors hover:bg-[var(--bg-2)]"
+                style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)", flexShrink: 0 }}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" strokeWidth="2" strokeLinecap="round">
                   <circle cx="12" cy="12" r="9" />
                   <path d="m6 6 12 12" />
                 </svg>
-                <span className="text-[11px] text-[#ccc] font-medium">Cancel</span>
+                <span className="text-[12px] text-[var(--text-2)] font-medium">Cancel</span>
               </button>
             )}
           </div>
@@ -1636,17 +1563,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           <button
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); setGlobalMuted(!muted); }}
-            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-20 node-slide-reveal"
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-[var(--bg-0)]  flex items-center justify-center opacity-0 group-hover/player:opacity-100 transition-opacity pointer-events-auto z-20 node-slide-reveal"
             title={muted ? "Unmute" : "Mute"}
           >
             {muted ? (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <line x1="23" y1="9" x2="17" y2="15" />
                 <line x1="17" y1="9" x2="23" y2="15" />
               </svg>
             ) : (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
@@ -1661,9 +1588,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             className="absolute bottom-0 left-0 right-0 flex items-center gap-2 px-2.5 h-9 opacity-0 group-hover/player:opacity-100 transition-opacity z-20"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <span className="text-[10px] text-white/60 font-mono tabular-nums shrink-0">{fmtTime(currentSec)}</span>
+            <span className="text-[12px] text-[var(--text-2)] font-mono tabular-nums shrink-0">{fmtTime(currentSec)}</span>
             <div
-              className="flex-1 h-[2px] bg-white/15 rounded-full cursor-pointer"
+              className="flex-1 h-[2px] bg-[var(--bg-2)] rounded-full cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1672,7 +1599,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 if (v && v.duration) v.currentTime = pct * v.duration;
               }}
             >
-              <div className="h-full bg-white/60 rounded-full transition-none" style={{ width: `${progress * 100}%` }} />
+              <div className="h-full bg-[var(--bg-2)] rounded-full transition-none" style={{ width: `${progress * 100}%` }} />
             </div>
             <button
               onMouseDown={(e) => e.stopPropagation()}
@@ -1686,11 +1613,11 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               title={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--text-1)">
                   <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
                 </svg>
               ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--text-1)">
                   <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
               )}
@@ -1702,23 +1629,23 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         {(() => {
           const modePicker = cfg.modes ? (
             <div className="relative shrink-0">
-              <div className="flex items-center rounded-full" style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div className="flex items-center rounded-full" style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}>
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => { setModeOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setDurOpen(false); setGrokResOpen(false); }}
                   className="flex items-center gap-1.5 pl-2 pr-1.5 py-1 hover:brightness-125 transition-all whitespace-nowrap"
                 >
-                  <span className="text-[11px] text-white/70">{cfg.modes.find((m) => m.value === mode)?.label ?? mode}</span>
+                  <span className="text-[12px] text-[var(--text-2)]">{cfg.modes.find((m) => m.value === mode)?.label ?? mode}</span>
                   <ChevronIcon open={modeOpen} />
                 </button>
                 {cfg.apiInput.useMotionControl && (
                   <>
-                    <span className="w-px h-3 bg-white/10 shrink-0" />
+                    <span className="w-px h-3 bg-[var(--bg-2)] shrink-0" />
                     <div className="relative group/orient-info flex items-center px-1.5 py-1">
-                      <div className="w-3.5 h-3.5 rounded-full border border-white/20 flex items-center justify-center text-white/40 hover:text-white/70 hover:border-white/40 transition-colors cursor-default select-none">
-                        <span className="text-[8px] font-semibold leading-none">i</span>
+                      <div className="w-3.5 h-3.5 rounded-full border border-[var(--border-1)] flex items-center justify-center text-[var(--text-3)] hover:text-[var(--text-2)] hover:border-[var(--border-1)] transition-colors cursor-default select-none">
+                        <span className="text-[12px] font-semibold leading-none">i</span>
                       </div>
-                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-[10px] leading-[1.6] text-[#AAA] opacity-0 group-hover/orient-info:opacity-100 transition-opacity z-50 node-slide-reveal" style={{ background: "#111317", border: "1px solid #2A2A2A" }}>
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 px-3 py-2 rounded-lg text-[12px] leading-[1.6] text-[var(--text-2)] opacity-0 group-hover/orient-info:opacity-100 transition-opacity z-50 node-slide-reveal" style={{ background: "var(--bg-0)", border: "1px solid var(--bg-2)" }}>
                         When Character Orientation matches the video, complex motions perform better; when it matches the image, camera movements are better supported.
                       </div>
                     </div>
@@ -1738,7 +1665,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
           const resPicker = cfg.resolutions ? (
             <div className="relative shrink-0">
               <Pill onClick={() => { setGrokResOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setDurOpen(false); setModeOpen(false); }}>
-                <span className="text-[11px] text-white/70">{resolution}</span>
+                <span className="text-[12px] text-[var(--text-2)]">{resolution}</span>
                 <ChevronIcon open={grokResOpen} />
               </Pill>
               <FloatMenu open={grokResOpen}>
@@ -1764,17 +1691,17 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 {/* Model */}
                 <div className="relative">
                   <Pill onClick={() => { setModelOpen((o) => !o); setRatioOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
-                    <span className="shrink-0 text-white/60" style={{ lineHeight: 0 }}>
+                    <span className="shrink-0 text-[var(--text-2)]" style={{ lineHeight: 0 }}>
                       <NodeProviderIcon provider={cfg.provider} />
                     </span>
-                    <span className="text-[11px] text-white/70">{cfg.name}</span>
+                    <span className="text-[12px] text-[var(--text-2)]">{cfg.name}</span>
                     <ChevronIcon open={modelOpen} />
                   </Pill>
                   <FloatMenu open={modelOpen}>
                     {[...new Set(VIDEO_MODEL_CFG.map(m => m.provider))].map((provider, pi) => (
                       <Fragment key={provider}>
-                        {pi > 0 && <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />}
-                        <div style={{ padding: "5px 10px 3px", fontSize: "10px", color: "rgba(255,255,255,0.22)", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 500 }}>
+                        {pi > 0 && <div style={{ height: "1px", background: "var(--border-1)", margin: "4px 8px" }} />}
+                        <div style={{ padding: "5px 10px 3px", fontSize: "12px", color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.09em", fontWeight: 500 }}>
                           {provider}
                         </div>
                         {VIDEO_MODEL_CFG.filter(m => m.provider === provider).map(m => (
@@ -1808,9 +1735,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                               if (removedHandles.length) killEdgesForHandles(id, removedHandles);
                               setModelOpen(false);
                             }}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-[11px] hover:bg-[#141C28] transition-colors ${videoModelId === m.id ? "text-white font-medium" : "text-[#A0A0A0]"}`}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-[12px] hover:bg-[var(--bg-1)] transition-colors ${videoModelId === m.id ? "text-[var(--text-1)] font-medium" : "text-[var(--text-2)]"}`}
                           >
-                            <span className="shrink-0 text-white/50" style={{ lineHeight: 0 }}>
+                            <span className="shrink-0 text-[var(--text-2)]" style={{ lineHeight: 0 }}>
                               <NodeProviderIcon provider={m.provider} />
                             </span>
                             <span className="flex-1 text-left whitespace-nowrap">{m.name}</span>
@@ -1832,11 +1759,11 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                         if (idx > 0) updateNodeData(id, { duration: (durations as readonly number[])[idx - 1] });
                       }}
                       disabled={Math.max(0, (durations as readonly number[]).indexOf(duration)) <= 0}
-                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-white/[0.07] bg-black/45 text-white/75 text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
-                      style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-[var(--border-1)] bg-[var(--bg-0)] text-[var(--text-2)] text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
+                      style={{ }}
                     >−</button>
                     <Pill onClick={() => { setDurOpen((o) => !o); setModelOpen(false); setRatioOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
-                      <span className="text-[11px] text-white/70 tabular-nums">{duration}s</span>
+                      <span className="text-[12px] text-[var(--text-2)] tabular-nums">{duration}s</span>
                       <ChevronIcon open={durOpen} />
                     </Pill>
                     <button
@@ -1847,20 +1774,20 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                         if (idx < (durations as readonly number[]).length - 1) updateNodeData(id, { duration: (durations as readonly number[])[idx + 1] });
                       }}
                       disabled={Math.max(0, (durations as readonly number[]).indexOf(duration)) >= (durations as readonly number[]).length - 1}
-                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-white/[0.07] bg-black/45 text-white/75 text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
-                      style={{ backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)" }}
+                      className="shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full border border-[var(--border-1)] bg-[var(--bg-0)] text-[var(--text-2)] text-xs leading-none disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-125 transition-all"
+                      style={{ }}
                     >+</button>
                     <FloatMenu open={durOpen}>
                       <div className="p-3 min-w-[200px]" onMouseDown={(e) => e.stopPropagation()}>
-                        <p className="text-[12px] text-white font-medium mb-2.5">Choose duration</p>
+                        <p className="text-[12px] text-[var(--text-1)] font-medium mb-2.5">Choose duration</p>
                         <div
                           className="nodrag flex items-center gap-2.5 pl-3 pr-4 py-2 rounded-lg"
-                          style={{ background: "#141C28" }}
+                          style={{ background: "var(--bg-1)" }}
                           onMouseDown={(e) => e.stopPropagation()}
                           onPointerDown={(e) => e.stopPropagation()}
                         >
-                          <span className="text-[11px] text-[#AAA] tabular-nums shrink-0 w-6">{duration}s</span>
-                          <div className="w-px h-3.5 shrink-0" style={{ background: "#2A2A2A" }} />
+                          <span className="text-[12px] text-[var(--text-2)] tabular-nums shrink-0 w-6">{duration}s</span>
+                          <div className="w-px h-3.5 shrink-0" style={{ background: "var(--bg-2)" }} />
                           <input
                             type="range"
                             min={0}
@@ -1884,7 +1811,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   <div className="relative">
                     <Pill onClick={() => { setRatioOpen((o) => !o); setModelOpen(false); setDurOpen(false); setModeOpen(false); setGrokResOpen(false); }}>
                       <AspectIcon ratio={aspectRatio} />
-                      <span className="text-[11px] text-white/70">{aspectRatio}</span>
+                      <span className="text-[12px] text-[var(--text-2)]">{aspectRatio}</span>
                       <ChevronIcon open={ratioOpen} />
                     </Pill>
                     <FloatMenu open={ratioOpen}>
@@ -1906,10 +1833,10 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => updateNodeData(id, { sound: !sound })}
                     className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
-                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}
                   >
-                    <ToggleSwitch on={sound} activeColor="#2dd4bf" />
-                    <span className="text-[11px] text-white/70">Sound</span>
+                    <ToggleSwitch on={sound} activeColor="var(--accent)" />
+                    <span className="text-[12px] text-[var(--text-2)]">Sound</span>
                   </button>
                 )}
 
@@ -1927,19 +1854,19 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                       }
                     }}
                     className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
-                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
-                  >                  <ToggleSwitch on={veoMode === "references"} activeColor="#fb923c" />
-                    <span className="text-[11px] text-white/70">{veoMode === "references" ? "References" : "Frames"}</span>
+                    style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}
+                  >                  <ToggleSwitch on={veoMode === "references"} activeColor="var(--warning)" />
+                    <span className="text-[12px] text-[var(--text-2)]">{veoMode === "references" ? "References" : "Frames"}</span>
                   </button>
                 )}
                 {/* Seed input */}
                 {cfg.supportsSeeds && (
                   <div
                     className="flex items-center gap-1.5 rounded-full px-2 py-1"
-                    style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <span className="text-[11px] text-white/70 shrink-0 select-none">Seed</span>
+                    <span className="text-[12px] text-[var(--text-2)] shrink-0 select-none">Seed</span>
                     <input
                       type="number"
                       min={0}
@@ -1951,16 +1878,16 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                         const v = e.target.value === "" ? 0 : Math.max(0, Math.min(2147483647, parseInt(e.target.value, 10)));
                         updateNodeData(id, { seed: isNaN(v) ? 0 : v });
                       }}
-                      className="nodrag w-12 bg-transparent border-none outline-none text-[11px] text-white/90 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="nodrag w-12 bg-transparent border-none outline-none text-[12px] text-[var(--text-2)] text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                 )}
 
                 {/* Img ref indicator */}
                 {activeHandles.has("resource") && hasResource && (
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#fb923c] shrink-0" />
-                    <span className="text-[10px] text-white/60">Img ref</span>
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full" style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--warning)] shrink-0" />
+                    <span className="text-[12px] text-[var(--text-2)]">Img ref</span>
                   </div>
                 )}
 
@@ -1971,20 +1898,20 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                 <div
                   className="flex items-center shrink-0"
                   onMouseDown={(e) => e.stopPropagation()}
-                  style={{ height: 26, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", overflow: "hidden" }}
+                  style={{ height: 26, borderRadius: 8, border: "1px solid var(--border-1)", background: "var(--border-1)", overflow: "hidden" }}
                 >
                   <button
                     onClick={(e) => { e.stopPropagation(); setGenCount(c => Math.max(1, c - 1)); }}
                     disabled={busy || genCount <= 1}
-                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount <= 1 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)", cursor: busy || genCount <= 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
+                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount <= 1 ? "var(--text-3)" : "var(--text-2)", cursor: busy || genCount <= 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
                   >−</button>
-                  <span style={{ fontSize: 11, color: "#fff", minWidth: 28, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontSize: 12, color: "var(--text-1)", minWidth: 28, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
                     {genCount}/4
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); setGenCount(c => Math.min(4, c + 1)); }}
                     disabled={busy || genCount >= 4}
-                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount >= 4 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)", cursor: busy || genCount >= 4 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
+                    style={{ width: 24, height: "100%", border: "none", background: "transparent", color: genCount >= 4 ? "var(--text-3)" : "var(--text-2)", cursor: busy || genCount >= 4 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, transition: "color 140ms" }}
                   >+</button>
                 </div>
               )}
@@ -2007,18 +1934,18 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx - 1); }}
             disabled={currentGenIdx === 0}
             className="absolute left-0 w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
-            style={{ background: "rgba(0,0,0,0.45)" }}
+            style={{ background: "var(--bg-0)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           </button>
           {generations.length <= 8 ? generations.map((_, i) => (
             <button
               key={i}
               onClick={(e) => { e.stopPropagation(); goToGen(i); }}
-              className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-white" : "w-1.5 h-1.5 bg-white/40 hover:bg-white/70"}`}
+              className={`rounded-full transition-all ${i === currentGenIdx ? "w-3 h-1.5 bg-[var(--text-1)]" : "w-1.5 h-1.5 bg-[var(--bg-2)] hover:bg-[var(--bg-2)]"}`}
             />
           )) : (
-            <span className="text-[10px] text-white/60 font-mono tabular-nums">
+            <span className="text-[12px] text-[var(--text-2)] font-mono tabular-nums">
               {currentGenIdx + 1} / {generations.length}
             </span>
           )}
@@ -2026,9 +1953,9 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
             onClick={(e) => { e.stopPropagation(); goToGen(currentGenIdx + 1); }}
             disabled={currentGenIdx === generations.length - 1}
             className="absolute right-0 w-7 h-7 flex items-center justify-center rounded-full transition-opacity disabled:opacity-20"
-            style={{ background: "rgba(0,0,0,0.45)" }}
+            style={{ background: "var(--bg-0)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
           </button>
         </div>
       )}
@@ -2037,12 +1964,12 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       {lightboxOpen && typeof document !== "undefined" && createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-200 ease-in-out"
-          style={{ backgroundColor: `rgba(0,0,0,${lightboxVisible ? 0.9 : 0})`, opacity: lightboxVisible ? 1 : 0 }}
+          style={{ backgroundColor: lightboxVisible ? "var(--scrim)" : "transparent", opacity: lightboxVisible ? 1 : 0 }}
           onClick={closeLightbox}
         >
           <div
             className="relative transition-all duration-200 ease-in-out rounded-2xl overflow-hidden"
-            style={{ transform: lightboxVisible ? "scale(1)" : "scale(0.95)", boxShadow: "0 0 0 8px #3a3a3a" }}
+            style={{ transform: lightboxVisible ? "scale(1)" : "scale(0.95)", boxShadow: "0 0 0 8px var(--bg-2)" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
@@ -2078,7 +2005,7 @@ function Pill({
       disabled={disabled && Tag === "button" ? true : undefined}
       className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 whitespace-nowrap shrink-0 ${fullWidth ? "w-full justify-between" : ""} ${disabled ? "opacity-40 cursor-not-allowed" : interactive && onClick ? "hover:brightness-125 transition-all cursor-pointer" : ""
         }`}
-      style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.07)" }}
+      style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}
     >
       {children}
     </Tag>
@@ -2089,7 +2016,7 @@ function FloatMenu({ children, fullWidth = false, open }: { children: React.Reac
   const { visible, className } = useAnimatedPopup(open);
   if (!visible) return null;
   return (
-    <div className={`absolute bottom-full left-0 mb-1.5 bg-[#111622] border border-[#222] rounded-xl overflow-hidden z-[1002] shadow-2xl ${className}`}>
+    <div className={`absolute bottom-full left-0 mb-1.5 bg-[var(--surface)] border border-[var(--bg-0)] rounded-xl overflow-hidden z-[1002] shadow-2xl ${className}`}>
       {children}
     </div>
   );
@@ -2100,7 +2027,7 @@ function FloatItem({ children, active, onClick }: { children: React.ReactNode; a
     <button
       onMouseDown={(e) => e.stopPropagation()}
       onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[11px] hover:bg-[#141C28] transition-colors ${active ? "text-white font-medium" : "text-[#A0A0A0]"}`}
+      className={`w-full px-3 py-2 text-left text-[12px] hover:bg-[var(--bg-1)] transition-colors ${active ? "text-[var(--text-1)] font-medium" : "text-[var(--text-2)]"}`}
     >
       {children}
     </button>
@@ -2110,7 +2037,7 @@ function FloatItem({ children, active, onClick }: { children: React.ReactNode; a
 function AspectIcon({ ratio }: { ratio: string }) {
   const [w, h] = ratio === "16:9" ? [11, 7] : ratio === "9:16" ? [7, 11] : ratio === "2:3" ? [7, 11] : ratio === "3:2" ? [11, 7] : [9, 9];
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none" stroke="#666" strokeWidth="1.2">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none" stroke="var(--border-2)" strokeWidth="1.2">
       <rect x="0.6" y="0.6" width={w - 1.2} height={h - 1.2} rx="0.8" />
     </svg>
   );
@@ -2118,17 +2045,17 @@ function AspectIcon({ ratio }: { ratio: string }) {
 
 function ChevronIcon({ open = false }: { open?: boolean }) {
   return (
-    <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round"
+    <svg width="7" height="7" viewBox="0 0 8 8" fill="none" stroke="var(--border-2)" strokeWidth="1.5" strokeLinecap="round"
       className={`shrink-0 transition-transform duration-100 ${open ? "rotate-180" : ""}`}>
       <path d="M1 2.5 4 5.5 7 2.5" />
     </svg>
   );
 }
 
-function ToggleSwitch({ on, activeColor = "#4ade80" }: { on: boolean; activeColor?: string }) {
+function ToggleSwitch({ on, activeColor = "var(--success)" }: { on: boolean; activeColor?: string }) {
   return (
-    <div className="relative shrink-0 rounded-full transition-colors" style={{ width: 32, height: 18, background: on ? "#3A3A3A" : "#2A2A2A" }}>
-      <div className="absolute top-[3px] rounded-full transition-transform" style={{ width: 12, height: 12, background: on ? activeColor : "#555", transform: on ? "translateX(17px)" : "translateX(3px)" }} />
+    <div className="relative shrink-0 rounded-full transition-colors" style={{ width: 32, height: 18, background: on ? "var(--bg-2)" : "var(--bg-2)" }}>
+      <div className="absolute top-[3px] rounded-full transition-transform" style={{ width: 12, height: 12, background: on ? activeColor : "var(--border-2)", transform: on ? "translateX(17px)" : "translateX(3px)" }} />
     </div>
   );
 }
@@ -2145,7 +2072,7 @@ function VideoNodeIcon() {
 
 function PromptIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="var(--text-1)">
       <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
     </svg>
   );
@@ -2153,16 +2080,16 @@ function PromptIcon() {
 
 function VideoRefIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
-      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="var(--text-1)" stroke="none" />
     </svg>
   );
 }
 
 function FrameStartIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
       <path d="M4.5 6h5M7 4l2.5 2L7 8" />
     </svg>
@@ -2171,7 +2098,7 @@ function FrameStartIcon() {
 
 function FrameEndIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
       <path d="M9.5 6h-5M7 4 4.5 6 7 8" />
     </svg>
@@ -2180,9 +2107,9 @@ function FrameEndIcon() {
 
 function ResourceIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-      <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
+      <circle cx="9" cy="9" r="2" fill="var(--text-1)" stroke="none" />
       <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
@@ -2190,9 +2117,9 @@ function ResourceIcon() {
 
 function RefVideoIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
-      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="var(--text-1)" stroke="none" />
       <path d="M11.5 3v1.5M11.5 7.5v1.5" strokeWidth="1.1" />
     </svg>
   );
@@ -2200,7 +2127,7 @@ function RefVideoIcon() {
 
 function AudioRefIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 5v4M4.5 3v8M7 4.5v5M9.5 3v8M12 5v4" />
     </svg>
   );
@@ -2208,7 +2135,7 @@ function AudioRefIcon() {
 
 function CharacterIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="7" cy="4.5" r="2.5" />
       <path d="M1.5 13c0-2.8 2.46-5 5.5-5s5.5 2.2 5.5 5" />
     </svg>
@@ -2217,7 +2144,7 @@ function CharacterIcon() {
 
 function SrcFrameStartIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
       <path d="M4.5 6h5M7 4l2.5 2L7 8" />
     </svg>
@@ -2226,7 +2153,7 @@ function SrcFrameStartIcon() {
 
 function SrcFrameEndIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
       <path d="M9.5 6h-5M7 4 4.5 6 7 8" />
     </svg>
@@ -2235,9 +2162,9 @@ function SrcFrameEndIcon() {
 
 function SrcImagePickIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
-      <circle cx="4.5" cy="4" r="1.2" fill="white" stroke="none" />
+      <circle cx="4.5" cy="4" r="1.2" fill="var(--text-1)" stroke="none" />
       <path d="m0.7 9 3.5-3.5 2.5 2.5 2-2 5 4" />
     </svg>
   );
@@ -2245,16 +2172,16 @@ function SrcImagePickIcon() {
 
 function SrcVideoIcon() {
   return (
-    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="11" viewBox="0 0 14 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <rect x="0.7" y="0.7" width="12.6" height="10.6" rx="1.3" />
-      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="white" stroke="none" />
+      <path d="M5.5 4.5v3l3-1.5-3-1.5z" fill="var(--text-1)" stroke="none" />
     </svg>
   );
 }
 
 function SrcAudioIcon() {
   return (
-    <svg width="12" height="11" viewBox="0 0 13 12" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="12" height="11" viewBox="0 0 13 12" fill="none" stroke="var(--text-1)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 4v4M4.5 2v8M6.5 3.5v5M9 2v8M11 4v4" />
     </svg>
   );
@@ -2263,24 +2190,28 @@ function SrcAudioIcon() {
 function NodeProviderIcon({ provider }: { provider: string }) {
   switch (provider) {
     case "OpenAI":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M22.408 9.80741C22.9487 8.17778 22.7685 6.37037 21.8974 4.88889C20.5758 2.60741 17.9024 1.45185 15.2891 1.98519C14.1477 0.711111 12.4656 0 10.7234 0C8.0501 0 5.70717 1.68889 4.86612 4.17778C3.15398 4.53333 1.68214 5.57037 0.811051 7.08148C-0.510601 9.36296 -0.210226 12.2074 1.56199 14.163C1.02131 15.8222 1.23158 17.6 2.10267 19.0815C3.42432 21.363 6.09766 22.5481 8.71093 21.9852C9.88239 23.2593 11.5345 24 13.2766 24C15.95 24 18.2929 22.3111 19.134 19.8222C20.8461 19.4667 22.3179 18.4296 23.189 16.9185C24.5107 14.637 24.2103 11.763 22.408 9.80741ZM13.2766 22.4296C12.1953 22.4296 11.174 22.0741 10.363 21.3926C10.393 21.363 10.4831 21.3333 10.5132 21.3037L15.3492 18.5481C15.5895 18.4 15.7397 18.163 15.7397 17.8667V11.1407L17.7823 12.2963C17.8123 12.2963 17.8123 12.3259 17.8123 12.3556V17.9259C17.8423 20.4148 15.7998 22.4296 13.2766 22.4296ZM3.48439 18.3111C2.94372 17.3926 2.76349 16.3259 2.94372 15.2889C2.97375 15.3185 3.03383 15.3481 3.0939 15.3778L7.92995 18.1333C8.17025 18.2815 8.47063 18.2815 8.71093 18.1333L14.6283 14.7556V17.0963C14.6283 17.1259 14.6283 17.1556 14.5983 17.1556L9.70216 19.9407C7.53946 21.1852 4.74597 20.4444 3.48439 18.3111ZM2.22282 7.88148C2.76349 6.96296 3.60454 6.28148 4.59578 5.8963V11.5852C4.59578 11.8519 4.74597 12.1185 4.98627 12.2667L10.9037 15.6444L8.86111 16.8C8.83108 16.8 8.80104 16.8296 8.80104 16.8L3.90492 14.0148C1.68214 12.7704 0.961239 10.0148 2.22282 7.88148ZM19.0438 11.7333L13.1264 8.35556L15.169 7.2C15.199 7.2 15.2291 7.17037 15.2291 7.2L20.1252 9.98519C22.3179 11.2296 23.0388 13.9852 21.7773 16.1185C21.2366 17.037 20.3955 17.7185 19.4043 18.0741V12.4148C19.4343 12.1481 19.2841 11.8815 19.0438 11.7333ZM21.0564 8.71111C21.0263 8.68148 20.9662 8.65185 20.9062 8.62222L16.0701 5.86667C15.8298 5.71852 15.5294 5.71852 15.2891 5.86667L9.37175 9.24444V6.9037C9.37175 6.87407 9.37175 6.84444 9.40179 6.84444L14.2979 4.05926C16.4906 2.81481 19.2541 3.55556 20.5157 5.71852C21.0564 6.60741 21.2366 7.67407 21.0564 8.71111ZM8.26036 12.8593L6.21781 11.7037C6.18777 11.7037 6.18777 11.6741 6.18777 11.6444V6.07407C6.18777 3.58519 8.23032 1.57037 10.7535 1.57037C11.8348 1.57037 12.8561 1.92593 13.6671 2.60741C13.6371 2.63704 13.577 2.66667 13.5169 2.6963L8.68089 5.45185C8.44059 5.6 8.2904 5.83704 8.2904 6.13333V12.8593H8.26036ZM9.37175 10.4889L12.0151 8.97778L14.6584 10.4889V13.4815L12.0151 14.9926L9.37175 13.4815V10.4889Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M22.408 9.80741C22.9487 8.17778 22.7685 6.37037 21.8974 4.88889C20.5758 2.60741 17.9024 1.45185 15.2891 1.98519C14.1477 0.711111 12.4656 0 10.7234 0C8.0501 0 5.70717 1.68889 4.86612 4.17778C3.15398 4.53333 1.68214 5.57037 0.811051 7.08148C-0.510601 9.36296 -0.210226 12.2074 1.56199 14.163C1.02131 15.8222 1.23158 17.6 2.10267 19.0815C3.42432 21.363 6.09766 22.5481 8.71093 21.9852C9.88239 23.2593 11.5345 24 13.2766 24C15.95 24 18.2929 22.3111 19.134 19.8222C20.8461 19.4667 22.3179 18.4296 23.189 16.9185C24.5107 14.637 24.2103 11.763 22.408 9.80741ZM13.2766 22.4296C12.1953 22.4296 11.174 22.0741 10.363 21.3926C10.393 21.363 10.4831 21.3333 10.5132 21.3037L15.3492 18.5481C15.5895 18.4 15.7397 18.163 15.7397 17.8667V11.1407L17.7823 12.2963C17.8123 12.2963 17.8123 12.3259 17.8123 12.3556V17.9259C17.8423 20.4148 15.7998 22.4296 13.2766 22.4296ZM3.48439 18.3111C2.94372 17.3926 2.76349 16.3259 2.94372 15.2889C2.97375 15.3185 3.03383 15.3481 3.0939 15.3778L7.92995 18.1333C8.17025 18.2815 8.47063 18.2815 8.71093 18.1333L14.6283 14.7556V17.0963C14.6283 17.1259 14.6283 17.1556 14.5983 17.1556L9.70216 19.9407C7.53946 21.1852 4.74597 20.4444 3.48439 18.3111ZM2.22282 7.88148C2.76349 6.96296 3.60454 6.28148 4.59578 5.8963V11.5852C4.59578 11.8519 4.74597 12.1185 4.98627 12.2667L10.9037 15.6444L8.86111 16.8C8.83108 16.8 8.80104 16.8296 8.80104 16.8L3.90492 14.0148C1.68214 12.7704 0.961239 10.0148 2.22282 7.88148ZM19.0438 11.7333L13.1264 8.35556L15.169 7.2C15.199 7.2 15.2291 7.17037 15.2291 7.2L20.1252 9.98519C22.3179 11.2296 23.0388 13.9852 21.7773 16.1185C21.2366 17.037 20.3955 17.7185 19.4043 18.0741V12.4148C19.4343 12.1481 19.2841 11.8815 19.0438 11.7333ZM21.0564 8.71111C21.0263 8.68148 20.9662 8.65185 20.9062 8.62222L16.0701 5.86667C15.8298 5.71852 15.5294 5.71852 15.2891 5.86667L9.37175 9.24444V6.9037C9.37175 6.87407 9.37175 6.84444 9.40179 6.84444L14.2979 4.05926C16.4906 2.81481 19.2541 3.55556 20.5157 5.71852C21.0564 6.60741 21.2366 7.67407 21.0564 8.71111ZM8.26036 12.8593L6.21781 11.7037C6.18777 11.7037 6.18777 11.6741 6.18777 11.6444V6.07407C6.18777 3.58519 8.23032 1.57037 10.7535 1.57037C11.8348 1.57037 12.8561 1.92593 13.6671 2.60741C13.6371 2.63704 13.577 2.66667 13.5169 2.6963L8.68089 5.45185C8.44059 5.6 8.2904 5.83704 8.2904 6.13333V12.8593H8.26036ZM9.37175 10.4889L12.0151 8.97778L14.6584 10.4889V13.4815L12.0151 14.9926L9.37175 13.4815V10.4889Z" /></svg>;
     case "Google":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M2.55464 6.25768C3.24798 4.87705 4.31161 3.71644 5.62666 2.90557C6.94171 2.0947 8.45636 1.66553 10.0013 1.66602C12.2471 1.66602 14.1338 2.49102 15.5763 3.83685L13.1871 6.22685C12.323 5.40102 11.2246 4.98018 10.0013 4.98018C7.83047 4.98018 5.99297 6.44685 5.3388 8.41602C5.17214 8.91602 5.07714 9.44935 5.07714 9.99935C5.07714 10.5493 5.17214 11.0827 5.3388 11.5827C5.9938 13.5527 7.83047 15.0185 10.0013 15.0185C11.1221 15.0185 12.0763 14.7227 12.823 14.2227C13.2558 13.9377 13.6264 13.5679 13.9123 13.1356C14.1982 12.7033 14.3935 12.2176 14.4863 11.7077H10.0013V8.48435H17.8496C17.948 9.02935 18.0013 9.59768 18.0013 10.1885C18.0013 12.7268 17.093 14.8635 15.5163 16.3135C14.138 17.5868 12.2513 18.3327 10.0013 18.3327C8.90683 18.3331 7.823 18.1179 6.81176 17.6992C5.80051 17.2806 4.88168 16.6668 4.10777 15.8929C3.33386 15.119 2.72005 14.2001 2.30141 13.1889C1.88278 12.1777 1.66753 11.0938 1.66797 9.99935C1.66797 8.65435 1.98964 7.38268 2.55464 6.25768Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M2.55464 6.25768C3.24798 4.87705 4.31161 3.71644 5.62666 2.90557C6.94171 2.0947 8.45636 1.66553 10.0013 1.66602C12.2471 1.66602 14.1338 2.49102 15.5763 3.83685L13.1871 6.22685C12.323 5.40102 11.2246 4.98018 10.0013 4.98018C7.83047 4.98018 5.99297 6.44685 5.3388 8.41602C5.17214 8.91602 5.07714 9.44935 5.07714 9.99935C5.07714 10.5493 5.17214 11.0827 5.3388 11.5827C5.9938 13.5527 7.83047 15.0185 10.0013 15.0185C11.1221 15.0185 12.0763 14.7227 12.823 14.2227C13.2558 13.9377 13.6264 13.5679 13.9123 13.1356C14.1982 12.7033 14.3935 12.2176 14.4863 11.7077H10.0013V8.48435H17.8496C17.948 9.02935 18.0013 9.59768 18.0013 10.1885C18.0013 12.7268 17.093 14.8635 15.5163 16.3135C14.138 17.5868 12.2513 18.3327 10.0013 18.3327C8.90683 18.3331 7.823 18.1179 6.81176 17.6992C5.80051 17.2806 4.88168 16.6668 4.10777 15.8929C3.33386 15.119 2.72005 14.2001 2.30141 13.1889C1.88278 12.1777 1.66753 11.0938 1.66797 9.99935C1.66797 8.65435 1.98964 7.38268 2.55464 6.25768Z" /></svg>;
     case "Seedream":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><path d="M2.7601 10.635L0.466553 11.2084V1.04883L2.7601 1.62222V10.635Z" /><path d="M13.8448 11.2295L11.5469 11.8029V0.454102L13.8448 1.02324V11.2295Z" /><path d="M6.39853 10.9452L4.10498 11.5186V5.53418L6.39853 6.10752V10.9452Z" /><path d="M7.89722 4.64663L10.1952 4.07324V10.0577L7.89722 9.48433V4.64663Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><path d="M2.7601 10.635L0.466553 11.2084V1.04883L2.7601 1.62222V10.635Z" /><path d="M13.8448 11.2295L11.5469 11.8029V0.454102L13.8448 1.02324V11.2295Z" /><path d="M6.39853 10.9452L4.10498 11.5186V5.53418L6.39853 6.10752V10.9452Z" /><path d="M7.89722 4.64663L10.1952 4.07324V10.0577L7.89722 9.48433V4.64663Z" /></svg>;
     case "Z-AI":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M19.9361 12.1411L17.6243 8.09523L17.3525 7.61735L18.5771 5.47657C18.6187 5.4023 18.6411 5.32158 18.6411 5.23763C18.6411 5.15367 18.6187 5.07295 18.5771 4.99868L17.215 2.61896C17.1735 2.5447 17.1127 2.48658 17.0424 2.4446C16.972 2.40262 16.8921 2.38002 16.8058 2.38002H11.6323L10.4077 0.236011C10.3245 0.0874804 10.1679 -0.00292969 9.9984 -0.00292969H7.27738C7.19425 -0.00292969 7.11111 0.0196728 7.04077 0.0616489C6.97042 0.103625 6.90967 0.161746 6.86811 0.236011L4.55316 4.28509L4.28138 4.75974H1.83213C1.749 4.75974 1.66587 4.78235 1.59552 4.82432C1.52518 4.8663 1.46443 4.92442 1.42286 4.99868L0.0639488 7.38164C0.0223821 7.4559 0 7.53663 0 7.62058C0 7.70453 0.0223821 7.78525 0.0639488 7.85952L2.65068 12.3833L1.42606 14.5273C1.38449 14.6015 1.36211 14.6823 1.36211 14.7662C1.36211 14.8502 1.38449 14.9309 1.42606 15.0051L2.78817 17.3849C2.82974 17.4591 2.89049 17.5173 2.96083 17.5592C3.03118 17.6012 3.11111 17.6238 3.19744 17.6238H8.36771L9.59233 19.7678C9.67546 19.9163 9.83214 20.0068 10.0016 20.0068H12.7226C12.8058 20.0068 12.8889 19.9842 12.9592 19.9422C13.0296 19.9002 13.0903 19.8421 13.1319 19.7678L15.7186 15.2441H18.1679C18.251 15.2441 18.3341 15.2215 18.4045 15.1795C18.4748 15.1375 18.5356 15.0794 18.5771 15.0051L19.9393 12.6254C19.9808 12.5512 20.0032 12.4704 20.0032 12.3865C20.0032 12.3025 19.9808 12.2218 19.9393 12.1475L19.9361 12.1411ZM7.27738 0.474952L8.63949 2.8579L7.27738 5.23763H18.1679L16.8058 7.61735H6.45883L4.82494 4.75974L7.27738 0.474952ZM8.09273 17.1395H3.19424L4.55636 14.7565H7.27738L1.83213 5.23763H4.55316L5.91527 7.61735L9.72662 14.2851L8.09273 17.1427V17.1395ZM16.8058 12.3768L15.4468 9.99707L10.0016 19.5224L8.63949 17.1427L10.0016 14.763L13.813 8.09523H17.0807L19.53 12.38H16.8058V12.3768Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M19.9361 12.1411L17.6243 8.09523L17.3525 7.61735L18.5771 5.47657C18.6187 5.4023 18.6411 5.32158 18.6411 5.23763C18.6411 5.15367 18.6187 5.07295 18.5771 4.99868L17.215 2.61896C17.1735 2.5447 17.1127 2.48658 17.0424 2.4446C16.972 2.40262 16.8921 2.38002 16.8058 2.38002H11.6323L10.4077 0.236011C10.3245 0.0874804 10.1679 -0.00292969 9.9984 -0.00292969H7.27738C7.19425 -0.00292969 7.11111 0.0196728 7.04077 0.0616489C6.97042 0.103625 6.90967 0.161746 6.86811 0.236011L4.55316 4.28509L4.28138 4.75974H1.83213C1.749 4.75974 1.66587 4.78235 1.59552 4.82432C1.52518 4.8663 1.46443 4.92442 1.42286 4.99868L0.0639488 7.38164C0.0223821 7.4559 0 7.53663 0 7.62058C0 7.70453 0.0223821 7.78525 0.0639488 7.85952L2.65068 12.3833L1.42606 14.5273C1.38449 14.6015 1.36211 14.6823 1.36211 14.7662C1.36211 14.8502 1.38449 14.9309 1.42606 15.0051L2.78817 17.3849C2.82974 17.4591 2.89049 17.5173 2.96083 17.5592C3.03118 17.6012 3.11111 17.6238 3.19744 17.6238H8.36771L9.59233 19.7678C9.67546 19.9163 9.83214 20.0068 10.0016 20.0068H12.7226C12.8058 20.0068 12.8889 19.9842 12.9592 19.9422C13.0296 19.9002 13.0903 19.8421 13.1319 19.7678L15.7186 15.2441H18.1679C18.251 15.2441 18.3341 15.2215 18.4045 15.1795C18.4748 15.1375 18.5356 15.0794 18.5771 15.0051L19.9393 12.6254C19.9808 12.5512 20.0032 12.4704 20.0032 12.3865C20.0032 12.3025 19.9808 12.2218 19.9393 12.1475L19.9361 12.1411ZM7.27738 0.474952L8.63949 2.8579L7.27738 5.23763H18.1679L16.8058 7.61735H6.45883L4.82494 4.75974L7.27738 0.474952ZM8.09273 17.1395H3.19424L4.55636 14.7565H7.27738L1.83213 5.23763H4.55316L5.91527 7.61735L9.72662 14.2851L8.09273 17.1427V17.1395ZM16.8058 12.3768L15.4468 9.99707L10.0016 19.5224L8.63949 17.1427L10.0016 14.763L13.813 8.09523H17.0807L19.53 12.38H16.8058V12.3768Z" /></svg>;
     case "X":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9.23842 15.4055L17.3051 9.26292C17.7006 8.9618 18.2658 9.07925 18.4543 9.54702C19.446 12.0138 19.0029 14.9784 17.0297 17.0138C15.0566 19.0492 12.3111 19.4955 9.80163 18.4789L7.06027 19.7882C10.9922 22.5604 15.7667 21.8748 18.7504 18.795C21.117 16.3538 21.8499 13.0262 21.1646 10.0254L21.1708 10.0318C20.1769 5.62354 21.4151 3.86151 23.9515 0.258408C23.9702 0.231693 23.9351 0.202703 23.9123 0.226139L20.7939 3.44289V3.43221L9.23842 15.4055Z" /><path d="M7.65167 7.33217C5.24368 9.81392 4.75711 14.1176 7.57924 16.8984L7.57713 16.9005L0.0792788 23.8097C0.0528384 23.834 0.0162235 23.8015 0.0377551 23.7728C0.487937 23.1707 1.01883 22.595 1.54932 22.0198L1.57777 21.9889C3.28214 20.1411 4.97141 18.3097 3.93926 15.7216C2.55615 12.2552 3.36158 8.19287 5.9228 5.55089C8.58547 2.80639 12.507 2.1144 15.7826 3.5048C16.5072 3.78245 17.1388 4.17758 17.6315 4.54493L14.8964 5.84777C12.3497 4.7457 9.43229 5.49537 7.65167 7.33217Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M9.23842 15.4055L17.3051 9.26292C17.7006 8.9618 18.2658 9.07925 18.4543 9.54702C19.446 12.0138 19.0029 14.9784 17.0297 17.0138C15.0566 19.0492 12.3111 19.4955 9.80163 18.4789L7.06027 19.7882C10.9922 22.5604 15.7667 21.8748 18.7504 18.795C21.117 16.3538 21.8499 13.0262 21.1646 10.0254L21.1708 10.0318C20.1769 5.62354 21.4151 3.86151 23.9515 0.258408C23.9702 0.231693 23.9351 0.202703 23.9123 0.226139L20.7939 3.44289V3.43221L9.23842 15.4055Z" /><path d="M7.65167 7.33217C5.24368 9.81392 4.75711 14.1176 7.57924 16.8984L7.57713 16.9005L0.0792788 23.8097C0.0528384 23.834 0.0162235 23.8015 0.0377551 23.7728C0.487937 23.1707 1.01883 22.595 1.54932 22.0198L1.57777 21.9889C3.28214 20.1411 4.97141 18.3097 3.93926 15.7216C2.55615 12.2552 3.36158 8.19287 5.9228 5.55089C8.58547 2.80639 12.507 2.1144 15.7826 3.5048C16.5072 3.78245 17.1388 4.17758 17.6315 4.54493L14.8964 5.84777C12.3497 4.7457 9.43229 5.49537 7.65167 7.33217Z" /></svg>;
     case "Kling":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M16.7522 2.86984L16.818 2.93745L16.8199 2.93552C18.087 4.25441 17.7236 6.90443 15.8863 9.90864L19.5 13.6567L19.3447 13.9703C18.7372 15.1986 17.9147 16.2992 16.9193 17.216C15.608 18.43 14.0251 19.2853 12.3143 19.7044L12.2522 19.7198L12.1634 19.7417L12.0994 19.7565L11.9584 19.7887L11.8416 19.8126L11.754 19.8299C11.6609 19.8493 11.5634 19.8673 11.4683 19.884L11.3888 19.8963L11.3286 19.904C11.2429 19.916 11.1576 19.9272 11.0727 19.9375C9.64831 20.1036 8.20616 19.9376 6.8516 19.4517C5.49703 18.9658 4.2643 18.1723 3.24348 17.1291L3.18385 17.0692C1.91429 15.7503 2.27391 13.0983 4.11366 10.0922L0.5 6.34416L0.65528 6.03054C1.26118 4.80131 2.0846 3.70115 3.08261 2.78741C4.10242 1.8473 5.28649 1.11848 6.57081 0.640344C6.86894 0.528933 7.18075 0.431691 7.48696 0.34926C7.73931 0.279139 7.9944 0.220054 8.25155 0.172163C8.33851 0.154131 8.43665 0.135456 8.53168 0.118712C10.0139 -0.12084 11.5297 0.00325476 12.9574 0.481036C14.385 0.958817 15.6847 1.77698 16.7522 2.86984ZM15.5304 3.03083H15.5267L15.5304 3.03276C14.3025 2.63864 12.354 3.27555 10.2944 4.68267C11.8615 4.22994 13.377 4.46435 14.3565 5.48057C15.2845 6.44462 15.5385 7.90777 15.187 9.44497C15.1704 9.52697 15.1497 9.61005 15.1248 9.69419C16.8062 7.05706 17.3441 4.58993 16.2795 3.48807C16.262 3.4682 16.2433 3.44949 16.2236 3.43204L16.2155 3.42431L16.2037 3.41336L16.1683 3.38503C16.153 3.37215 16.1371 3.3597 16.1205 3.34768L16.0944 3.32836C15.9242 3.19657 15.7334 3.09594 15.5304 3.03083ZM14.6876 8.95876C14.4708 10.2995 13.7559 11.6545 12.672 12.777C11.5913 13.9001 10.282 14.642 8.98696 14.8687C7.77516 15.0812 6.72981 14.8043 6.04472 14.0959C5.36149 13.3868 5.09441 12.3069 5.29938 11.044C5.51615 9.7045 6.22919 8.3489 7.30807 7.22771C7.30807 7.22771 7.30994 7.22771 7.31429 7.22127L7.31801 7.21483C8.40062 6.09944 9.70497 5.3595 10.9969 5.13539C12.2087 4.92287 13.2516 5.1985 13.9391 5.90818C14.6224 6.61657 14.8894 7.69847 14.6845 8.9594H14.6882L14.6876 8.95876ZM3.70621 3.51061C2.88113 4.26712 2.1865 5.16395 1.65217 6.16255L1.64596 6.16449L4.78137 9.40762C5.04127 9.02837 5.31475 8.65932 5.60124 8.30124C5.70311 8.17567 5.80807 8.04558 5.91553 7.91614L5.95652 7.86784L6.10559 7.69525C6.10994 7.69139 6.11429 7.68301 6.11429 7.68301L6.14161 7.65082L6.1559 7.63343L6.23292 7.54456C6.27226 7.49819 6.31284 7.45247 6.35466 7.40739C6.35466 7.40288 6.36087 7.39644 6.36087 7.39644L6.42795 7.32045L6.47578 7.26893C6.47785 7.26592 6.4795 7.26507 6.4795 7.26507C6.48385 7.26249 6.48385 7.25863 6.48385 7.25863C6.48675 7.25562 6.48965 7.25176 6.49255 7.24703L6.50124 7.23609C6.50882 7.23006 6.51569 7.22314 6.52174 7.21548L6.53354 7.2026C6.55901 7.17619 6.58944 7.14528 6.61677 7.11437C6.63126 7.09591 6.64783 7.07745 6.66646 7.05899L6.69193 7.03194C6.69627 7.0255 6.70807 7.01326 6.70807 7.01326L6.7559 6.96432L6.84907 6.86901L6.88012 6.83488L6.91491 6.79688C7.5863 6.09838 8.30377 5.44917 9.06211 4.85397L9.16149 4.77862H9.16211V4.77798L9.16335 4.77733L9.26273 4.70134C9.37371 4.61505 9.48551 4.53068 9.59814 4.44825C9.71822 4.36325 9.8383 4.27953 9.95838 4.1971C11.587 3.0714 13.182 2.39586 14.4839 2.26191C12.7422 1.17239 10.6864 0.752921 8.6764 1.07697C8.58944 1.09114 8.50621 1.10595 8.41677 1.12462C8.36025 1.13493 8.31118 1.14523 8.26149 1.15554L8.23168 1.16198C7.77515 1.25942 7.3258 1.39004 6.88696 1.55288C5.71551 1.9877 4.63519 2.65238 3.70621 3.51061ZM3.87888 16.6531C4.05279 16.7905 4.25093 16.8949 4.47329 16.9661H4.46894C5.70497 17.3577 7.64596 16.7188 9.69814 15.3156C8.13292 15.7664 6.6205 15.532 5.64099 14.5157C4.71739 13.5562 4.46335 12.0885 4.81304 10.5513C4.83043 10.4693 4.85093 10.3863 4.87453 10.3021C3.19379 12.9399 2.65714 15.4064 3.7205 16.5089C3.77062 16.56 3.8235 16.6082 3.87888 16.6531ZM18.346 13.8389V13.8402C17.8108 14.8373 17.1168 15.7333 16.2932 16.4902C15.0606 17.625 13.5707 18.4173 11.9627 18.7931L11.9429 18.7983L11.8894 18.8112C11.8291 18.8281 11.7679 18.8418 11.7062 18.8524C11.666 18.8614 11.6251 18.8693 11.5832 18.8762C11.4967 18.8936 11.4097 18.9087 11.3224 18.9213L11.2497 18.9342L11.1671 18.9451C11.1008 18.9545 11.0329 18.9631 10.9634 18.9709C9.06697 19.1922 7.15308 18.7592 5.51801 17.7389C6.77143 17.6108 8.29752 16.9764 9.86273 15.9274L9.95217 15.8668L10.0416 15.8057L10.1634 15.7206H10.164L10.3994 15.5545C10.5128 15.4721 10.6246 15.3877 10.7348 15.3014C10.8035 15.2503 10.871 15.1994 10.9373 15.1488C11.6946 14.5518 12.4122 13.9025 13.0851 13.2052C13.1012 13.1881 13.1164 13.1713 13.1304 13.155L13.1491 13.1331C13.1822 13.1009 13.2133 13.0693 13.2422 13.0384L13.2894 12.9895C13.2894 12.9895 13.3019 12.9766 13.3037 12.9702L13.3217 12.9521L13.3292 12.9438L13.3832 12.8884L13.4248 12.8433C13.4389 12.8296 13.4528 12.815 13.4665 12.7995L13.4776 12.7866C13.4837 12.7792 13.4906 12.7725 13.4981 12.7667L13.5075 12.7551L13.5161 12.7441C13.5161 12.7441 13.5224 12.7377 13.5261 12.7358L13.5429 12.7171L13.5596 12.6984L13.5758 12.6823C13.5584 12.7012 13.5418 12.7209 13.5261 12.7416L13.5646 12.6997L13.5652 12.6984C13.5921 12.6684 13.6188 12.6396 13.6453 12.6121C13.6453 12.6121 13.6453 12.6057 13.6516 12.6057C13.688 12.5653 13.7234 12.5245 13.7578 12.4833L13.828 12.4022C13.8372 12.396 13.8447 12.3873 13.8497 12.3771L13.8894 12.3275L13.8994 12.3152C13.9478 12.2616 13.9952 12.2073 14.0416 12.1523L14.0901 12.0943C14.1679 12.0003 14.2453 11.9057 14.3224 11.8103L14.4155 11.6951L14.4447 11.6577C14.482 11.6092 14.5188 11.562 14.5553 11.516C14.5863 11.4774 14.6168 11.4379 14.6466 11.3975C14.8451 11.1367 15.0377 10.8711 15.2242 10.6009L18.346 13.8389ZM18.346 13.8389C18.346 13.8368 18.3472 13.835 18.3497 13.8338V13.8441L18.346 13.8402H18.3472L18.346 13.8389Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M16.7522 2.86984L16.818 2.93745L16.8199 2.93552C18.087 4.25441 17.7236 6.90443 15.8863 9.90864L19.5 13.6567L19.3447 13.9703C18.7372 15.1986 17.9147 16.2992 16.9193 17.216C15.608 18.43 14.0251 19.2853 12.3143 19.7044L12.2522 19.7198L12.1634 19.7417L12.0994 19.7565L11.9584 19.7887L11.8416 19.8126L11.754 19.8299C11.6609 19.8493 11.5634 19.8673 11.4683 19.884L11.3888 19.8963L11.3286 19.904C11.2429 19.916 11.1576 19.9272 11.0727 19.9375C9.64831 20.1036 8.20616 19.9376 6.8516 19.4517C5.49703 18.9658 4.2643 18.1723 3.24348 17.1291L3.18385 17.0692C1.91429 15.7503 2.27391 13.0983 4.11366 10.0922L0.5 6.34416L0.65528 6.03054C1.26118 4.80131 2.0846 3.70115 3.08261 2.78741C4.10242 1.8473 5.28649 1.11848 6.57081 0.640344C6.86894 0.528933 7.18075 0.431691 7.48696 0.34926C7.73931 0.279139 7.9944 0.220054 8.25155 0.172163C8.33851 0.154131 8.43665 0.135456 8.53168 0.118712C10.0139 -0.12084 11.5297 0.00325476 12.9574 0.481036C14.385 0.958817 15.6847 1.77698 16.7522 2.86984ZM15.5304 3.03083H15.5267L15.5304 3.03276C14.3025 2.63864 12.354 3.27555 10.2944 4.68267C11.8615 4.22994 13.377 4.46435 14.3565 5.48057C15.2845 6.44462 15.5385 7.90777 15.187 9.44497C15.1704 9.52697 15.1497 9.61005 15.1248 9.69419C16.8062 7.05706 17.3441 4.58993 16.2795 3.48807C16.262 3.4682 16.2433 3.44949 16.2236 3.43204L16.2155 3.42431L16.2037 3.41336L16.1683 3.38503C16.153 3.37215 16.1371 3.3597 16.1205 3.34768L16.0944 3.32836C15.9242 3.19657 15.7334 3.09594 15.5304 3.03083ZM14.6876 8.95876C14.4708 10.2995 13.7559 11.6545 12.672 12.777C11.5913 13.9001 10.282 14.642 8.98696 14.8687C7.77516 15.0812 6.72981 14.8043 6.04472 14.0959C5.36149 13.3868 5.09441 12.3069 5.29938 11.044C5.51615 9.7045 6.22919 8.3489 7.30807 7.22771C7.30807 7.22771 7.30994 7.22771 7.31429 7.22127L7.31801 7.21483C8.40062 6.09944 9.70497 5.3595 10.9969 5.13539C12.2087 4.92287 13.2516 5.1985 13.9391 5.90818C14.6224 6.61657 14.8894 7.69847 14.6845 8.9594H14.6882L14.6876 8.95876ZM3.70621 3.51061C2.88113 4.26712 2.1865 5.16395 1.65217 6.16255L1.64596 6.16449L4.78137 9.40762C5.04127 9.02837 5.31475 8.65932 5.60124 8.30124C5.70311 8.17567 5.80807 8.04558 5.91553 7.91614L5.95652 7.86784L6.10559 7.69525C6.10994 7.69139 6.11429 7.68301 6.11429 7.68301L6.14161 7.65082L6.1559 7.63343L6.23292 7.54456C6.27226 7.49819 6.31284 7.45247 6.35466 7.40739C6.35466 7.40288 6.36087 7.39644 6.36087 7.39644L6.42795 7.32045L6.47578 7.26893C6.47785 7.26592 6.4795 7.26507 6.4795 7.26507C6.48385 7.26249 6.48385 7.25863 6.48385 7.25863C6.48675 7.25562 6.48965 7.25176 6.49255 7.24703L6.50124 7.23609C6.50882 7.23006 6.51569 7.22314 6.52174 7.21548L6.53354 7.2026C6.55901 7.17619 6.58944 7.14528 6.61677 7.11437C6.63126 7.09591 6.64783 7.07745 6.66646 7.05899L6.69193 7.03194C6.69627 7.0255 6.70807 7.01326 6.70807 7.01326L6.7559 6.96432L6.84907 6.86901L6.88012 6.83488L6.91491 6.79688C7.5863 6.09838 8.30377 5.44917 9.06211 4.85397L9.16149 4.77862H9.16211V4.77798L9.16335 4.77733L9.26273 4.70134C9.37371 4.61505 9.48551 4.53068 9.59814 4.44825C9.71822 4.36325 9.8383 4.27953 9.95838 4.1971C11.587 3.0714 13.182 2.39586 14.4839 2.26191C12.7422 1.17239 10.6864 0.752921 8.6764 1.07697C8.58944 1.09114 8.50621 1.10595 8.41677 1.12462C8.36025 1.13493 8.31118 1.14523 8.26149 1.15554L8.23168 1.16198C7.77515 1.25942 7.3258 1.39004 6.88696 1.55288C5.71551 1.9877 4.63519 2.65238 3.70621 3.51061ZM3.87888 16.6531C4.05279 16.7905 4.25093 16.8949 4.47329 16.9661H4.46894C5.70497 17.3577 7.64596 16.7188 9.69814 15.3156C8.13292 15.7664 6.6205 15.532 5.64099 14.5157C4.71739 13.5562 4.46335 12.0885 4.81304 10.5513C4.83043 10.4693 4.85093 10.3863 4.87453 10.3021C3.19379 12.9399 2.65714 15.4064 3.7205 16.5089C3.77062 16.56 3.8235 16.6082 3.87888 16.6531ZM18.346 13.8389V13.8402C17.8108 14.8373 17.1168 15.7333 16.2932 16.4902C15.0606 17.625 13.5707 18.4173 11.9627 18.7931L11.9429 18.7983L11.8894 18.8112C11.8291 18.8281 11.7679 18.8418 11.7062 18.8524C11.666 18.8614 11.6251 18.8693 11.5832 18.8762C11.4967 18.8936 11.4097 18.9087 11.3224 18.9213L11.2497 18.9342L11.1671 18.9451C11.1008 18.9545 11.0329 18.9631 10.9634 18.9709C9.06697 19.1922 7.15308 18.7592 5.51801 17.7389C6.77143 17.6108 8.29752 16.9764 9.86273 15.9274L9.95217 15.8668L10.0416 15.8057L10.1634 15.7206H10.164L10.3994 15.5545C10.5128 15.4721 10.6246 15.3877 10.7348 15.3014C10.8035 15.2503 10.871 15.1994 10.9373 15.1488C11.6946 14.5518 12.4122 13.9025 13.0851 13.2052C13.1012 13.1881 13.1164 13.1713 13.1304 13.155L13.1491 13.1331C13.1822 13.1009 13.2133 13.0693 13.2422 13.0384L13.2894 12.9895C13.2894 12.9895 13.3019 12.9766 13.3037 12.9702L13.3217 12.9521L13.3292 12.9438L13.3832 12.8884L13.4248 12.8433C13.4389 12.8296 13.4528 12.815 13.4665 12.7995L13.4776 12.7866C13.4837 12.7792 13.4906 12.7725 13.4981 12.7667L13.5075 12.7551L13.5161 12.7441C13.5161 12.7441 13.5224 12.7377 13.5261 12.7358L13.5429 12.7171L13.5596 12.6984L13.5758 12.6823C13.5584 12.7012 13.5418 12.7209 13.5261 12.7416L13.5646 12.6997L13.5652 12.6984C13.5921 12.6684 13.6188 12.6396 13.6453 12.6121C13.6453 12.6121 13.6453 12.6057 13.6516 12.6057C13.688 12.5653 13.7234 12.5245 13.7578 12.4833L13.828 12.4022C13.8372 12.396 13.8447 12.3873 13.8497 12.3771L13.8894 12.3275L13.8994 12.3152C13.9478 12.2616 13.9952 12.2073 14.0416 12.1523L14.0901 12.0943C14.1679 12.0003 14.2453 11.9057 14.3224 11.8103L14.4155 11.6951L14.4447 11.6577C14.482 11.6092 14.5188 11.562 14.5553 11.516C14.5863 11.4774 14.6168 11.4379 14.6466 11.3975C14.8451 11.1367 15.0377 10.8711 15.2242 10.6009L18.346 13.8389ZM18.346 13.8389C18.346 13.8368 18.3472 13.835 18.3497 13.8338V13.8441L18.346 13.8402H18.3472L18.346 13.8389Z" /></svg>;
     case "Bytedance":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M3.1544 12.1539L0.533203 12.8092V1.19824L3.1544 1.85354V12.1539Z" /><path d="M15.8225 12.8333L13.1963 13.4886V0.518555L15.8225 1.169V12.8333Z" /><path d="M7.31261 12.5083L4.69141 13.1636V6.32422L7.31261 6.97947V12.5083Z" /><path d="M9.02539 5.3096L11.6516 4.6543V11.4937L9.02539 10.8384V5.3096Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M3.1544 12.1539L0.533203 12.8092V1.19824L3.1544 1.85354V12.1539Z" /><path d="M15.8225 12.8333L13.1963 13.4886V0.518555L15.8225 1.169V12.8333Z" /><path d="M7.31261 12.5083L4.69141 13.1636V6.32422L7.31261 6.97947V12.5083Z" /><path d="M9.02539 5.3096L11.6516 4.6543V11.4937L9.02539 10.8384V5.3096Z" /></svg>;
     case "Alibaba":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9.39589 9.99064C10.2791 8.81304 11.9431 7.16184 11.9943 5.99704C12.0967 4.48664 10.5735 3.98744 8.99909 4.00024C7.89829 4.01304 6.77189 4.33304 6.00389 4.60184C3.32869 5.54904 1.66469 7.04664 0.60229 8.72344C-0.51131 10.3746 -0.14011 11.949 2.21509 12.0002C4.01989 11.9234 5.19749 11.4242 6.42629 10.797C6.43909 10.797 3.03429 11.7698 1.79269 11.053C1.66469 10.9762 1.52389 10.8738 1.48549 10.5922C1.47269 10.0034 2.45829 9.38904 3.00869 9.19704V8.17304C3.41829 8.32664 3.85349 8.41624 4.31429 8.41624C5.19749 8.41624 6.00389 8.09624 6.63109 7.57144C6.65669 7.66104 6.66949 7.76344 6.65669 7.86584H6.89989C6.92549 7.59704 6.78469 7.39224 6.78469 7.39224C6.56709 7.03384 6.17029 7.04664 6.17029 7.04664C6.17029 7.04664 6.37509 7.13624 6.52869 7.35384C5.95269 7.84024 5.21029 8.12184 4.40389 8.12184C4.05829 8.12184 3.72549 8.07064 3.41829 7.96824L4.22469 7.16184L4.00709 6.57304C5.63269 6.00984 6.98949 5.57464 9.21669 5.17784L8.70469 4.80664L8.96069 4.65304C10.3047 5.02424 11.1879 5.29304 11.1367 6.00984C11.1111 6.12504 11.0727 6.26584 11.0087 6.41944C10.6247 7.18744 9.45989 8.48024 8.98629 9.01784C8.67909 9.37624 8.37189 9.72184 8.15429 10.0546C7.93669 10.3874 7.79589 10.7074 7.78309 11.0018C7.80869 13.3442 14.6695 9.91384 16.0007 9.00504C14.0423 9.84984 11.9303 10.6562 9.60069 10.8098C8.94789 10.8482 9.02469 10.5026 9.39589 9.99064Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M9.39589 9.99064C10.2791 8.81304 11.9431 7.16184 11.9943 5.99704C12.0967 4.48664 10.5735 3.98744 8.99909 4.00024C7.89829 4.01304 6.77189 4.33304 6.00389 4.60184C3.32869 5.54904 1.66469 7.04664 0.60229 8.72344C-0.51131 10.3746 -0.14011 11.949 2.21509 12.0002C4.01989 11.9234 5.19749 11.4242 6.42629 10.797C6.43909 10.797 3.03429 11.7698 1.79269 11.053C1.66469 10.9762 1.52389 10.8738 1.48549 10.5922C1.47269 10.0034 2.45829 9.38904 3.00869 9.19704V8.17304C3.41829 8.32664 3.85349 8.41624 4.31429 8.41624C5.19749 8.41624 6.00389 8.09624 6.63109 7.57144C6.65669 7.66104 6.66949 7.76344 6.65669 7.86584H6.89989C6.92549 7.59704 6.78469 7.39224 6.78469 7.39224C6.56709 7.03384 6.17029 7.04664 6.17029 7.04664C6.17029 7.04664 6.37509 7.13624 6.52869 7.35384C5.95269 7.84024 5.21029 8.12184 4.40389 8.12184C4.05829 8.12184 3.72549 8.07064 3.41829 7.96824L4.22469 7.16184L4.00709 6.57304C5.63269 6.00984 6.98949 5.57464 9.21669 5.17784L8.70469 4.80664L8.96069 4.65304C10.3047 5.02424 11.1879 5.29304 11.1367 6.00984C11.1111 6.12504 11.0727 6.26584 11.0087 6.41944C10.6247 7.18744 9.45989 8.48024 8.98629 9.01784C8.67909 9.37624 8.37189 9.72184 8.15429 10.0546C7.93669 10.3874 7.79589 10.7074 7.78309 11.0018C7.80869 13.3442 14.6695 9.91384 16.0007 9.00504C14.0423 9.84984 11.9303 10.6562 9.60069 10.8098C8.94789 10.8482 9.02469 10.5026 9.39589 9.99064Z" /></svg>;
     case "MiniMax":
-      return <svg className="text-[#2DD4BF]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M13.565 1.66699C14.5283 1.66699 15.3092 2.43949 15.3092 3.39199V13.8095C15.3159 13.9691 15.3842 14.1199 15.4999 14.2301C15.6155 14.3403 15.7694 14.4013 15.9292 14.4003C16.0888 14.4011 16.2425 14.34 16.3579 14.2298C16.4734 14.1196 16.5416 13.969 16.5483 13.8095V7.58283C16.5495 7.35739 16.5951 7.1344 16.6825 6.92658C16.7699 6.71876 16.8973 6.53019 17.0576 6.37164C17.2179 6.21308 17.4078 6.08764 17.6165 6.00248C17.8253 5.91733 18.0487 5.87412 18.2742 5.87533C18.4997 5.87412 18.7232 5.91736 18.932 6.00256C19.1408 6.08777 19.3307 6.21329 19.491 6.37193C19.6513 6.53058 19.7787 6.71924 19.8661 6.92716C19.9534 7.13507 19.9989 7.35815 20 7.58366V13.0512C19.9991 13.1945 19.9414 13.3315 19.8395 13.4323C19.7377 13.5331 19.6 13.5893 19.4567 13.5887C19.3856 13.5891 19.3152 13.5755 19.2494 13.5488C19.1837 13.522 19.1238 13.4825 19.0733 13.4326C19.0227 13.3827 18.9825 13.3233 18.9549 13.2579C18.9274 13.1924 18.9129 13.1222 18.9125 13.0512V7.58366C18.9121 7.50027 18.8952 7.41778 18.8629 7.34091C18.8306 7.26403 18.7834 7.19428 18.7242 7.13562C18.6649 7.07696 18.5946 7.03056 18.5174 6.99905C18.4402 6.96754 18.3576 6.95155 18.2742 6.95199C18.1908 6.95155 18.1081 6.96754 18.0309 6.99905C17.9537 7.03056 17.8834 7.07696 17.8242 7.13562C17.7649 7.19428 17.7178 7.26403 17.6854 7.34091C17.6531 7.41778 17.6363 7.50027 17.6358 7.58366V13.8103C17.6346 14.0332 17.5895 14.2537 17.5031 14.4592C17.4167 14.6647 17.2907 14.8512 17.1322 15.008C16.9737 15.1647 16.7859 15.2888 16.5795 15.373C16.3731 15.4572 16.1521 15.4999 15.9292 15.4987C15.7062 15.4999 15.4853 15.4572 15.2789 15.373C15.0724 15.2888 14.8846 15.1647 14.7262 15.008C14.5677 14.8512 14.4416 14.6647 14.3552 14.4592C14.2688 14.2537 14.2237 14.0332 14.2225 13.8103V3.39366C14.2156 3.22439 14.1433 3.06441 14.0208 2.94737C13.8983 2.83033 13.7352 2.76537 13.5658 2.76616C13.3964 2.76515 13.2332 2.8299 13.1106 2.94678C12.988 3.06366 12.9155 3.22356 12.9083 3.39283L12.9075 16.6462C12.9049 17.0962 12.7236 17.5268 12.4035 17.8433C12.0835 18.1597 11.6509 18.3361 11.2008 18.3337C10.9779 18.3349 10.7569 18.2922 10.5505 18.208C10.3441 18.1238 10.1563 17.9997 9.99783 17.843C9.83935 17.6862 9.7133 17.4997 9.62688 17.2942C9.54046 17.0887 9.49537 16.8682 9.49417 16.6453V15.0337C9.49417 14.737 9.7375 14.4962 10.0375 14.4962C10.3375 14.4962 10.5808 14.737 10.5808 15.0337V16.6453C10.5808 16.8645 10.6992 17.067 10.8908 17.177C11.0825 17.2862 11.3192 17.2862 11.5108 17.177C11.6049 17.1237 11.6831 17.0464 11.7376 16.953C11.792 16.8596 11.8208 16.7534 11.8208 16.6453V3.39199C11.8208 2.43949 12.6017 1.66699 13.565 1.66699ZM8.83667 1.66699C9.8 1.66699 10.5808 2.43949 10.5808 3.39199V12.9945C10.5805 13.0655 10.5662 13.1357 10.5387 13.2011C10.5112 13.2666 10.4711 13.326 10.4206 13.3759C10.3701 13.4258 10.3103 13.4653 10.2446 13.4921C10.1789 13.5189 10.1085 13.5324 10.0375 13.532C9.96652 13.5324 9.89614 13.5189 9.8304 13.4921C9.76467 13.4653 9.70485 13.4258 9.65439 13.3759C9.60392 13.326 9.5638 13.2666 9.53631 13.2011C9.50881 13.1357 9.49449 13.0655 9.49417 12.9945V3.39199C9.49306 3.21864 9.4232 3.05281 9.29992 2.93094C9.17664 2.80906 9.01002 2.74111 8.83667 2.74199C8.66331 2.74111 8.4967 2.80906 8.37341 2.93094C8.25013 3.05281 8.18027 3.21864 8.17917 3.39199V15.0695C8.17652 15.5245 7.99335 15.9598 7.66989 16.2798C7.34644 16.5999 6.90917 16.7784 6.45417 16.7762C5.99902 16.7786 5.56153 16.6002 5.2379 16.2801C4.91427 15.9601 4.73098 15.5246 4.72833 15.0695V7.58366C4.7279 7.50027 4.71104 7.41778 4.67872 7.34091C4.64641 7.26403 4.59927 7.19428 4.53999 7.13562C4.48072 7.07696 4.41047 7.03056 4.33326 6.99905C4.25605 6.96754 4.17339 6.95155 4.09 6.95199C4.00661 6.95155 3.92395 6.96754 3.84674 6.99905C3.76953 7.03056 3.69928 7.07696 3.64001 7.13562C3.58073 7.19428 3.53359 7.26403 3.50128 7.34091C3.46896 7.41778 3.4521 7.50027 3.45167 7.58366V10.7503C3.45047 10.9758 3.40487 11.1988 3.31749 11.4066C3.23011 11.6144 3.10265 11.803 2.94239 11.9615C2.78213 12.1201 2.59221 12.2455 2.38347 12.3307C2.17474 12.4158 1.95127 12.459 1.72583 12.4578C1.5004 12.459 1.27693 12.4158 1.06819 12.3307C0.859454 12.2455 0.669534 12.1201 0.509275 11.9615C0.349016 11.803 0.221556 11.6144 0.134175 11.4066C0.0467933 11.1988 0.00120057 10.9758 0 10.7503L0 9.60199C0 9.30449 0.243333 9.06366 0.543333 9.06366C0.843333 9.06366 1.0875 9.30533 1.0875 9.60199V10.7503C1.0875 11.0987 1.37333 11.3812 1.72583 11.3812C2.07833 11.3812 2.36417 11.0987 2.36417 10.7503V7.58283C2.36681 7.12783 2.54999 6.69249 2.87344 6.37247C3.19689 6.05246 3.63416 5.87394 4.08917 5.87616C4.54431 5.87372 4.9818 6.05214 5.30543 6.37218C5.62907 6.69222 5.81236 7.12768 5.815 7.58283V15.0695C5.815 15.4187 6.10083 15.7012 6.45417 15.7012C6.80667 15.7012 7.0925 15.4187 7.0925 15.0695V3.39199C7.0925 2.43949 7.87333 1.66699 8.83667 1.66699Z" /></svg>;
+      return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M13.565 1.66699C14.5283 1.66699 15.3092 2.43949 15.3092 3.39199V13.8095C15.3159 13.9691 15.3842 14.1199 15.4999 14.2301C15.6155 14.3403 15.7694 14.4013 15.9292 14.4003C16.0888 14.4011 16.2425 14.34 16.3579 14.2298C16.4734 14.1196 16.5416 13.969 16.5483 13.8095V7.58283C16.5495 7.35739 16.5951 7.1344 16.6825 6.92658C16.7699 6.71876 16.8973 6.53019 17.0576 6.37164C17.2179 6.21308 17.4078 6.08764 17.6165 6.00248C17.8253 5.91733 18.0487 5.87412 18.2742 5.87533C18.4997 5.87412 18.7232 5.91736 18.932 6.00256C19.1408 6.08777 19.3307 6.21329 19.491 6.37193C19.6513 6.53058 19.7787 6.71924 19.8661 6.92716C19.9534 7.13507 19.9989 7.35815 20 7.58366V13.0512C19.9991 13.1945 19.9414 13.3315 19.8395 13.4323C19.7377 13.5331 19.6 13.5893 19.4567 13.5887C19.3856 13.5891 19.3152 13.5755 19.2494 13.5488C19.1837 13.522 19.1238 13.4825 19.0733 13.4326C19.0227 13.3827 18.9825 13.3233 18.9549 13.2579C18.9274 13.1924 18.9129 13.1222 18.9125 13.0512V7.58366C18.9121 7.50027 18.8952 7.41778 18.8629 7.34091C18.8306 7.26403 18.7834 7.19428 18.7242 7.13562C18.6649 7.07696 18.5946 7.03056 18.5174 6.99905C18.4402 6.96754 18.3576 6.95155 18.2742 6.95199C18.1908 6.95155 18.1081 6.96754 18.0309 6.99905C17.9537 7.03056 17.8834 7.07696 17.8242 7.13562C17.7649 7.19428 17.7178 7.26403 17.6854 7.34091C17.6531 7.41778 17.6363 7.50027 17.6358 7.58366V13.8103C17.6346 14.0332 17.5895 14.2537 17.5031 14.4592C17.4167 14.6647 17.2907 14.8512 17.1322 15.008C16.9737 15.1647 16.7859 15.2888 16.5795 15.373C16.3731 15.4572 16.1521 15.4999 15.9292 15.4987C15.7062 15.4999 15.4853 15.4572 15.2789 15.373C15.0724 15.2888 14.8846 15.1647 14.7262 15.008C14.5677 14.8512 14.4416 14.6647 14.3552 14.4592C14.2688 14.2537 14.2237 14.0332 14.2225 13.8103V3.39366C14.2156 3.22439 14.1433 3.06441 14.0208 2.94737C13.8983 2.83033 13.7352 2.76537 13.5658 2.76616C13.3964 2.76515 13.2332 2.8299 13.1106 2.94678C12.988 3.06366 12.9155 3.22356 12.9083 3.39283L12.9075 16.6462C12.9049 17.0962 12.7236 17.5268 12.4035 17.8433C12.0835 18.1597 11.6509 18.3361 11.2008 18.3337C10.9779 18.3349 10.7569 18.2922 10.5505 18.208C10.3441 18.1238 10.1563 17.9997 9.99783 17.843C9.83935 17.6862 9.7133 17.4997 9.62688 17.2942C9.54046 17.0887 9.49537 16.8682 9.49417 16.6453V15.0337C9.49417 14.737 9.7375 14.4962 10.0375 14.4962C10.3375 14.4962 10.5808 14.737 10.5808 15.0337V16.6453C10.5808 16.8645 10.6992 17.067 10.8908 17.177C11.0825 17.2862 11.3192 17.2862 11.5108 17.177C11.6049 17.1237 11.6831 17.0464 11.7376 16.953C11.792 16.8596 11.8208 16.7534 11.8208 16.6453V3.39199C11.8208 2.43949 12.6017 1.66699 13.565 1.66699ZM8.83667 1.66699C9.8 1.66699 10.5808 2.43949 10.5808 3.39199V12.9945C10.5805 13.0655 10.5662 13.1357 10.5387 13.2011C10.5112 13.2666 10.4711 13.326 10.4206 13.3759C10.3701 13.4258 10.3103 13.4653 10.2446 13.4921C10.1789 13.5189 10.1085 13.5324 10.0375 13.532C9.96652 13.5324 9.89614 13.5189 9.8304 13.4921C9.76467 13.4653 9.70485 13.4258 9.65439 13.3759C9.60392 13.326 9.5638 13.2666 9.53631 13.2011C9.50881 13.1357 9.49449 13.0655 9.49417 12.9945V3.39199C9.49306 3.21864 9.4232 3.05281 9.29992 2.93094C9.17664 2.80906 9.01002 2.74111 8.83667 2.74199C8.66331 2.74111 8.4967 2.80906 8.37341 2.93094C8.25013 3.05281 8.18027 3.21864 8.17917 3.39199V15.0695C8.17652 15.5245 7.99335 15.9598 7.66989 16.2798C7.34644 16.5999 6.90917 16.7784 6.45417 16.7762C5.99902 16.7786 5.56153 16.6002 5.2379 16.2801C4.91427 15.9601 4.73098 15.5246 4.72833 15.0695V7.58366C4.7279 7.50027 4.71104 7.41778 4.67872 7.34091C4.64641 7.26403 4.59927 7.19428 4.53999 7.13562C4.48072 7.07696 4.41047 7.03056 4.33326 6.99905C4.25605 6.96754 4.17339 6.95155 4.09 6.95199C4.00661 6.95155 3.92395 6.96754 3.84674 6.99905C3.76953 7.03056 3.69928 7.07696 3.64001 7.13562C3.58073 7.19428 3.53359 7.26403 3.50128 7.34091C3.46896 7.41778 3.4521 7.50027 3.45167 7.58366V10.7503C3.45047 10.9758 3.40487 11.1988 3.31749 11.4066C3.23011 11.6144 3.10265 11.803 2.94239 11.9615C2.78213 12.1201 2.59221 12.2455 2.38347 12.3307C2.17474 12.4158 1.95127 12.459 1.72583 12.4578C1.5004 12.459 1.27693 12.4158 1.06819 12.3307C0.859454 12.2455 0.669534 12.1201 0.509275 11.9615C0.349016 11.803 0.221556 11.6144 0.134175 11.4066C0.0467933 11.1988 0.00120057 10.9758 0 10.7503L0 9.60199C0 9.30449 0.243333 9.06366 0.543333 9.06366C0.843333 9.06366 1.0875 9.30533 1.0875 9.60199V10.7503C1.0875 11.0987 1.37333 11.3812 1.72583 11.3812C2.07833 11.3812 2.36417 11.0987 2.36417 10.7503V7.58283C2.36681 7.12783 2.54999 6.69249 2.87344 6.37247C3.19689 6.05246 3.63416 5.87394 4.08917 5.87616C4.54431 5.87372 4.9818 6.05214 5.30543 6.37218C5.62907 6.69222 5.81236 7.12768 5.815 7.58283V15.0695C5.815 15.4187 6.10083 15.7012 6.45417 15.7012C6.80667 15.7012 7.0925 15.4187 7.0925 15.0695V3.39199C7.0925 2.43949 7.87333 1.66699 8.83667 1.66699Z" /></svg>;
     default:
       return null;
   }
 }
+
+// memo: React Flow re-renders every node wrapper on canvas changes; with the
+// narrow selectors above, unchanged props now mean a skipped render.
+export default memo(VideoGeneratorNode);

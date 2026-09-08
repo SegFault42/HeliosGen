@@ -1,0 +1,71 @@
+<!--CSS-->
+.wrap{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0}
+.page{flex:1;background:linear-gradient(180deg,#161512,var(--paper));box-shadow:inset 0 1px 0 var(--hi);border:1px solid var(--rule);border-radius:14px;padding:32px 48px;display:flex;flex-direction:column;gap:24px;overflow:hidden}
+.head{display:flex;align-items:flex-end;gap:24px}
+.head h1{font-family:var(--serif);font-size:40px;font-weight:500;letter-spacing:-.02em;margin:0;line-height:1}
+.head .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--rule2);border-bottom:1px solid var(--rule)}
+.stats div{padding:16px 0;border-right:1px solid var(--rule);padding-right:24px;margin-right:24px}
+.stats div:last-child{border-right:0}
+.stats .v{font-family:var(--mono);font-size:28px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:8px}
+.stats .d{color:var(--ash);font-size:13px;margin-top:6px}
+.cols{display:grid;grid-template-columns:1fr 1.5fr;gap:48px;flex:1;min-height:0}
+.cols h2{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em;margin:0 0 16px}
+.mono-cell{font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+.pcs .thumb{width:32px;height:32px;display:inline-block;vertical-align:middle;margin-right:12px}
+.foot{display:flex;justify-content:space-between;color:var(--ash);border-top:1px solid var(--rule);padding-top:12px}
+<!--/CSS-->
+<div class="app">
+  <!--RAIL ledger-->
+  <section class="wrap">
+    <div class="notice"><span class="mono">Statement</span><span style="font-size:13px">Costs are provider prices at strike time. Nothing here is estimated.</span><span class="x mono">Since Aug 2026</span></div>
+    <div class="page">
+      <div class="head">
+        <h1>September 2026</h1>
+        <span class="mono muted" style="padding-bottom:4px">Statement 09 · 612 pieces · 2 providers</span>
+        <div class="acts"><span class="tabs"><span>Aug</span><span class="on">Sep</span><span>All</span></span><span class="btn sm secondary">Export CSV</span><span class="btn sm secondary">Export PDF</span></div>
+      </div>
+      <div class="stats">
+        <div><span class="mono muted">Spent</span><div class="v">$23.40</div><div class="d">Aug: $31.08 · −25%</div></div>
+        <div><span class="mono muted">Pieces</span><div class="v">612</div><div class="d">518 images · 94 videos</div></div>
+        <div><span class="mono muted">Avg per piece</span><div class="v">$0.038</div><div class="d">Median $0.04</div></div>
+        <div><span class="mono muted">Wallet</span><div class="v">$46.60</div><div class="d">Last top-up Sep 02 · $50.00</div></div>
+      </div>
+      <div class="cols">
+        <div>
+          <h2>By model</h2>
+          <table class="led">
+            <tr><th class="mono">Model</th><th class="mono r">Pieces</th><th class="mono r">Avg</th><th class="mono r">Total</th></tr>
+            <tr><td>Nano Banana <span class="mono muted">· kie.ai</span></td><td class="r mono-cell">280</td><td class="r mono-cell">$0.040</td><td class="r mono-cell">$11.20</td></tr>
+            <tr><td>GPT Image 2 <span class="mono muted">· Codex</span></td><td class="r mono-cell">110</td><td class="r mono-cell">$0.060</td><td class="r mono-cell">$6.60</td></tr>
+            <tr><td>Flux 2 <span class="mono muted">· kie.ai</span></td><td class="r mono-cell">128</td><td class="r mono-cell">$0.016</td><td class="r mono-cell">$2.00</td></tr>
+            <tr><td>Veo 3.1 <span class="mono muted">· kie.ai</span></td><td class="r mono-cell">4</td><td class="r mono-cell">$0.450</td><td class="r mono-cell">$1.80</td></tr>
+            <tr><td>Kling 3 <span class="mono muted">· kie.ai</span></td><td class="r mono-cell">90</td><td class="r mono-cell">$0.020</td><td class="r mono-cell">$1.80</td></tr>
+            <tr style="border-top:1px solid var(--rule2)"><td style="border-bottom:0;font-weight:500">Total</td><td class="r mono-cell" style="border-bottom:0">612</td><td class="r mono-cell" style="border-bottom:0">$0.038</td><td class="r mono-cell" style="border-bottom:0;font-weight:500">$23.40</td></tr>
+          </table>
+          <h2 style="margin-top:20px">By day</h2>
+          <div style="display:flex;align-items:flex-end;gap:6px;height:48px;border-bottom:1px solid var(--rule2);padding-bottom:0">
+            <i style="flex:1;height:30%;background:var(--rule2)"></i><i style="flex:1;height:55%;background:var(--rule2)"></i><i style="flex:1;height:20%;background:var(--rule2)"></i><i style="flex:1;height:80%;background:var(--rule2)"></i><i style="flex:1;height:64%;background:var(--rule2)"></i><i style="flex:1;height:12%;background:var(--rule2)"></i><i style="flex:1;height:100%;background:var(--ember)"></i>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px"><span class="mono muted">Sep 01</span><span class="mono muted">Sep 07 · $4.90</span></div>
+        </div>
+        <div class="pcs">
+          <h2>Pieces</h2>
+          <table class="led">
+            <tr><th class="mono">Piece</th><th class="mono">Model</th><th class="mono">Time</th><th class="mono r">Duration</th><th class="mono r">Cost</th></tr>
+            <tr><td><span class="thumb"><img src="piece-apple.jpg" alt=""></span><span class="mono-cell">0142</span></td><td>Nano Banana</td><td class="mono-cell">14:02</td><td class="r mono-cell">6.2s</td><td class="r mono-cell">$0.04</td></tr>
+            <tr><td><span class="thumb"><img src="piece-flash.jpg" alt=""></span><span class="mono-cell">0141</span></td><td>GPT Image 2</td><td class="mono-cell">13:58</td><td class="r mono-cell">18.4s</td><td class="r mono-cell">$0.06</td></tr>
+            <tr><td><span class="thumb"><img src="piece-lemon.jpg" alt=""></span><span class="mono-cell">0140</span></td><td>Nano Banana</td><td class="mono-cell">13:51</td><td class="r mono-cell">5.9s</td><td class="r mono-cell">$0.04</td></tr>
+            <tr><td><span class="thumb"><img src="piece-pear.jpg" alt=""></span><span class="mono-cell">0139</span></td><td>Flux 2</td><td class="mono-cell">13:44</td><td class="r mono-cell">4.1s</td><td class="r mono-cell">$0.03</td></tr>
+            <tr><td><span class="thumb"></span><span class="mono-cell">0138</span></td><td>Veo 3.1 <span class="mono muted">· 8s</span></td><td class="mono-cell">13:20</td><td class="r mono-cell">96s</td><td class="r mono-cell">$0.45</td></tr>
+            <tr><td><span class="thumb"></span><span class="mono-cell">0137</span></td><td>Nano Banana</td><td class="mono-cell">12:57</td><td class="r mono-cell">6.6s</td><td class="r mono-cell">$0.04</td></tr>
+            <tr><td><span class="thumb"></span><span class="mono-cell">0136</span></td><td>Flux 2</td><td class="mono-cell">12:31</td><td class="r mono-cell">4.4s</td><td class="r mono-cell">$0.03</td></tr>
+            <tr><td><span class="thumb"></span><span class="mono-cell">0135</span></td><td>GPT Image 2</td><td class="mono-cell">12:10</td><td class="r mono-cell">21.0s</td><td class="r mono-cell">$0.06</td></tr>
+            <tr><td><span class="thumb"></span><span class="mono-cell">0134</span></td><td>Nano Banana</td><td class="mono-cell">11:48</td><td class="r mono-cell">6.0s</td><td class="r mono-cell">$0.04</td></tr>
+          </table>
+          <div class="foot" style="margin-top:12px"><span class="mono">Showing 9 of 612</span><span class="mono">Load 50 more</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

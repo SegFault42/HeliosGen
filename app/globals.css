@@ -1,131 +1,283 @@
 @import "tailwindcss";
 
+/* ============================================================
+   SOLSTICE (HeliosGen redesign) — design tokens
+   Drop-in for globals.css. Dark theme only.
+   Rule: NO hex literals anywhere else in the app. Every colour,
+   radius, shadow and font goes through these variables.
+   ============================================================ */
 
-/* ── Base ─────────────────────────────────────────────── */
-html,
-body,
-#__next {
-  height: 100%;
+/* Fonts are self-hosted via next/font in app/layout.tsx (Outfit, Archivo, Space Mono). */
+
+:root {
+  /* ---------- Background (3 levels) + surface ---------- */
+  --bg-0: #09090B;      /* app background, behind panels */
+  --bg-1: #111113;      /* panels, canvas, modal body */
+  --bg-2: #18181B;      /* inset blocks, inputs at rest, hover rows */
+  --surface: #1F1F23;   /* cards, nodes, popovers, toasts */
+
+  /* ---------- Border (2 levels) — solid, never rgba ---------- */
+  --border-1: #27272B;  /* dividers, panel edges (1px) */
+  --border-2: #3A3A40;  /* interactive outlines: inputs, pills, nodes (1px) */
+
+  /* ---------- Text (all ≥ 4.5:1 on --surface) ---------- */
+  --text-1: #F5F5F7;    /* primary · 16.1:1 */
+  --text-2: #B4B4BC;    /* secondary · 8.4:1 */
+  --text-3: #8A8A93;    /* muted floor · 4.8:1 — never lighter than this */
+
+  /* ---------- Accent (lime default) ---------- */
+  --accent: #D9FF3D;
+  --accent-hover: #E6FF70;
+  --accent-press: #C2EA1E;
+  --accent-edge: #8DAA12;   /* bottom edge of primary buttons */
+  --on-accent: #0B0B0C;     /* ink text on accent, warning, error, text-1 fills */
+
+  /* ---------- Semantic ---------- */
+  --success: #3DDC97;
+  --warning: #FFB224;   /* pending + warning banner fill */
+  --error: #FF5C5C;
+
+  /* ---------- Focus ---------- */
+  --focus-ring: #F5F5F7;          /* outline: 2px solid; outline-offset: 2px */
+
+  /* ---------- Type ---------- */
+  --font-ui: var(--font-outfit), "Outfit", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-archivo), "Archivo", "Archivo Black", Impact, sans-serif; /* font-stretch: 75%; font-weight: 900; uppercase */
+  --font-mono: var(--font-space-mono), "Space Mono", ui-monospace, Menlo, monospace;      /* uppercase, letter-spacing .1em */
+
+  --fs-2: 12px;  /* mono labels, badges, meta — FLOOR, nothing smaller */
+  --fs-3: 13px;  /* controls: pills, buttons sm, card captions */
+  --fs-4: 14px;  /* body / default UI */
+  --fs-5: 16px;  /* subheading, prompt text */
+  --fs-6: 20px;  /* heading (modal title) */
+  --fs-7: 28px;  /* display */
+  --fs-8: 44px;  /* hero line "START CREATING WITH …" */
+  --lh-tight: 0.92;  /* display */
+  --lh-ui: 1.4;
+  --lh-body: 1.5;
+  --tracking-mono: 0.1em;
+
+  /* ---------- Spacing (4px base) ---------- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-5: 24px;  --sp-6: 32px;
+
+  /* ---------- Radius ---------- */
+  --r-1: 8px;    /* inset blocks inside nodes, dropdown rows */
+  --r-2: 12px;   /* inputs (block), composer sub-cards, tooltips */
+  --r-3: 20px;   /* panels, gallery cards, modals */
+  --r-node: 16px;
+  --r-pill: 999px; /* buttons, segmented controls, badges, nav items */
+
+  /* ---------- Elevation (2 levels + button edge) ---------- */
+  /* Level 0: flat. Level 1: outline steps --border-2 → --text-2 on hover. */
+  --shadow-btn: 0 3px 0 var(--accent-edge);      /* primary button at rest */
+  --shadow-btn-press: 0 1px 0 var(--accent-edge);/* primary button pressed, with translateY(2px) */
+  --scrim: rgba(9, 9, 11, 0.72);                  /* modal scrim — the ONLY translucent surface */
+
+  /* ---------- Motion ---------- */
+  --dur-1: 120ms;  /* state change: hover, press, toggle */
+  --dur-2: 200ms;  /* transitions: popover, modal, toast */
+  --dur-3: 420ms;  /* progress fill */
+  --ease: cubic-bezier(.2, .8, .2, 1);
 }
 
-body {
-  background: #0B0E14;
-  color: #FFFFFF;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* Teal alternative — apply [data-accent="teal"] on <html> to switch. */
+:root[data-accent="teal"] {
+  --accent: #2DD4BF;
+  --accent-hover: #5EEAD4;
+  --accent-press: #14B8A6;
+  --accent-edge: #178F82;
 }
 
-/* ── Prevent iOS Safari zoom on input focus ─────────── */
-@media (max-width: 767px) {
-  input, textarea, select {
-    font-size: 16px !important;
-  }
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-1: 0ms; --dur-2: 0ms; --dur-3: 0ms; }
 }
+
+/* ---------- Tailwind 4 bridge ---------- */
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-border-1: var(--border-1);
+  --color-border-2: var(--border-2);
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-press: var(--accent-press);
+  --color-accent-edge: var(--accent-edge);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --font-ui: var(--font-ui);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-1: var(--r-1);
+  --radius-2: var(--r-2);
+  --radius-3: var(--r-3);
+  --radius-node: var(--r-node);
+}
+
+/* ---------- Base ---------- */
+html { background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); font-size: var(--fs-4); line-height: var(--lh-ui); -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.label { font-family: var(--font-mono); font-size: var(--fs-2); letter-spacing: var(--tracking-mono); text-transform: uppercase; }
+.display { font-family: var(--font-display); font-stretch: 75%; font-weight: 900; text-transform: uppercase; line-height: var(--lh-tight); letter-spacing: -0.01em; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- shadcn / base-ui semantic aliases -> Solstice ---------- */
+@theme inline {
+  --color-background: var(--bg-0);
+  --color-foreground: var(--text-1);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text-1);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text-1);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--text-1);
+  --color-muted: var(--bg-2);
+  --color-muted-foreground: var(--text-3);
+  --color-accent-foreground: var(--on-accent);
+  --color-destructive: var(--error);
+  --color-destructive-foreground: var(--on-accent);
+  --color-border: var(--border-1);
+  --color-input: var(--border-2);
+  --color-ring: var(--focus-ring);
+  --color-sidebar: var(--bg-0);
+  --color-sidebar-foreground: var(--text-2);
+  --color-sidebar-primary: var(--accent);
+  --color-sidebar-primary-foreground: var(--on-accent);
+  --color-sidebar-accent: var(--bg-2);
+  --color-sidebar-accent-foreground: var(--text-1);
+  --color-sidebar-border: var(--border-1);
+  --color-sidebar-ring: var(--focus-ring);
+  --radius-pill: var(--r-pill);
+}
+
+/* ---------- App base ---------- */
+html, body, #__next { height: 100%; }
+body { background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); }
+
+/* Prevent iOS Safari zoom on input focus */
+@media (max-width: 767px) { input, textarea, select { font-size: 16px !important; } }
+
+/* ============================================================
+   CANVAS / NODE RULES — Solstice (see design/components.md > Canvas node,
+   Edge + handle, Canvas toolbar).
+   ============================================================ */
 
 /* ── Node design system ──────────────────────────────── */
 .node-card {
-  background: #141820;
-  border: 1px solid transparent;
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-node);
   overflow: visible;
   position: relative;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
-  transition: border-color 120ms, box-shadow 120ms;
+  transition: border-color var(--dur-1) var(--ease);
 }
 
 .node-card:hover {
-  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
+  border-color: var(--text-2);
 }
 
 .node-card:hover .node-above-label {
-  color: #A0A0A0;
+  color: var(--text-2);
 }
 
 .node-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-bottom: 1px solid #1C2436;
+  gap: var(--sp-2);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-1);
 }
 
 .node-label {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
   font-weight: 500;
-  color: #A0A0A0;
-  letter-spacing: 0.02em;
+  color: var(--text-2);
+  letter-spacing: var(--tracking-mono);
   text-transform: uppercase;
 }
 
 .node-field-label {
   display: block;
-  font-size: 11px;
-  color: #A0A0A0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  color: var(--text-3);
   margin-bottom: 4px;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--tracking-mono);
+  text-transform: uppercase;
 }
 
 .node-textarea {
   width: 100%;
-  background: #0D1119;
-  border: 1px solid #1A2030;
-  border-radius: 5px;
-  color: #FFFFFF;
-  font-size: 13px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-1);
+  color: var(--text-1);
+  font-size: var(--fs-3);
   line-height: 1.5;
   padding: 7px 8px;
   resize: none;
   outline: none;
   font-family: inherit;
-  transition: border-color 100ms;
+  transition: border-color var(--dur-1);
 }
 
 .node-textarea::placeholder {
-  color: #3A4055;
+  color: var(--text-3);
 }
 
 .node-textarea:focus {
-  border-color: #3A4055;
+  border-color: var(--accent);
 }
 
 .node-input {
   width: 100%;
-  background: #0D1119;
-  border: 1px solid #1A2030;
-  border-radius: 5px;
-  color: #FFFFFF;
-  font-size: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-1);
+  color: var(--text-1);
+  font-size: var(--fs-2);
   padding: 5px 8px;
   outline: none;
   font-family: inherit;
-  transition: border-color 100ms;
+  transition: border-color var(--dur-1);
 }
 
 .node-input::placeholder {
-  color: #3A4055;
+  color: var(--text-3);
 }
 
 .node-input:focus {
-  border-color: #3A4055;
+  border-color: var(--accent);
 }
 
 .node-select {
   width: 100%;
-  background: #0D1119;
-  border: 1px solid #1A2030;
-  border-radius: 5px;
-  color: #A0A0A0;
-  font-size: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-1);
+  color: var(--text-2);
+  font-size: var(--fs-2);
   padding: 5px 8px;
   outline: none;
   font-family: inherit;
   appearance: none;
   cursor: pointer;
-  transition: border-color 100ms;
+  transition: border-color var(--dur-1);
 }
 
 .node-select:focus {
-  border-color: #1E2840;
+  border-color: var(--accent);
 }
 
 /* ── Floating node label (above frame) ───────────────── */
@@ -133,25 +285,34 @@ body {
   position: absolute;
   top: -20px;
   left: 2px;
-  font-size: 11px;
-  color: #6A7080;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  color: var(--text-3);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--tracking-mono);
   font-weight: 500;
   user-select: none;
-  pointer-events: none;
-  transition: color 120ms;
+  /* clickable: double-click renames (components/nodes/NodeLabel.tsx) */
+  pointer-events: auto;
+  cursor: text;
+  transition: color var(--dur-1);
+}
+input.node-above-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  user-select: text;
 }
 
 /* ── Handles ─────────────────────────────────────────── */
 
-/* ── Dot handles ─────────────────────────────────────────────────────────── */
+/* ── Dot handles — 14px circle, 3px bg-1 ring, role color when connected ──── */
 .node-handle.react-flow__handle {
   width: 14px !important;
   height: 14px !important;
   border-radius: 50% !important;
-  border: 2px solid #0B0E14 !important;
-  background: #1A2235 !important;
+  border: 3px solid var(--bg-1) !important;
+  background: var(--border-2) !important;
   /* neutral — role color when connected or selected */
   z-index: 10;
   opacity: 0;
@@ -210,17 +371,17 @@ body {
 
 .node-handle-prompt.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-prompt.react-flow__handle {
-  background: #2DD4BF !important;
+  background: var(--accent) !important;
 }
 
 .node-handle-source.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-source.react-flow__handle {
-  background: #34d399 !important;
+  background: var(--accent) !important;
 }
 
 .node-handle-video.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-video.react-flow__handle {
-  background: #22d3ee !important;
+  background: var(--warning) !important;
 }
 
 /* ── Icon handles ────────────────────────────────────────────────────────── */
@@ -228,8 +389,8 @@ body {
   width: 28px !important;
   height: 28px !important;
   border-radius: 50% !important;
-  background: #0D1119 !important;
-  border: 1.5px solid #1E2540 !important;
+  background: var(--bg-2) !important;
+  border: 1.5px solid var(--border-2) !important;
   /* neutral — role color only when connected */
   display: flex !important;
   align-items: center !important;
@@ -294,76 +455,76 @@ body {
 /* Connected or selected: full role color — input handles */
 .node-handle-icon-prompt.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-prompt.react-flow__handle {
-  border-color: #2DD4BF !important;
-  --handle-color: #2DD4BF;
+  border-color: var(--accent) !important;
+  --handle-color: var(--accent);
 }
 
 .node-handle-icon-image.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-image.react-flow__handle {
-  border-color: #2DD4BF !important;
-  --handle-color: #2DD4BF;
+  border-color: var(--accent) !important;
+  --handle-color: var(--accent);
 }
 
 .node-handle-icon-resource.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-resource.react-flow__handle {
-  border-color: #fb923c !important;
-  --handle-color: #fb923c;
+  border-color: var(--accent) !important;
+  --handle-color: var(--accent);
 }
 
 .node-handle-icon-videoref.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-videoref.react-flow__handle {
-  border-color: #22d3ee !important;
-  --handle-color: #22d3ee;
+  border-color: var(--warning) !important;
+  --handle-color: var(--warning);
 }
 
 .node-handle-icon-refvideo.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-refvideo.react-flow__handle {
-  border-color: #38bdf8 !important;
-  --handle-color: #38bdf8;
+  border-color: var(--warning) !important;
+  --handle-color: var(--warning);
 }
 
 .node-handle-icon-audioref.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-audioref.react-flow__handle {
-  border-color: #5EEAD4 !important;
-  --handle-color: #5EEAD4;
+  border-color: var(--success) !important;
+  --handle-color: var(--success);
 }
 
 .node-handle-icon-character.react-flow__handle.node-handle-connected,
 .react-flow__node.selected .node-handle-icon-character.react-flow__handle {
-  border-color: #f472b6 !important;
-  --handle-color: #f472b6;
+  border-color: var(--accent) !important;
+  --handle-color: var(--accent);
 }
 
 /* Output handle colors — always visible when the handle is shown (hover/selected/connected) */
 .react-flow__node:hover .node-handle-icon-out-text.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-text.react-flow__handle,
 .node-handle-icon-out-text.react-flow__handle.node-handle-connected {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .react-flow__node:hover .node-handle-icon-out-image.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-image.react-flow__handle,
 .node-handle-icon-out-image.react-flow__handle.node-handle-connected {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .react-flow__node:hover .node-handle-icon-out-video.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-video.react-flow__handle,
 .node-handle-icon-out-video.react-flow__handle.node-handle-connected {
-  border-color: #22d3ee !important;
+  border-color: var(--warning) !important;
 }
 
 .react-flow__node:hover .node-handle-icon-out-audio.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-audio.react-flow__handle,
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connected {
-  border-color: #5EEAD4 !important;
+  border-color: var(--success) !important;
 }
 
-/* Assistant output — yellow, overrides the inherited out-text blue */
+/* Assistant output — collapsed into the accent bucket with the other text/character roles */
 .react-flow__node:hover .node-handle-icon-out-assistant.react-flow__handle,
 .react-flow__node.selected .node-handle-icon-out-assistant.react-flow__handle,
 .node-handle-icon-out-assistant.react-flow__handle.node-handle-connected {
-  border-color: #FBBF24 !important;
+  border-color: var(--accent) !important;
 }
 
 /* Selected + unconnected: dim input (left) handles only; output handles keep full opacity */
@@ -398,51 +559,51 @@ body {
 
 /* Connecting handle: show its type color */
 .node-handle-icon-prompt.react-flow__handle.node-handle-connecting {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-image.react-flow__handle.node-handle-connecting {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-resource.react-flow__handle.node-handle-connecting {
-  border-color: #fb923c !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-videoref.react-flow__handle.node-handle-connecting {
-  border-color: #22d3ee !important;
+  border-color: var(--warning) !important;
 }
 
 .node-handle-icon-refvideo.react-flow__handle.node-handle-connecting {
-  border-color: #38bdf8 !important;
+  border-color: var(--warning) !important;
 }
 
 .node-handle-icon-audioref.react-flow__handle.node-handle-connecting {
-  border-color: #5EEAD4 !important;
+  border-color: var(--success) !important;
 }
 
 .node-handle-icon-character.react-flow__handle.node-handle-connecting {
-  border-color: #f472b6 !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-out-text.react-flow__handle.node-handle-connecting {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-out-assistant.react-flow__handle.node-handle-connecting {
-  border-color: #FBBF24 !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-out-image.react-flow__handle.node-handle-connecting {
-  border-color: #2DD4BF !important;
+  border-color: var(--accent) !important;
 }
 
 .node-handle-icon-out-video.react-flow__handle.node-handle-connecting {
-  border-color: #22d3ee !important;
+  border-color: var(--warning) !important;
 }
 
 .node-handle-icon-out-audio.react-flow__handle.node-handle-connecting {
-  border-color: #5EEAD4 !important;
+  border-color: var(--success) !important;
 }
 
 /* ── Show only compatible input handles while connecting ─────────────────── */
@@ -489,8 +650,8 @@ body {
   appearance: none;
   flex: 1;
   height: 3px;
-  border-radius: 99px;
-  background: #1C2436;
+  border-radius: var(--r-pill);
+  background: var(--border-1);
   outline: none;
   cursor: pointer;
 }
@@ -500,19 +661,17 @@ body {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--text-1);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .dur-slider::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--text-1);
   cursor: pointer;
   border: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 /* ── Instant hide on deselect (class toggled by JS) ─────────────────────── */
@@ -536,8 +695,8 @@ body {
 
 /* ── Selection rectangle (drag) + post-release overlay ── */
 .react-flow__selection {
-  background: rgba(45, 212, 191, 0.04) !important;
-  border: 1px solid rgba(45, 212, 191, 0.3) !important;
+  background: transparent !important;
+  border: 1px solid var(--accent) !important;
   border-radius: 3px;
   z-index: 0 !important;
   pointer-events: none;
@@ -550,64 +709,62 @@ body {
 }
 
 .react-flow__nodesselection-rect {
-  background: rgba(45, 212, 191, 0.03) !important;
-  border: 1px solid rgba(45, 212, 191, 0.2) !important;
+  background: transparent !important;
+  border: 1px solid var(--accent) !important;
   border-radius: 3px;
 }
 
 /* ── React Flow overrides ────────────────────────────── */
 .react-flow {
-  --xy-background-color-default: #0B0E14;
-  background: #0B0E14;
+  --xy-background-color-default: var(--bg-1);
+  background: var(--bg-1);
 }
 
 .react-flow__node.selected .node-card {
-  border-color: #2DD4BF !important;
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25), 0 2px 16px rgba(0, 15, 30, 0.5);
+  border-color: var(--accent) !important;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 .react-flow__node.selected .node-card.node-generating {
-  border-color: transparent !important;
-  box-shadow: none !important;
+  border-color: var(--accent) !important;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 .react-flow__node .node-card.node-over-limit,
 .react-flow__node.selected .node-card.node-over-limit,
 .react-flow__node.node-ancestor .node-card.node-over-limit {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.2), 0 2px 14px rgba(239, 68, 68, 0.12) !important;
+  border-color: var(--error) !important;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  filter: brightness(1.4);
+  stroke: var(--text-1) !important;
 }
 
 /* ── Ancestor highlight (upstream nodes of selected node) ── */
 .react-flow__node.node-ancestor .node-card {
-  border-color: #2DD4BF !important;
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15), 0 2px 16px rgba(0, 0, 0, 0.5);
-  transition: border-color 150ms, box-shadow 150ms;
+  border-color: var(--accent) !important;
+  transition: border-color 150ms;
 }
 
 .react-flow__node.node-ancestor .node-above-label {
-  color: rgba(0, 242, 255, 0.7);
+  color: var(--accent);
   transition: color 150ms;
 }
 
 .react-flow__edge.edge-ancestor .react-flow__edge-path {
-  filter: brightness(1.25);
-  opacity: 0.85;
+  stroke: var(--accent) !important;
 }
 
 /* ── Group-preview highlight (downstream + other connected nodes) ── */
 .react-flow__node.node-group-preview .node-card {
-  border-color: rgba(190, 190, 190, 0.65) !important;
-  box-shadow: 0 0 0 1px rgba(190, 190, 190, 0.1), 0 2px 16px rgba(0, 0, 0, 0.5);
-  transition: border-color 150ms, box-shadow 150ms;
+  border-color: var(--text-2) !important;
+  transition: border-color 150ms;
 }
 
 .react-flow__node.node-group-preview .node-above-label {
-  color: rgba(190, 190, 190, 0.65);
+  color: var(--text-2);
   transition: color 150ms;
 }
 
@@ -617,49 +774,49 @@ body {
 
 .react-flow__controls {
   box-shadow: none !important;
-  border: 1px solid #1A2030 !important;
-  border-radius: 6px !important;
+  border: 1px solid var(--border-2) !important;
+  border-radius: var(--r-1) !important;
   overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: #0B0E14 !important;
+  background: var(--bg-1) !important;
   border: none !important;
-  border-bottom: 1px solid #1A2030 !important;
-  color: #A0A0A0 !important;
+  border-bottom: 1px solid var(--border-2) !important;
+  color: var(--text-2) !important;
 }
 
 .react-flow__controls-button:hover {
-  background: #131720 !important;
-  color: #FFFFFF !important;
+  background: var(--bg-2) !important;
+  color: var(--text-1) !important;
 }
 
 .react-flow__controls-button:last-child {
   border-bottom: none !important;
 }
 
-/* ── Node error blink ────────────────────────────────── */
-/* box-shadow handles the glow; the ::before pseudo-element overlays the border
-   so the red blink covers the blue selected border instead of appearing outside it. */
+/* ── Node error blink — border-color only, no glow ────── */
+/* The ::before pseudo-element overlays the border so the red blink covers
+   the accent selected border instead of appearing outside it. */
 @keyframes node-error-blink {
 
   0%,
   100% {
-    box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
+    border-color: var(--border-2);
   }
 
   20%,
   55% {
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35), 0 0 28px rgba(239, 68, 68, 0.25);
+    border-color: var(--error);
   }
 
   37%,
   72% {
-    box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
+    border-color: var(--border-2);
   }
 }
 
-/* Pseudo-element overlays the node border — covers the blue selected border with red */
+/* Pseudo-element overlays the node border — covers the accent selected border with red */
 @keyframes node-error-blink-border {
 
   0%,
@@ -669,7 +826,7 @@ body {
 
   20%,
   55% {
-    border-color: #ef4444;
+    border-color: var(--error);
   }
 
   37%,
@@ -682,17 +839,17 @@ body {
 
   0%,
   100% {
-    color: #6A7080;
+    color: var(--text-3);
   }
 
   20%,
   55% {
-    color: #f87171;
+    color: var(--error);
   }
 
   37%,
   72% {
-    color: #6A7080;
+    color: var(--text-3);
   }
 }
 
@@ -700,12 +857,12 @@ body {
   animation: node-error-blink 1.4s ease 1 forwards;
 }
 
-/* Positioned over the node border, so the red ring covers the blue selected border */
+/* Positioned over the node border, so the red ring covers the accent selected border */
 .node-card.node-error-blink::before {
   content: '';
   position: absolute;
   inset: -1px;
-  border-radius: 8px;
+  border-radius: var(--r-node);
   border: 1px solid transparent;
   pointer-events: none;
   z-index: 1;
@@ -713,34 +870,30 @@ body {
 }
 
 /* ── Node identify blink (triggered from group toolbar job list) ── */
-/* Applied via an injected <style> tag (not via classList) so React can't wipe it */
+/* Applied via an injected <style> tag (not via classList) so React can't wipe it.
+   Border-color only — no glow, per Solstice elevation rules. */
 @keyframes node-identify-input-blink {
-  0%, 100% { box-shadow: 0 2px 16px rgba(0,0,0,0.5); border-color: transparent; }
-  18%       { box-shadow: 0 0 0 3px rgba(45,212,191,0.55), 0 0 30px rgba(45,212,191,0.15); border-color: rgba(45,212,191,0.65); }
-  35%       { box-shadow: 0 2px 16px rgba(0,0,0,0.5); border-color: transparent; }
-  58%       { box-shadow: 0 0 0 2px rgba(45,212,191,0.35), 0 0 20px rgba(45,212,191,0.08); border-color: rgba(45,212,191,0.45); }
-  75%       { box-shadow: 0 2px 16px rgba(0,0,0,0.5); border-color: transparent; }
+  0%, 100% { border-color: transparent; }
+  18%       { border-color: var(--accent); }
+  35%       { border-color: transparent; }
+  58%       { border-color: var(--accent); }
+  75%       { border-color: transparent; }
 }
 
 @keyframes node-identify-blink {
   0%, 100% {
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
     border-color: transparent;
   }
   18% {
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.75), 0 0 30px rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.8);
+    border-color: var(--text-1);
   }
   35% {
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
     border-color: transparent;
   }
   58% {
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5), 0 0 20px rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.5);
+    border-color: var(--text-1);
   }
   75% {
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
     border-color: transparent;
   }
 }
@@ -756,7 +909,7 @@ body {
   }
 
   to {
-    stroke-dashoffset: -18;
+    stroke-dashoffset: -28;
   }
 }
 
@@ -783,21 +936,21 @@ body {
 
 /* ── Toolbar buttons ─────────────────────────────────── */
 .toolbar-btn {
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 500;
-  color: #A0A0A0;
-  background: #0B0E14;
-  border: 1px solid #1E2840;
-  border-radius: 6px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
   padding: 5px 12px;
   cursor: pointer;
-  transition: color 100ms, border-color 100ms;
+  transition: color var(--dur-1), border-color var(--dur-1);
   font-family: inherit;
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  color: #FFFFFF;
-  border-color: #243050;
+  color: var(--text-1);
+  border-color: var(--text-2);
 }
 
 .toolbar-btn:disabled {
@@ -806,48 +959,43 @@ body {
 }
 
 .toolbar-btn-primary {
-  font-size: 13px;
-  font-weight: 500;
-  color: #FFFFFF;
-  background: #2DD4BF;
-  border: 1px solid #2DD4BF;
-  border-radius: 6px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-pill);
   padding: 5px 14px;
   cursor: pointer;
-  transition: background 100ms, border-color 100ms, box-shadow 100ms;
+  box-shadow: var(--shadow-btn);
+  transition: background var(--dur-1);
   font-family: inherit;
 }
 
 .toolbar-btn-primary:hover:not(:disabled) {
-  background: #2DD4BF;
-  border-color: #2DD4BF;
-  box-shadow: 0 0 12px rgba(45, 212, 191, 0.35);
+  background: var(--accent-hover);
 }
 
 .toolbar-btn-primary:disabled {
-  opacity: 0.3;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 /* ── Video Generator node — subtle border ────────────── */
 .video-node-card.node-card {
-  border-color: #1C2436;
-  box-shadow: 0 0 0 1px rgba(80, 80, 80, 0.08), 0 2px 16px rgba(0, 0, 0, 0.5);
+  border-color: var(--border-2);
 }
 
 .video-node-card.node-card:hover {
-  border-color: #2A3550;
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.12), 0 2px 20px rgba(0, 0, 0, 0.6);
+  border-color: var(--text-2);
 }
 
 .react-flow__node.selected .video-node-card.node-card {
-  border-color: #2DD4BF !important;
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25), 0 2px 16px rgba(0, 15, 30, 0.5);
+  border-color: var(--accent) !important;
 }
 
 .react-flow__node.node-ancestor .video-node-card.node-card {
-  border-color: #2DD4BF !important;
-  box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15), 0 0 18px rgba(0, 0, 0, 0.5);
+  border-color: var(--accent) !important;
 }
 
 /* ── Carousel slide ─────────────────────────────────────────────────────── */
@@ -979,7 +1127,7 @@ body {
 
   20%,
   55% {
-    stroke: #ef4444;
+    stroke: var(--error);
   }
 
   37%,
@@ -1000,7 +1148,7 @@ body {
 
   20%,
   55% {
-    box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+    box-shadow: none;
   }
 
   37%,
@@ -1019,7 +1167,7 @@ body {
 
   20%,
   55% {
-    border-color: #ef4444;
+    border-color: var(--error);
   }
 
   37%,
@@ -1074,28 +1222,23 @@ body {
   top: 0;
   bottom: 0;
   width: 50%;
-  background: linear-gradient(to right,
-      transparent 0%,
-      rgba(255, 255, 255, 0.13) 30%,
-      rgba(255, 255, 255, 0.28) 50%,
-      rgba(255, 255, 255, 0.13) 70%,
-      transparent 100%);
+  background: var(--border-1);
   animation: upload-shimmer 1.4s ease-in-out infinite;
   pointer-events: none;
 }
 
-/* ── Lightbox blur-up pulse ───────────────────────────────────────────────── */
+/* ── Lightbox loading pulse ──────────────────────────────────────────────── */
 @keyframes lightbox-blur-pulse {
 
   0%,
   100% {
-    filter: blur(6px);
     opacity: 1;
+    transform: scale(1);
   }
 
   50% {
-    filter: blur(22px);
-    opacity: 0.7;
+    opacity: 0.5;
+    transform: scale(0.98);
   }
 }
 
@@ -1104,29 +1247,21 @@ body {
   transform-origin: center;
 }
 
-/* ── Generating border animation ─────────────────────────────────────────── */
+/* ── Generating border animation — border pulses accent <-> border-2, no glow ── */
+@keyframes node-generating-pulse {
+  0%, 100% { border-color: var(--accent); }
+  50%       { border-color: var(--border-2); }
+}
+
 .node-card.node-generating {
-  border: 2px solid transparent;
-  background:
-    linear-gradient(#141820, #141820) padding-box,
-    conic-gradient(
-      from var(--border-angle, 0deg),
-      rgba(45, 212, 191, 0.05) 0deg,
-      rgba(45, 212, 191, 0.05) 150deg,
-      #00266A 200deg,
-      #005FCC 250deg,
-      #00AEFF 305deg,
-      #00F2FF 340deg,
-      rgba(0, 242, 255, 0.05) 360deg
-    ) border-box;
+  border: 1px solid var(--border-2);
+  animation: node-generating-pulse 700ms var(--ease) infinite alternate;
   transition: none;
-  box-shadow: none;
 }
 
 /* ── Pipeline queued state ───────────────────────────────────────────────── */
-@keyframes node-queued-pulse {
-  0%, 100% { border-color: rgba(148, 163, 184, 0.18); box-shadow: 0 2px 16px rgba(0,0,0,0.5); }
-  50%       { border-color: rgba(148, 163, 184, 0.5);  box-shadow: 0 2px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(148,163,184,0.15); }
+.node-card.node-queued {
+  border: 1px dashed var(--border-2);
 }
 
 .node-card.node-queued {
@@ -1137,8 +1272,17 @@ body {
 /* scrollbar-width:thin keeps the native overlay model (appears on scroll,
    no reserved gutter, no macOS mode-switch on hover) */
 .prompt-ta {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  /* none, not thin: on Windows a thin bar reserves a gutter, so the textarea
+     wraps narrower than the highlight overlay behind it and the layers drift */
+  scrollbar-width: none;
+}
+
+/* The textarea text is transparent (the overlay paints it). Keep it
+   transparent while selected too, otherwise the browser repaints the selected
+   run in HighlightText and it doubles over the overlay. */
+.prompt-ta::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 /* Suppress the always-visible WebKit classic track that causes the black bar */
@@ -1160,13 +1304,10 @@ body {
 
 .mention-chip {
   display: inline;
-  background: rgba(255, 255, 255, 0.13);
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
   border-radius: 4px;
-  color: #FFFFFF;
-  padding: 2px 0;
+  color: var(--text-1);
+  padding: 2px 4px;
   pointer-events: auto;
-  /* shadows stay well under space-char width (~3-4 px) so the natural space
-     character creates a visible gap to surrounding text, and the caret lands
-     outside the chip */
-  box-shadow: -2px 0 0 rgba(255, 255, 255, 0.13), 2px 0 0 rgba(255, 255, 255, 0.13);
 }

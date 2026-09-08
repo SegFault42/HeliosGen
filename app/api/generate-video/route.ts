@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dlog } from "@/lib/debugLog";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { rewriteLocalMediaForKie } from "@/lib/kieUpload";
@@ -406,11 +407,11 @@ export async function POST(req: NextRequest) {
 
   // Debug mode — log payload to server console and return without submitting
   if (debugOnly) {
-    console.log(`[DEBUG] generate-video payload → ${endpoint}`, JSON.stringify(kieBody, null, 2));
+    dlog(`[DEBUG] generate-video payload → ${endpoint}`, JSON.stringify(kieBody, null, 2));
     return NextResponse.json({ debugPayload: kieBody, debugEndpoint: endpoint });
   }
 
-  console.log(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
+  dlog(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
   const createRes = await fetch(endpoint, {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -427,7 +428,7 @@ export async function POST(req: NextRequest) {
   }
 
   const createdText = await createRes.text();
-  console.log("[generate-video] kie.ai response:", createdText);
+  dlog("[generate-video] kie.ai response:", createdText);
   let created: { code?: number; msg?: string; data?: { taskId?: string; id?: string } };
   try {
     created = JSON.parse(createdText);

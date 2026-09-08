@@ -32,6 +32,9 @@ export function useSpaceSync() {
   const dirtyRef       = useRef(false);
   // Set by requestWorkflowSync(); makes the next debounce-arm use IMMEDIATE_MS.
   const immediateRef   = useRef(false);
+  // updatedAt of each space as last written to the DB. Lets `save` send only
+  // the spaces that changed since (previously every edit re-sent every space).
+  const savedStampRef  = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (hydrated) return;
@@ -55,6 +58,9 @@ export function useSpaceSync() {
         const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
         if (!dbSpaces?.length) return;
         loadSpacesFromDB(dbSpaces);
+        savedStampRef.current = new Map(
+          useWorkflowStore.getState().spaces.map((sp) => [sp.id, sp.updatedAt ?? sp.createdAt ?? 0]),
+        );
         const now = new Date();
         lastSyncedRef.current = now.getTime();
         setLastSyncedAt(now);
@@ -75,19 +81,29 @@ export function useSpaceSync() {
     immediateRef.current = false;
     setStatus("syncing");
     try {
-      const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
-      const res = await fetch("/api/workflows", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        keepalive,
-        body: JSON.stringify({
-          spaces: spacesToSave.map((sp) => ({
-            ...sp,
-            nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
+      const all = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
+      const stamps = savedStampRef.current;
+      const stamp = (sp: Space) => sp.updatedAt ?? sp.createdAt ?? 0;
+      // A space we saved before is gone → full save so the server drops it too.
+      const deleted = [...stamps.keys()].some((id) => !all.some((sp) => sp.id === id));
+      const partial = !deleted && stamps.size > 0;
+      const spacesToSave = partial ? all.filter((sp) => stamps.get(sp.id) !== stamp(sp)) : all;
+      if (spacesToSave.length > 0 || !partial) {
+        const res = await fetch("/api/workflows", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          keepalive,
+          body: JSON.stringify({
+            partial,
+            spaces: spacesToSave.map((sp) => ({
+              ...sp,
+              nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+      }
+      savedStampRef.current = new Map(all.map((sp) => [sp.id, stamp(sp)]));
       const now = new Date();
       lastSyncedRef.current = now.getTime();
       setLastSyncedAt(now);

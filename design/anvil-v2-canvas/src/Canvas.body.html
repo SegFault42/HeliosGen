@@ -1,0 +1,113 @@
+<!--CSS-->
+.wrap{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0}
+.top{display:flex;align-items:center;gap:16px}
+.top .name{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em}
+.top .crumbs{color:var(--ash)}
+.top .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.board{flex:1;display:flex;gap:16px;min-height:0}
+.frame{flex:1;background:var(--paper);border:1px solid var(--rule);border-radius:0;position:relative;overflow:hidden}
+.frame svg.edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.frame svg.edges path{fill:none;stroke:var(--graphite);stroke-width:1.5}
+.frame svg.edges path.run{stroke:var(--ember);stroke-dasharray:6 6}
+.frame svg.edges path.idle{stroke:var(--rule2)}
+.plate .pb .thumb{width:100%;height:120px;margin-bottom:8px}
+.plate .pb p{margin:0 0 6px}
+.plate .pb .kv{display:flex;justify-content:space-between;color:var(--ash);margin-top:4px}
+.plate .pb .kv b{color:var(--ink);font-weight:500;font-family:var(--mono);font-size:12px}
+.prog{height:1px;background:var(--rule);margin-top:10px;position:relative}
+.prog i{position:absolute;left:0;top:0;height:1px;background:var(--ember)}
+.bar{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:var(--linen);box-shadow:0 16px 40px rgba(0,0,0,.5);border:1px solid var(--rule2);border-radius:6px;display:flex;align-items:center;gap:8px;padding:8px}
+.bar .zoom{display:flex;align-items:center;gap:12px;padding:0 8px;color:var(--graphite);border-left:1px solid var(--rule);margin-left:4px}
+.sheet{width:340px;background:linear-gradient(180deg,#161512,var(--paper));box-shadow:inset 0 1px 0 var(--hi);border:1px solid var(--rule);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+.sheet .sh{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--rule)}
+.sheet pre{margin:0;padding:20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--ink);white-space:pre;overflow:hidden}
+.sheet pre .k{color:var(--ink);font-weight:500}
+.sheet pre .s{color:var(--ember)}
+.sheet pre .n{color:var(--wait)}
+.sheet pre .c{color:var(--ash)}
+.sheet .sf{margin-top:auto;padding:16px 20px;border-top:1px solid var(--rule);display:flex;gap:8px}
+.legend{position:absolute;left:20px;bottom:20px;display:flex;gap:16px;color:var(--ash)}
+<!--/CSS-->
+<div class="app">
+  <!--RAIL canvas-->
+  <section class="wrap">
+    <div class="top">
+      <span class="name">Apple, four ways</span>
+      <span class="crumbs mono">Workflow 07 · 5 plates · last run 14:02 · $0.19</span>
+      <div class="right"><span class="mono muted">Autosaved</span><span class="btn sm secondary">Share</span><span class="btn sm secondary">Export</span></div>
+    </div>
+    <div class="board">
+      <div class="frame">
+        <svg class="edges">
+          <path d="M292 168 C 340 168, 340 122, 388 122"/>
+          <path d="M292 168 C 340 168, 340 268, 388 268"/>
+          <path class="run" d="M628 122 C 676 122, 676 196, 724 196"/>
+          <path d="M628 268 C 676 268, 676 400, 724 400"/>
+          <path d="M292 470 C 340 470, 340 268, 388 268"/>
+        </svg>
+
+        <div class="plate" style="left:52px;top:100px">
+          <div class="ph"><span class="mono">01 · Prompt</span><span class="mono muted">Text</span></div>
+          <div class="pb"><p class="serif" style="font-size:17px;color:var(--ink);font-weight:400;line-height:1.3">A single red apple on a white tiled floor, hard flash, direct daylight, editorial.</p><div class="kv"><span class="mono">Tokens</span><b>28</b></div></div>
+          <i class="port c" style="right:-5px;top:64px"></i>
+        </div>
+
+        <div class="plate" style="left:388px;top:60px;width:240px">
+          <div class="ph"><span class="mono">02 · Image</span><span class="mono muted">Nano Banana</span></div>
+          <div class="pb"><div class="thumb"><img src="piece-apple.jpg" alt=""></div><div class="kv"><span class="mono">Cost</span><b>$0.04</b></div><div class="kv"><span class="mono">Time</span><b>6.2s</b></div></div>
+          <i class="port c" style="left:-5px;top:58px"></i><i class="port c" style="right:-5px;top:58px"></i>
+        </div>
+
+        <div class="plate" style="left:388px;top:230px;width:240px">
+          <div class="ph"><span class="mono">03 · Image</span><span class="mono muted">GPT Image 2</span></div>
+          <div class="pb"><div class="thumb"><img src="piece-flash.jpg" alt=""></div><div class="kv"><span class="mono">Cost</span><b>$0.06</b></div><div class="kv"><span class="mono">Time</span><b>18.4s</b></div></div>
+          <i class="port c" style="left:-5px;top:34px"></i><i class="port c" style="right:-5px;top:34px"></i>
+        </div>
+
+        <div class="plate run" style="left:724px;top:140px;width:240px">
+          <div class="ph"><span class="mono">04 · Video</span><span class="mono" style="color:var(--ember)">Striking 42%</span></div>
+          <div class="pb"><p>Veo 3.1 · 8s · 720p</p><div class="kv"><span class="mono">Est. cost</span><b>$0.40</b></div><div class="prog"><i style="width:42%"></i></div></div>
+          <i class="port c" style="left:-5px;top:52px"></i><i class="port" style="right:-5px;top:52px"></i>
+        </div>
+
+        <div class="plate err" style="left:724px;top:350px;width:240px">
+          <div class="ph"><span class="mono">05 · Upscale</span><span class="mono" style="color:var(--fail)">Failed</span></div>
+          <div class="pb"><p style="color:var(--fail)">Provider returned 402: wallet below $0.10 reserve.</p><div style="display:flex;gap:8px;margin-top:8px"><span class="btn sm secondary">Retry</span><span class="btn sm ghost">Top up</span></div></div>
+          <i class="port c" style="left:-5px;top:46px"></i><i class="port" style="right:-5px;top:46px"></i>
+        </div>
+
+        <div class="plate on" style="left:52px;top:420px">
+          <div class="ph"><span class="mono">06 · Reference</span><span class="mono muted">Upload</span></div>
+          <div class="pb"><div class="thumb" style="height:80px"><img src="piece-pear.jpg" alt=""></div><div class="kv"><span class="mono">Size</span><b>1024 × 1024</b></div></div>
+          <i class="port c" style="right:-5px;top:46px"></i>
+        </div>
+
+        <div class="legend"><span class="mono">■ Ember · connected</span><span class="mono">□ Rule-2 · empty</span><span class="mono" style="color:var(--ember)">— — Ember · running</span></div>
+
+        <div class="bar">
+          <span class="btn sm secondary">Add plate</span>
+          <span class="btn sm primary" style="height:32px;font-size:12px">Run all · $0.50</span>
+          <div class="zoom"><span class="mono">−</span><span class="mono">100%</span><span class="mono">+</span><span class="mono">Fit</span></div>
+        </div>
+      </div>
+
+      <aside class="sheet">
+        <div class="sh"><span class="mono">Sheet · 06 Reference</span><span class="tabs"><span class="on">YAML</span><span>JSON</span></span></div>
+<pre><span class="k">id</span>: <span class="s">plate-06</span>
+<span class="k">kind</span>: <span class="s">reference</span>
+<span class="k">source</span>:
+  <span class="k">file</span>: <span class="s">pear-01.png</span>
+  <span class="k">width</span>: <span class="n">1024</span>
+  <span class="k">height</span>: <span class="n">1024</span>
+<span class="k">outputs</span>:
+  - <span class="k">to</span>: <span class="s">plate-03</span>
+    <span class="k">as</span>: <span class="s">image_ref</span>
+<span class="k">cost</span>:
+  <span class="k">strike</span>: <span class="n">0.00</span>
+  <span class="k">currency</span>: <span class="s">USD</span>
+<span class="c"># edited 14:02 · v4</span></pre>
+        <div class="sf"><span class="btn sm secondary">Apply</span><span class="btn sm ghost">Revert</span><span class="btn sm danger" style="margin-left:auto">Delete plate</span></div>
+      </aside>
+    </div>
+  </section>
+</div>

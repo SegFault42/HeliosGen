@@ -1,3 +1,9 @@
+# ANVIL
+
+Fork privado do [HeliosGen](https://github.com/SegFault42/HeliosGen) (MIT) com o design system Solstice e o backend Codex CLI corrigido. Nome de trabalho: **ANVIL**. O README original do upstream segue abaixo para referência de build.
+
+---
+
 <p align="center">
   <img
     src="https://raw.githubusercontent.com/SegFault42/HeliosGen/main/public/HG.svg"

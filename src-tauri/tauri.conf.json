@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "HeliosGen",
+  "productName": "ANVIL",
   "version": "1.2.0",
   "identifier": "cash.sdd.helios.desktop",
   "build": {
@@ -12,7 +12,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "HeliosGen",
+        "title": "ANVIL",
         "width": 1400,
         "height": 900,
         "minWidth": 900,
@@ -45,7 +45,7 @@
     ],
     "category": "GraphicsAndDesign",
     "shortDescription": "Build AI image & video pipelines visually.",
-    "longDescription": "HeliosGen is a local-first visual workflow builder for AI image and video generation. All data stays on your machine.",
+    "longDescription": "ANVIL is a local-first visual workflow builder for AI image and video generation. All data stays on your machine.",
     "macOS": {
       "minimumSystemVersion": "10.15",
       "entitlements": "entitlements.plist",

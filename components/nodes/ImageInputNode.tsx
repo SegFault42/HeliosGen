@@ -1,20 +1,23 @@
 "use client";
+import { memo } from "react";
+import { useNodeEdges } from "@/lib/nodeSelectors";
 import { useRef, useCallback, useEffect, useState } from "react";
+import NodeLabel, { requestRename } from "@/components/nodes/NodeLabel";
 import { createPortal } from "react-dom";
 import NextImage from "next/image";
 import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { sha256Hex } from "@/lib/assetHash";
+import { findCachedAsset, uploadAsset } from "@/lib/uploadAsset";
 
 
 type ImageInputNodeType = Node<NodeData, "imageInputNode">;
 
 
-export default function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
+function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   const updateNodeData  = useWorkflowStore((s) => s.updateNodeData);
   const updateNodeSize  = useWorkflowStore((s) => s.updateNodeSize);
-  const edges           = useWorkflowStore((s) => s.edges);
+  const edges           = useNodeEdges(id);
   const sourceConnected = edges.some((e) => e.source === id);
   const fileRef        = useRef<HTMLInputElement>(null);
   const rootRef        = useRef<HTMLDivElement>(null);
@@ -105,29 +108,19 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
   const loadFile = useCallback(
     async (file: File) => {
-      // Read as ArrayBuffer — needed for hashing and direct binary upload
       const bytes = await file.arrayBuffer();
-      const hash  = await sha256Hex(bytes);
 
-      const authHeaders: Record<string, string> = {};
-
-      // ── Cache lookup: skip upload if already in R2 ───────────────────────
-      try {
-        const lookupRes = await fetch(`/api/lookup-asset?hash=${hash}`, { headers: authHeaders });
-        const { cdnUrl } = await lookupRes.json() as { cdnUrl: string | null };
-        if (cdnUrl) {
-          // Already uploaded — use existing URL directly
-          const img = new window.Image();
-          img.onload = () => updateNodeData(id, {
-            inputImage:        cdnUrl,
-            imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}`,
-            r2Url:             cdnUrl,
-          });
-          img.src = cdnUrl;
-          return;
-        }
-      } catch {
-        // Lookup failed — fall through to normal upload
+      // ── Already stored? Use it directly, no preview blob needed ───────────
+      const cached = await findCachedAsset(bytes);
+      if (cached) {
+        const img = new window.Image();
+        img.onload = () => updateNodeData(id, {
+          inputImage:        cached,
+          imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}`,
+          r2Url:             cached,
+        });
+        img.src = cached;
+        return;
       }
 
       // ── Show local preview immediately ────────────────────────────────────
@@ -141,32 +134,42 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       };
       img.src = blobUrl;
 
-      // ── Upload raw bytes to R2 (hash stored server-side) ──────────────────
+      // ── Upload (hash stored server-side) ──────────────────────────────────
       try {
-        const uploadHeaders: Record<string, string> = {
-          "Content-Type": file.type || "image/jpeg",
-          ...authHeaders,
-        };
-        const res     = await fetch("/api/upload-asset", { method: "POST", headers: uploadHeaders, body: bytes });
-        const { cdnUrl } = await res.json() as { cdnUrl?: string };
-        if (cdnUrl) {
-          updateNodeData(id, { r2Url: cdnUrl, inputImage: cdnUrl });
-        }
+        const cdnUrl = await uploadAsset(bytes, file.type || "image/jpeg");
+        updateNodeData(id, { r2Url: cdnUrl, inputImage: cdnUrl });
       } catch {
-        // R2 unavailable — blob URL stays as fallback until page reload
+        // storage unavailable — blob URL stays as fallback until page reload
       }
     },
     [id, updateNodeData]
   );
 
+  // Drop on the node (empty or filled) replaces its image in place: same node id,
+  // every edge and downstream generator keeps pointing at it. stopPropagation keeps
+  // WorkflowCanvas.onDrop from also spawning a new node for the same file.
+  const [fileOver, setFileOver] = useState(false);
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file?.type.startsWith("image/")) loadFile(file);
+      e.stopPropagation();
+      setFileOver(false);
+      const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+      if (file) loadFile(file);
     },
     [loadFile]
   );
+  const onDragOverFile = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setFileOver(true);
+  }, []);
+  const onDragLeaveFile = useCallback((e: React.DragEvent) => {
+    if (e.relatedTarget instanceof globalThis.Node && e.currentTarget.contains(e.relatedTarget)) return;
+    setFileOver(false);
+  }, []);
 
   // ── Two-layer crossfade: old image stays visible until new one fades in ─────
   const canonicalSrc = (data.r2Url ?? data.inputImage) as string | undefined;
@@ -194,7 +197,13 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       setTopReady(false);
       return;
     }
-    if (canonicalSrc === baseSrcRef.current) return;
+    if (canonicalSrc === baseSrcRef.current) {
+      // Back to the settled image mid-crossfade (undo, or a replace that got
+      // reverted): drop the incoming layer instead of leaving it on top.
+      setTopSrc(undefined);
+      setTopReady(false);
+      return;
+    }
 
     if (!baseSrcRef.current) {
       // No existing image — set directly, nothing to crossfade over
@@ -235,9 +244,12 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           background: "transparent",
         }}
         onAnimationEnd={(e) => { if (e.animationName === "node-error-blink") updateNodeData(id, { hasError: false }); }}
+        onDrop={onDrop}
+        onDragOver={onDragOverFile}
+        onDragLeave={onDragLeaveFile}
       >
         <CornerResizer minWidth={60} minHeight={60} keepAspectRatio />
-        <span className="node-above-label">{data.label as string}</span>
+        <NodeLabel id={id} label={data.label as string} />
 
         {/* Inner: clips image to border-radius */}
         <div
@@ -245,6 +257,18 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           style={{ borderRadius: 7, overflow: "hidden" }}
           onDoubleClick={openLightbox}
         >
+          {fileOver && (
+            <div
+              aria-hidden
+              style={{
+                position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+                display: "grid", placeItems: "center",
+                background: "var(--scrim)", border: "2px solid var(--accent)", borderRadius: 7,
+              }}
+            >
+              <span className="label" style={{ color: "var(--accent)", fontSize: 12 }}>Drop to replace</span>
+            </div>
+          )}
           {/* Layer 1 — base image */}
           {baseSrc && (
             // Use <NextImage> only for confirmed R2 CDN URLs — third-party URLs skip
@@ -325,7 +349,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
             <div
               aria-hidden
               className="absolute top-1.5 right-2 pointer-events-none select-none z-30 tabular-nums px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-150 node-slide-reveal"
-              style={{ fontSize: 9, lineHeight: 1, color: "#fff", background: "#1a1a1a" }}
+              style={{ fontSize: 12, lineHeight: 1, color: "var(--text-1)", background: "var(--bg-0)" }}
             >
               {natW} × {natH}
             </div>
@@ -335,13 +359,21 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           </div>
-          <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity node-slide-reveal">
+          <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 px-2.5 opacity-0 group-hover:opacity-100 transition-opacity node-slide-reveal">
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => { fileRef.current?.click(); }}
-              className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors relative z-10"
+              className="h-6 px-3 rounded-full bg-[var(--bg-0)]  border border-[var(--border-1)] text-[12px] text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-0)] transition-colors relative z-10"
             >
               replace
+            </button>
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); requestRename(id); }}
+              title="Rename node (or double-click its label)"
+              className="h-6 px-3 rounded-full bg-[var(--bg-0)]  border border-[var(--border-1)] text-[12px] text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--bg-0)] transition-colors relative z-10"
+            >
+              rename
             </button>
           </div>
         </div>
@@ -394,14 +426,14 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         {lightboxOpen && typeof document !== "undefined" && createPortal(
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-200 ease-in-out"
-            style={{ backgroundColor: `rgba(0,0,0,${lightboxVisible ? 0.9 : 0})`, opacity: lightboxVisible ? 1 : 0 }}
+            style={{ backgroundColor: lightboxVisible ? "var(--scrim)" : "transparent", opacity: lightboxVisible ? 1 : 0 }}
             onClick={closeLightbox}
           >
             <div
               className="relative transition-all duration-200 ease-in-out rounded-2xl overflow-hidden"
               style={{
                 transform: lightboxVisible ? "scale(1)" : "scale(0.95)",
-                boxShadow: "0 0 0 8px #3a3a3a",
+                boxShadow: "0 0 0 8px var(--bg-2)",
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -448,7 +480,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       onAnimationEnd={(e) => { if (e.animationName === "node-error-blink") updateNodeData(id, { hasError: false }); }}
     >
       <CornerResizer minWidth={160} minHeight={100} />
-      <span className="node-above-label">{data.label as string}</span>
+      <NodeLabel id={id} label={data.label as string} />
 
       <Handle
         type="source"
@@ -485,13 +517,14 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
       <div className="overflow-hidden rounded-[7px] p-2.5">
         <div
           onDrop={onDrop}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={onDragOverFile}
+          onDragLeave={onDragLeaveFile}
           onClick={() => { fileRef.current?.click(); }}
-          className="border border-dashed border-[#1E2840] hover:border-[#243050] rounded-md cursor-pointer transition-colors py-8 text-center"
+          className="border border-dashed border-[var(--bg-2)] hover:border-[var(--bg-2)] rounded-md cursor-pointer transition-colors py-8 text-center"
         >
-          <p className="text-[11px] text-[#A0A0A0]">
+          <p className="text-[12px] text-[var(--text-2)]">
             Drop image or{" "}
-            <span className="underline underline-offset-2 text-white">browse</span>
+            <span className="underline underline-offset-2 text-[var(--text-1)]">browse</span>
           </p>
         </div>
         <input
@@ -521,9 +554,9 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
 
 function ImageOutIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-      <circle cx="9" cy="9" r="2" fill="white" stroke="none" />
+      <circle cx="9" cy="9" r="2" fill="var(--text-1)" stroke="none" />
       <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
     </svg>
   );
@@ -531,10 +564,12 @@ function ImageOutIcon() {
 
 function PromptIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 14 14" fill="white">
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="var(--text-1)">
       <path d="M1.5 2h11v2H8.5v8H5.5V4H1.5V2z" />
     </svg>
   );
 }
 
-
+// memo: React Flow re-renders every node wrapper on canvas changes; with the
+// narrow selectors above, unchanged props now mean a skipped render.
+export default memo(ImageInputNode);
