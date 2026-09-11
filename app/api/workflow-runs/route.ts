@@ -1,0 +1,5 @@
+import { NextRequest, NextResponse } from "next/server";
+import { runtime as getRuntime } from "@/lib/workflow-runtime/bootstrap";
+export const runtime = "nodejs";
+export async function GET(req:NextRequest) { const requestId=req.nextUrl.searchParams.get("requestId"); if(!requestId) return NextResponse.json({runs:getRuntime().store.listRuns()}); const run=getRuntime().store.findRun(requestId); return NextResponse.json({runs:run?[run]:[]}); }
+export async function POST(req:NextRequest) { try { const b=await req.json(); if(!b.planId||!b.requestId||!b.approval) return NextResponse.json({error:{code:"malformed",message:"planId, requestId and approval are required"}},{status:400}); const r=getRuntime(); const run=r.store.createRun(b.planId,b.requestId,b.approval,new Date()); void r.runner.tick(); return NextResponse.json(run,{status:202}); } catch(e) { const msg=e instanceof Error?e.message:"request failed"; return NextResponse.json({error:{code:msg.includes("conflict")?"conflict":"invalid_request",message:msg}},{status:msg.includes("conflict")?409:422}); } }
