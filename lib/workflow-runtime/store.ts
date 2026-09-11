@@ -25,7 +25,7 @@ export function createRuntimeStore(database: DatabaseSync) {
       if (old) { if (old.request_hash !== requestHash) throw new Error("request_conflict"); return JSON.parse(old.run_json); }
       const runId = randomUUID(); const ts = now.toISOString();
       const steps: RunStep[] = p.plan.steps.map(s => ({ ...s, attempt: 0, taskId: null, state: "queued", error: null, outputs: [], creditBefore: null, creditAfter: null }));
-      const run: Run = { runId, requestId, planId, fingerprint: p.plan.fingerprint, spaceId: p.plan.spaceId, spaceName: p.plan.spaceName, state: "queued", createdAt: ts, updatedAt: ts, steps, outputs: [] };
+      const run: Run = Object.assign({ runId, requestId, planId, fingerprint: p.plan.fingerprint, spaceId: p.plan.spaceId, spaceName: p.plan.spaceName, state: "queued" as const, createdAt: ts, updatedAt: ts, steps, outputs: [] }, { approval });
       database.prepare("INSERT INTO workflow_runs VALUES(?,?,?,?,?)").run(runId, requestId, requestHash, planId, JSON.stringify(run)); return run;
     },
     getRun, listRuns() { return (database.prepare("SELECT run_json FROM workflow_runs").all() as {run_json:string}[]).map(r => JSON.parse(r.run_json) as Run); }, findRun(requestId: string) { const r = database.prepare("SELECT run_json FROM workflow_runs WHERE request_id=?").get(requestId) as {run_json:string}|undefined; return r ? JSON.parse(r.run_json) as Run : null; },
