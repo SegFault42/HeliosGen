@@ -12,6 +12,7 @@ import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs } from "@/lib/executor";
+import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
@@ -914,25 +915,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       startFrameUrl: finalStartFrameUrl,
       endFrameUrl: finalEndFrameUrl,
       referenceImageUrls: veoMode === "references" ? orderedResources.map(r => r.url).slice(0, 3) : undefined,
-    } : {
-      videoModel: videoModelId,
-      prompt: finalPrompt,
-      aspectRatio,
-      duration,
-      ...(cfg.modes?.length ? { mode } : {}),
-      resolution,
-      ...(cfg.sound ? { sound } : {}),
-      startFrameUrl: finalStartFrameUrl,
-      endFrameUrl: finalEndFrameUrl,
-      videoRefUrl: finalVideoRefUrl,
-      resources: orderedResources,
-      referenceImageUrls: orderedResources.length > 0
-        ? orderedResources.map((r) => r.url)
-        : undefined,
-      referenceVideoUrls: upstream.referenceVideoUrls.slice(0, maxRefVideos),
-      referenceAudioUrls: upstream.referenceAudioUrls.slice(0, maxRefAudios),
-      ...(cfg.supportsSeeds && seed ? { seed } : {}),
-    };
+    } : buildVideoPayload(data, { ...upstream, startFrameUrl: finalStartFrameUrl, endFrameUrl: finalEndFrameUrl, videoRefUrl: finalVideoRefUrl });
 
     if (debugMode) {
       // Simulate a 5-second generation and log payload to backend console

@@ -13,6 +13,7 @@ import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs } from "@/lib/executor";
+import { buildImagePayload } from "@/lib/workflow-runtime/generationPayloads";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { browserNotify, requestNotificationPermission } from "@/lib/browserNotify";
 
@@ -553,21 +554,14 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
       catch { return false; }
     })();
 
-    const payload = {
-      model,
-      prompt: resolvedPrompt,
-      imageUrls: orderedUrls,
-      aspectRatio,
-      quality,
-      ...(isAzure ? {
+    const payload = isAzure ? {
+      model, prompt: resolvedPrompt, imageUrls: orderedUrls, aspectRatio, quality,
         azureBaseUrl, azureDeployment, azureQuality, azureResolution,
         ...(aspectRatio === "custom" ? {
           azureCustomWidth: data.azureCustomWidth as number | undefined,
           azureCustomHeight: data.azureCustomHeight as number | undefined,
         } : {}),
-      } : {}),
-      ...(isCodex ? { codexProvider: true } : {}),
-    };
+    } : buildImagePayload(data, upstream, isCodex ? "codex" : "kie");
 
     if (!resolvedPrompt.trim()) {
       updateNodeData(id, { hasError: true });

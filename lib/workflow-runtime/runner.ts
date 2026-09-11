@@ -4,9 +4,10 @@ import { resolveNodeInputs, buildImagePayload, buildVideoPayload } from "./gener
 import type { Approval, Run, PlanStep, Output } from "./contracts";
 import { createRuntimeStore } from "./store";
 import type { GenerationTransport } from "./transport";
-export function createRunner(store: ReturnType<typeof createRuntimeStore>, transport: GenerationTransport, bootId: string) {
+export function createRunner(store: ReturnType<typeof createRuntimeStore>, transport: GenerationTransport, _baseUrlOrBootId: string, bootId?: string) {
+  const owner = bootId ?? _baseUrlOrBootId;
   async function tick(now = new Date()): Promise<void> {
-    store.recoverInterrupted(bootId, now); const runs = (store as unknown as { listRuns?:()=>Run[] }).listRuns?.() ?? [];
+    store.recoverInterrupted(owner, now); const runs = store.listRuns();
     for (const run of runs) {
       if (run.state === "succeeded" || run.state === "failed" || run.state === "reconciliation_required") continue;
       for (const step of run.steps) {
@@ -16,7 +17,7 @@ export function createRunner(store: ReturnType<typeof createRuntimeStore>, trans
       for (const step of fresh.steps.filter(s => s.state === "queued")) {
         const deps = fresh.steps.filter(d => step.dependsOn.includes(d.nodeId)); if (deps.some(d => d.state === "error" || d.state === "blocked" || d.state === "reconciliation_required")) { store.updateStep(fresh.runId,step.nodeId,{state:"blocked",error:"Dependency failed"}); continue; }
         if (deps.some(d => d.state !== "done")) continue;
-        if (!store.claimStep(fresh.runId,step.nodeId,bootId,now)) continue;
+        if (!store.claimStep(fresh.runId,step.nodeId,owner,now)) continue;
         try {
           const p = store.getPlan(fresh.planId); if (!p) throw new Error("plan_not_found");
           const nodes = p.snapshot.nodes as Node<NodeData>[]; const edges = p.snapshot.edges as never[];
@@ -28,5 +29,5 @@ export function createRunner(store: ReturnType<typeof createRuntimeStore>, trans
       const end = store.getRun(run.runId); if (end) { if (end.steps.some(s=>s.state==="reconciliation_required")) end.state="reconciliation_required"; else if (end.steps.every(s=>s.state==="done")) { end.state="succeeded"; end.outputs=end.steps.flatMap(s=>s.outputs); } else if (end.steps.some(s=>s.state==="error")) end.state="failed"; else end.state="running"; for (const s of end.steps) store.updateStep(end.runId,s.nodeId,{}); }
     }
   }
-  return { tick, retry(_runId:string,_nodeId:string,_requestId:string,_approval:Approval,_now=new Date()): Run { throw new Error("retry_requires_explicit_terminal_error_implementation"); } };
+  return { tick, retry(runId:string,nodeId:string,requestId:string,approval:Approval,now=new Date()): Run { return store.retryStep(runId,nodeId,requestId,approval,now); } };
 }
