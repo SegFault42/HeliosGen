@@ -6,7 +6,16 @@
 const parentAtStart = process.ppid;
 
 setInterval(() => {
-  if (process.ppid !== parentAtStart || process.ppid === 1) {
+  let parentGone = process.ppid !== parentAtStart || process.ppid === 1;
+  // Windows retains the original parent PID after exit instead of reparenting.
+  if (!parentGone && process.platform === "win32") {
+    try {
+      process.kill(parentAtStart, 0);
+    } catch (error) {
+      parentGone = error.code === "ESRCH";
+    }
+  }
+  if (parentGone) {
     console.error("[sidecar-guard] parent process gone — shutting down");
     process.exit(0);
   }

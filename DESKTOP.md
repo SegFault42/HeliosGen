@@ -26,6 +26,9 @@ hosted/web deployment.
   (`src-tauri/loader/`) that calls `TransformProcessType` to drop its Dock tile,
   then `exec`s the real node (path passed in `HELIOS_NODE_BIN`).
 
+  On Windows, `helios-node.exe` is the Node runtime itself. There is no forwarding
+  loader or second runtime copy: the process Tauri stops on exit is the server.
+
 [tauri#14014]: https://github.com/tauri-apps/tauri/issues/14014
 
 - `next.config.ts` emits `output: "standalone"` when `DESKTOP_BUILD=1`.
@@ -110,6 +113,42 @@ Verify the result:
 spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → accepted, source=Notarized Developer ID
 xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_1.2.0_aarch64.dmg"
 ```
+
+## Windows build verification
+
+On Windows, install Node 22+ (Node 24 is used in CI), Rust with the MSVC target,
+Microsoft C++ Build Tools, and WebView2. To use the repository's locked dependency
+versions (as CI does), install with
+`npx --yes pnpm@9.15.9 install --frozen-lockfile --config.node-linker=hoisted`.
+Then run `npm run desktop:build -- --bundles nsis` from PowerShell or Command Prompt.
+The installer is written to `src-tauri/target/release/bundle/nsis/`.
+
+In a disposable Windows user profile, install the app and check startup and
+normal shutdown with:
+
+```powershell
+./scripts/desktop/smoke-windows.ps1 -AppPath 'C:\path to install\heliosgen-desktop.exe'
+```
+
+The smoke check starts its own app instance, discovers that instance's server
+port, checks an HTTP response, closes the window normally, and verifies the
+server exits. It does not submit an image or video generation request.
+It refuses to run when HeliosGen data already exists in that profile, so it
+cannot open or migrate an existing user's database during a smoke test.
+
+The `Windows desktop` workflow builds in a checkout path containing spaces,
+installs to a path containing spaces, runs the smoke check, and uploads the NSIS
+installer with its SHA-256 checksum. The artifact remains available for 14 days.
+
+If Tauri cannot prepare its installer tools in the user cache (for example on a
+restricted or encrypted filesystem), use its supported local tools override:
+
+```powershell
+'{"bundle":{"useLocalToolsDir":true}}' | Set-Content windows-local.json
+npm run desktop:build -- --bundles nsis --config windows-local.json
+```
+
+Keep that environment-specific override out of commits.
 
 ## Local data store
 

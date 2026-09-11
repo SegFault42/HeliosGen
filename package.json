@@ -10,7 +10,7 @@
     "lint": "eslint",
     "desktop:dev": "node scripts/desktop/dev.mjs",
     "desktop:check-version": "node scripts/desktop/check-version.mjs",
-    "desktop:build": "node scripts/desktop/check-version.mjs && CI=true tauri build",
+    "desktop:build": "node scripts/desktop/build.mjs",
     "desktop:icon": "tauri icon",
     "tauri": "tauri"
   },
