@@ -45,6 +45,11 @@ fn pick_port() -> u16 {
 /// fold in a few common bin dirs.
 fn resolve_user_path() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
+    // Windows GUI apps get the full user PATH already, and it's `;`-separated —
+    // the `:` splitting below would mangle drive letters.
+    if cfg!(windows) {
+        return base;
+    }
 
     let shell_path = std::env::var("SHELL").ok().and_then(|sh| {
         std::process::Command::new(sh)
@@ -96,6 +101,20 @@ fn resolve_user_env_var(name: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Tauri resolves resource paths on Windows as verbatim `\\?\C:\...` paths.
+/// Node's CJS loader can't handle those for the entry script (it lstat's `C:`
+/// and dies with EISDIR), so hand the sidecar plain paths instead.
+fn plain_path(path: &std::path::Path) -> String {
+    let s = path.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        s.into_owned()
+    }
+}
+
 /// Block until the sidecar is accepting connections (or give up after `timeout`).
 fn wait_for_server(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
@@ -144,15 +163,18 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
     let mut cmd = app
         .shell()
         .sidecar("helios-node")?
-        .current_dir(server_dir)
+        .current_dir(plain_path(&server_dir))
         .args([
             "--disable-warning=ExperimentalWarning".to_string(), // node:sqlite
             "-r".to_string(),
             "./sidecar-guard.js".to_string(),
-            server_entry.to_string_lossy().to_string(),
+            plain_path(&server_entry),
         ])
-        .env("HELIOS_NODE_BIN", node_bin.to_string_lossy().to_string())
+        .env("HELIOS_NODE_BIN", plain_path(&node_bin))
         .env("PATH", resolve_user_path())
+        // Lets sidecar-guard.js exit if this app dies without killing the
+        // sidecar (crash / force-kill) — see scripts/desktop/sidecar-guard.js.
+        .env("HELIOS_APP_PID", std::process::id().to_string())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
@@ -183,6 +205,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
                 CommandEvent::Terminated(payload) => {
                     eprintln!("[next] server exited: {:?}", payload.code)
                 }
+                CommandEvent::Error(e) => eprintln!("[next] sidecar error: {e}"),
                 _ => {}
             }
         }
@@ -241,3 +264,4 @@ pub fn run() {
             }
         });
 }
+
