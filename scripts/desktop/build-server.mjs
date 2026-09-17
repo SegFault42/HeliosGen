@@ -34,11 +34,18 @@ const APP_VERSION = JSON.parse(
 ).version;
 
 /**
- * Build the sidecar shim (src-tauri/loader) and stage it as the Tauri
- * `externalBin`. Fast (no tauri deps) and needed even for `tauri dev` — the
- * Tauri build script hard-fails if the externalBin file is missing.
+ * Stage the Tauri `externalBin`: Node itself on Windows, or the Rust loader
+ * on Unix. Needed even for `tauri dev`, which checks the sidecar exists.
  */
 function stageShim(triple) {
+  // Killing a forwarding shim on Windows would leave its Node child running.
+  // Launch Node directly so Tauri owns the server process it needs to stop.
+  if (process.platform === "win32") {
+    const dest = join(BIN_DIR, `helios-node-${triple}${EXE}`);
+    mkdirSync(BIN_DIR, { recursive: true });
+    copyFileSync(process.execPath, dest);
+    return dest;
+  }
   const manifest = join(SRC_TAURI, "loader", "Cargo.toml");
   console.log("[desktop] building sidecar shim (helios-node)…");
   run("cargo", ["build", "--release", "--manifest-path", manifest]);
@@ -68,7 +75,9 @@ function run(cmd, args, env = {}, cwd = ROOT) {
     cwd,
     stdio: "inherit",
     env: { ...process.env, ...env },
-    shell: process.platform === "win32",
+    // npm is a command shim on Windows. Other executables must bypass the
+    // shell so paths with spaces are passed as single arguments.
+    shell: process.platform === "win32" && cmd === "npm",
   });
 }
 
@@ -179,15 +188,15 @@ for (const [dir, keepIf] of [
 
 const triple = targetTriple();
 
-// The Node runtime ships as a *resource* (Contents/Resources/server/node-bin/),
-// not as the Tauri sidecar. A binary launched out of a bundle's Contents/MacOS/
-// gets its own macOS Dock tile (tauri-apps/tauri#14014); the sidecar is instead
-// the shim, which hides itself from the Dock and then exec's this node.
+// On Unix, the loader execs this separate resource (and hides the macOS Dock
+// tile). Windows runs Node directly as the sidecar, so needs no second copy.
 const nodeDest = join(STAGE, "node-bin", `node${EXE}`);
-mkdirSync(dirname(nodeDest), { recursive: true });
-console.log(`[desktop] bundling node runtime → ${nodeDest}`);
-copyFileSync(portableNodeBinary(), nodeDest);
-if (process.platform !== "win32") chmodSync(nodeDest, 0o755);
+if (process.platform !== "win32") {
+  mkdirSync(dirname(nodeDest), { recursive: true });
+  console.log(`[desktop] bundling node runtime → ${nodeDest}`);
+  copyFileSync(portableNodeBinary(), nodeDest);
+  chmodSync(nodeDest, 0o755);
+}
 
 stageShim(triple);
 

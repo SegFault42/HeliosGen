@@ -1,0 +1,65 @@
+name: Windows desktop
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/desktop/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.ts"
+      - ".github/workflows/windows-desktop.yml"
+  pull_request:
+    paths:
+      - "scripts/desktop/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "next.config.ts"
+      - ".github/workflows/windows-desktop.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: HeliosGen Source
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      # Exercise a source path with spaces as part of every Windows build.
+      - uses: actions/checkout@v4
+        with:
+          path: HeliosGen Source
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: rustup default stable
+      - run: npx --yes pnpm@9.15.9 install --frozen-lockfile --config.node-linker=hoisted
+      - run: node --test scripts/desktop/sidecar-guard.test.mjs
+      - run: npm run desktop:build -- --bundles nsis
+      - name: Install and smoke test
+        run: |
+          $installer = Get-ChildItem -LiteralPath 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe'
+          if (@($installer).Count -ne 1) { throw 'Expected exactly one Windows installer.' }
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'HeliosGen Smoke Install'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDirectory" -WindowStyle Hidden -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+          ./scripts/desktop/smoke-windows.ps1 -AppPath (Join-Path $installDirectory 'heliosgen-desktop.exe')
+          $hash = Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $($installer.Name)" | Set-Content -LiteralPath "$($installer.FullName).sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HeliosGen-windows-x64
+          path: |
+            HeliosGen Source/src-tauri/target/release/bundle/nsis/*-setup.exe
+            HeliosGen Source/src-tauri/target/release/bundle/nsis/*.sha256
+          if-no-files-found: error
+          retention-days: 14

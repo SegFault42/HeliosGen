@@ -34,7 +34,7 @@ const SOURCES = [
   {
     file: "src-tauri/Cargo.lock",
     read: (t) =>
-      t.match(/name = "heliosgen-desktop"\nversion = "([^"]+)"/)?.[1],
+      t.match(/name = "heliosgen-desktop"\r?\nversion = "([^"]+)"/)?.[1],
   },
 ];
 

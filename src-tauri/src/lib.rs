@@ -43,6 +43,12 @@ fn pick_port() -> u16 {
 /// user-installed CLIs the server shells out to (ffmpeg, ffprobe, codex,
 /// codex-imagegen) go missing. Recover the interactive login shell's PATH and
 /// fold in a few common bin dirs.
+#[cfg(windows)]
+fn resolve_user_path() -> String {
+    std::env::var("PATH").unwrap_or_default()
+}
+
+#[cfg(not(windows))]
 fn resolve_user_path() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
 
@@ -128,19 +134,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .expect("server.js has no parent dir")
         .to_path_buf();
 
-    // The Node runtime ships as a resource, not the sidecar — a binary launched
-    // from Contents/MacOS/ gets its own macOS Dock tile (tauri-apps/tauri#14014).
-    // The `helios-node` sidecar is a shim that hides itself from the Dock and
-    // then exec's this.
-    let node_rel = if cfg!(windows) {
-        "server/node-bin/node.exe"
-    } else {
-        "server/node-bin/node"
-    };
-    let node_bin = app
-        .path()
-        .resolve(node_rel, tauri::path::BaseDirectory::Resource)?;
-
+    // Windows runs Node as the sidecar; Unix uses the loader to exec a resource.
     let mut cmd = app
         .shell()
         .sidecar("helios-node")?
@@ -149,15 +143,24 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
             "--disable-warning=ExperimentalWarning".to_string(), // node:sqlite
             "-r".to_string(),
             "./sidecar-guard.js".to_string(),
-            server_entry.to_string_lossy().to_string(),
+            // Node cannot resolve the extended Windows resource path reliably.
+            "server.js".to_string(),
         ])
-        .env("HELIOS_NODE_BIN", node_bin.to_string_lossy().to_string())
         .env("PATH", resolve_user_path())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
         .env("HELIOS_DATA_DIR", data_dir.to_string_lossy().to_string())
         .env("HELIOS_MEDIA_DIR", media_dir.to_string_lossy().to_string());
+
+    #[cfg(not(windows))]
+    {
+        let node_bin = app.path().resolve(
+            "server/node-bin/node",
+            tauri::path::BaseDirectory::Resource,
+        )?;
+        cmd = cmd.env("HELIOS_NODE_BIN", node_bin.to_string_lossy().to_string());
+    }
 
     // codex-imagegen is spawned from inside the Next.js server with the
     // sidecar's env, so a .zshrc override like CODEX_IMAGEGEN_MODEL has to be
