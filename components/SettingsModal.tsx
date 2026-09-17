@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { LocalUpdateButton } from "@/components/UpdateBanner";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MODEL_GROUPS } from "@/lib/models";
 import { useWorkflowStore } from "@/lib/store";
@@ -1584,6 +1585,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </button>
             );
           })}
+          <LocalUpdateButton />
         </div>
 
         {/* ── Right content ── */}

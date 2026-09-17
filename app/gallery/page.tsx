@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -292,6 +292,7 @@ interface SavedSettings {
   azureCustomHeight?: number;
   promptTextMode?: "text" | "json" | "yaml";
   multiPromptMode?: boolean;
+  enhancePrompt?: boolean;
   vidStartFrameUrl?: string | null;
   vidEndFrameUrl?: string | null;
   vidResourceUrls?: string[];
@@ -703,6 +704,25 @@ function GalleryInner() {
     }
   }, []);
   const [submitting, setSubmitting] = useState(false);
+  const [expandingPrompt, setExpandingPrompt] = useState(false);
+  const [enhancePrompt, setEnhancePrompt] = useState(() => loadSettings(tab, selectedFolderId)?.enhancePrompt ?? false);
+  const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
+  const [promptUndo, setPromptUndo] = useState<{
+    original: string; mode: "text" | "json" | "yaml"; enhanced: string;
+  } | null>(null);
+  const promptExpansion = useRef<AbortController | null>(null);
+  const latestPromptDraft = useRef({ prompt, tab, folderId: selectedFolderId });
+  // An edit (even one later undone) invalidates an in-flight enhancement.
+  // Layout cleanup runs synchronously with the committed change, before a late
+  // response can insert its result while passive effects are still pending.
+  useLayoutEffect(() => {
+    latestPromptDraft.current = { prompt, tab, folderId: selectedFolderId };
+    return () => { promptExpansion.current?.abort(); };
+  }, [tab, selectedFolderId, prompt]);
+  useEffect(() => {
+    setPromptUndo(current => current?.enhanced === prompt ? current : null);
+    setReviewedPrompt(current => current === prompt ? current : null);
+  }, [prompt]);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
   const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab, selectedFolderId)?.promptTextMode ?? "text");
   const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.multiPromptMode ?? false);
@@ -1073,6 +1093,9 @@ function GalleryInner() {
     }
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
     const saved = loadSettings(tab, prevFolderIdRef.current);
+    setEnhancePrompt(saved?.enhancePrompt ?? false);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
     const azureOpts = (model as { azureResolutionOptions?: string[] }).azureResolutionOptions;
     const savedIsCustom = saved?.aspectRatio === "custom" && Number.isFinite(saved.azureCustomWidth) && Number.isFinite(saved.azureCustomHeight) && isAzureActiveForModel(model.id, azureOpts);
@@ -1237,7 +1260,7 @@ function GalleryInner() {
       .map(r => r.cdnUrl!))];
     const readyCdnUrl = (r: RefImage) => !r.uploading && !r.error && !!r.cdnUrl;
     const s: SavedSettings = {
-      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode,
+      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, enhancePrompt,
       vidStartFrameUrl: vidStartFrame?.cdnUrl ?? null,
       vidEndFrameUrl: vidEndFrame?.cdnUrl ?? null,
       vidResourceUrls: vidResources.filter(readyCdnUrl).map(r => r.cdnUrl!),
@@ -1249,7 +1272,7 @@ function GalleryInner() {
     };
     settingsSnapshotRef.current = s;
     saveSettings(tab, prevFolderIdRef.current, s);
-  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
+  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, enhancePrompt, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
 
   // Save/restore all settings when switching folders
   useEffect(() => {
@@ -1281,6 +1304,9 @@ function GalleryInner() {
     setAzureResolution(saved?.azureResolution ?? "1k");
     setPromptTextMode(saved?.promptTextMode ?? "text");
     setMultiPromptMode(saved?.multiPromptMode ?? false);
+    setEnhancePrompt(saved?.enhancePrompt ?? false);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
     setRefImages(prev => { prev.forEach(r => URL.revokeObjectURL(r.objectUrl)); return savedUrls.map(toRef); });
     setTaggedImages(
       saved?.taggedImages?.length
@@ -1360,7 +1386,10 @@ function GalleryInner() {
     if (!hasRefImgs && imgModel.textOnlyPromptMaxLength) return imgModel.textOnlyPromptMaxLength;
     return imgModel.apiInput.promptMaxLength;
   })();
-  const promptOverLimit = promptMaxLength !== null && prompt.length > promptMaxLength;
+  const batchPromptCount = prompt.split(/\n\n+/).filter(block => block.trim()).length;
+  const promptOverLimit = promptMaxLength !== null && (multiPromptMode
+    ? prompt.split(/\n\n+/).some(block => block.trim() && block.length > promptMaxLength)
+    : prompt.length > promptMaxLength);
 
   const handleFilePick = async (files: FileList) => {
     if (!imgModel?.supportsImages) return;
@@ -1783,8 +1812,93 @@ function GalleryInner() {
     throw new Error("Timed out");
   };
 
+  const expandPrompt = async (source: string, blockIndex?: number, allBlocks = false) => {
+    if (promptExpansion.current || submitting) return;
+    const snapshot = prompt;
+    const blocks = allBlocks ? snapshot.split(/\n\n+/) : [source];
+    const tasks = blocks.map((text, index) => ({ index, text,
+      idea: text.trim().replace(/^\/prompt(?:\s+|$)/i, "").trim() })).filter(item => item.text.trim());
+    if (!tasks.length || tasks.some(item => !item.idea)) { setGenError("Add an idea after /prompt."); return; }
+    const controller = new AbortController();
+    promptExpansion.current = controller;
+    setExpandingPrompt(true);
+    setGenError("");
+    try {
+      let usedKie = false;
+      for (const task of tasks) {
+        controller.signal.throwIfAborted();
+        const response = await fetch("/api/expand-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-helios-prompt": "1" },
+          body: JSON.stringify({ idea: task.idea, kind: isVideo ? "video" : "image" }),
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not enhance prompt.");
+        if (typeof result.prompt !== "string" || !result.prompt.trim()) throw new Error("Enhancement returned no prompt. Original text preserved.");
+        blocks[task.index] = result.prompt;
+        usedKie ||= result.provider === "kie";
+      }
+      controller.signal.throwIfAborted();
+      let enhanced = blocks.join("\n\n");
+      if (!allBlocks && blockIndex !== undefined) {
+        const originalBlocks = snapshot.split(/\n\n+/);
+        originalBlocks[blockIndex] = enhanced;
+        enhanced = originalBlocks.join("\n\n");
+      }
+      const latest = latestPromptDraft.current;
+      if (latest.prompt !== snapshot || latest.tab !== tab || latest.folderId !== selectedFolderId) return;
+      // Guard all insertion-related state together, not only the text setter.
+      // There is no await between the latest-draft check and these updates.
+      setPrompt(enhanced);
+      setPromptUndo({ original: snapshot, mode: promptTextMode, enhanced });
+      setReviewedPrompt(allBlocks || !multiPromptMode ? enhanced : null);
+      setPromptTextMode("text");
+      if (usedKie) addToast("Enhanced with Kie Luna — Codex ChatGPT is not configured.", "info");
+      requestAnimationFrame(() => {
+        if (inputRef.current && !multiPromptMode && !controller.signal.aborted) {
+          resizeTextarea(inputRef.current, promptExpanded ? window.innerHeight * 0.75 - 220 : 264);
+          inputRef.current.focus();
+        }
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) setGenError((error as Error).message);
+    } finally {
+      promptExpansion.current = null;
+      setExpandingPrompt(false);
+    }
+  };
+
+  const restoreOriginalPrompt = () => {
+    if (!promptUndo || promptUndo.enhanced !== prompt || expandingPrompt) return;
+    setPrompt(promptUndo.original);
+    setPromptTextMode(promptUndo.mode);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
+    requestAnimationFrame(() => {
+      const inputs = multiPromptMode
+        ? Array.from(document.querySelectorAll<HTMLTextAreaElement>("[data-prompt-stack] textarea"))
+        : inputRef.current ? [inputRef.current] : [];
+      inputs.forEach(input => resizeTextarea(input, promptExpanded ? window.innerHeight * 0.75 - 220 : 264));
+      inputs[0]?.focus();
+    });
+  };
+
   const generate = async () => {
+    if (promptExpansion.current || expandingPrompt) return;
+    if (multiPromptMode && batchPromptCount === 0) return;
+    const blocks = multiPromptMode ? prompt.split(/\n\n+/) : [prompt];
+    const commandIndex = blocks.findIndex(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+    if (commandIndex >= 0) {
+      await expandPrompt(blocks[commandIndex], multiPromptMode ? commandIndex : undefined, enhancePrompt && multiPromptMode);
+      return; // Expanding text never starts media generation or creates a tile.
+    }
+    if (enhancePrompt && prompt.trim() && reviewedPrompt !== prompt) {
+      await expandPrompt(prompt, undefined, multiPromptMode);
+      return; // Pause for review; a second submission uses the reviewed text.
+    }
     if (kieKeySet === false) return;
+    if (promptOverLimit) { setGenError("A prompt exceeds the selected model's character limit."); return; }
     if (!prompt.trim() && !isVideo) return;
     requestNotificationPermission();
     if (refImages.some(r => r.uploading)) { setGenError("Images still uploading…"); setTimeout(() => setGenError(""), 3_000); return; }
@@ -2198,7 +2312,12 @@ function GalleryInner() {
   const displayVidRefAudios = getDisplayOrder(vidRefAudios, draggingId, reorderOverId);
 
   const vidRequiresPrompt = isVideo && !!(vidModel?.apiInput.promptMaxLength);
-  const canGenerate = kieKeySet === false ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const hasPromptCommand = (multiPromptMode ? prompt.split(/\n\n+/) : [prompt]).some(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+  const needsEnhancement = hasPromptCommand || (enhancePrompt && !!prompt.trim() && reviewedPrompt !== prompt);
+  const canGenerate = expandingPrompt || submitting || (multiPromptMode && batchPromptCount === 0) ? false : needsEnhancement ? true : kieKeySet === false ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const primaryActionLabel = needsEnhancement
+    ? multiPromptMode && enhancePrompt ? `Enhance ${batchPromptCount} prompt${batchPromptCount === 1 ? "" : "s"}` : "Enhance prompt"
+    : multiPromptMode && batchPromptCount > 0 ? `Generate ${batchPromptCount} ${isVideo ? "video" : "image"}${batchPromptCount === 1 ? "" : "s"}` : "Generate";
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
@@ -3633,6 +3752,9 @@ function GalleryInner() {
                     overlayInnerRef.current.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`;
                 }}
                 onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(prompt.trim())) {
+                    e.preventDefault(); void expandPrompt(prompt); return;
+                  }
                   if (atMenuOpen) {
                     if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                     if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3641,7 +3763,7 @@ function GalleryInner() {
                   }
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); }
                 }}
-                disabled={submitting}
+                disabled={submitting || expandingPrompt}
                 style={{
                   position: "relative",
                   display: "block",
@@ -3746,59 +3868,71 @@ function GalleryInner() {
                 if (!b.trim() && acc.some(x => !x.trim())) return acc; // max one empty block
                 return [...acc, b];
               }, []);
-              let promptIndex = 0;
+              const focusBlock = (index: number) => {
+                setExpandedPromptIdx(index);
+                requestAnimationFrame(() => {
+                  const textarea = document.querySelectorAll<HTMLTextAreaElement>('[data-prompt-stack] textarea')[index];
+                  textarea?.focus();
+                  textarea?.scrollIntoView({ block: "nearest" });
+                });
+              };
+              const removeBlock = (index: number) => {
+                const next = blocks.filter((_, i) => i !== index);
+                setPrompt(next.join('\n\n'));
+                focusBlock(Math.max(0, Math.min(index, next.length - 1)));
+              };
               return (
+                <div style={{ minWidth: 0, minHeight: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "0 2px 10px" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>Multi prompts · {batchPromptCount}</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>One output per prompt. Settings apply to all.</span>
+                </div>
                 <div data-prompt-stack="" style={{
-                  display: "flex", flexDirection: "column", gap: "6px",
-                  maxHeight: promptExpanded ? "calc(75vh - 220px)" : "204px", overflowY: "auto", scrollbarWidth: "none",
+                  display: "flex", flexDirection: "column", gap: "8px", minWidth: 0,
+                  maxHeight: promptExpanded ? "calc(75vh - 300px)" : "280px", overflowY: "auto", scrollbarWidth: "thin",
                 }}>
                   {blocks.map((block, blockIdx) => {
                     const isNonEmpty = !!block.trim();
-                    const displayIdx = isNonEmpty ? ++promptIndex : null;
                     const isExpanded = expandedPromptIdx === blockIdx;
+                    const overLimit = isNonEmpty && promptMaxLength !== null && block.length > promptMaxLength;
                     return (
                       <div
                         key={blockIdx}
-                        onClick={(e) => {
-                          const next = isExpanded ? null : blockIdx;
-                          setExpandedPromptIdx(next);
-                          if (next !== null) {
-                            requestAnimationFrame(() => {
-                              const stack = document.querySelector('[data-prompt-stack]');
-                              const ta = stack?.querySelectorAll<HTMLTextAreaElement>('textarea')[blockIdx];
-                              if (ta) ta.focus();
-                            });
-                          } else {
-                            const rowEl = e.currentTarget as HTMLElement;
-                            requestAnimationFrame(() => rowEl.scrollIntoView({ block: "nearest", behavior: "smooth" }));
-                          }
-                        }}
                         style={{
-                          position: "relative",
-                          display: "flex", alignItems: "flex-start", gap: "8px",
+                          position: "relative", minWidth: 0,
+                          display: "flex", flexDirection: "column", gap: "8px",
                           background: isExpanded ? "rgba(45,212,191,0.04)" : "rgba(255,255,255,0.03)",
-                          border: `1px solid ${isExpanded ? "rgba(45,212,191,0.18)" : isNonEmpty ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.04)"}`,
-                          borderRadius: "8px", padding: "7px 24px 7px 10px",
-                          opacity: isNonEmpty ? 1 : 0.4,
-                          cursor: isExpanded ? "default" : "pointer",
+                          border: `1px solid ${overLimit ? "rgba(248,113,113,0.6)" : isExpanded ? "rgba(45,212,191,0.3)" : "rgba(255,255,255,0.09)"}`,
+                          borderRadius: "8px", padding: "10px 12px",
                           transition: "background 120ms, border-color 120ms",
                           flexShrink: 0,
                         }}
                       >
-                        <span style={{
-                          fontSize: "10px", fontWeight: 700, letterSpacing: "0.06em",
-                          color: isNonEmpty ? "#2DD4BF" : "rgba(255,255,255,0.25)",
-                          fontFamily: "monospace", lineHeight: "22px", flexShrink: 0, minWidth: "18px",
-                        }}>
-                          {displayIdx !== null ? String(displayIdx).padStart(2, '0') : "—"}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, minWidth: 0 }}>
+                          <label htmlFor={`multi-prompt-${blockIdx}`} style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.65)", marginRight: "auto" }}>Prompt {blockIdx + 1}</label>
+                          {promptMaxLength !== null && <span id={`multi-limit-${blockIdx}`} style={{ fontSize: 10, fontVariantNumeric: "tabular-nums", color: overLimit ? "#f87171" : "rgba(255,255,255,0.3)" }}>
+                            {block.length}/{promptMaxLength}{overLimit ? " · Too long" : ""}
+                          </span>}
+                          <button type="button" aria-label={`Duplicate prompt ${blockIdx + 1}`} title="Duplicate this prompt"
+                            disabled={submitting || expandingPrompt || !isNonEmpty}
+                            onClick={() => { const next = [...blocks]; next.splice(blockIdx + 1, 0, block); setPrompt(next.join('\n\n')); focusBlock(blockIdx + 1); }}
+                            className="disabled:opacity-30" style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", cursor: "pointer", background: "none", border: "none", padding: "2px 4px" }}>Duplicate</button>
+                          <button type="button" aria-label={`Remove prompt ${blockIdx + 1}`} title="Remove this prompt"
+                            disabled={submitting || expandingPrompt} onClick={() => removeBlock(blockIdx)}
+                            className="disabled:opacity-30" style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", cursor: "pointer", background: "none", border: "none", padding: "2px 4px" }}>Remove</button>
+                        </div>
                         <div data-block-wrapper="" style={{ flex: 1, position: "relative", minWidth: 0 }}>
                         <textarea
+                          id={`multi-prompt-${blockIdx}`}
+                          aria-label={`Prompt ${blockIdx + 1}`}
+                          aria-invalid={overLimit}
+                          aria-describedby={promptMaxLength !== null ? `multi-limit-${blockIdx}` : undefined}
+                          ref={node => { if (node) { resizeTextarea(node, isExpanded ? 132 : 44); if (!isExpanded) node.scrollTop = 0; } }}
                           value={block}
-                          rows={1}
+                          rows={2}
                           data-prompt-input=""
-                          placeholder={blockIdx === 0 && !isNonEmpty ? "Describe the scene you imagine…" : undefined}
-                          onClick={e => { if (isExpanded) e.stopPropagation(); }}
+                          className="placeholder:text-white/30"
+                          placeholder={isVideo ? "Describe the video you imagine…" : "Describe the scene you imagine…"}
                           onDragOver={e => {
                             // Textareas are NATIVE drop targets: without explicit handlers WebKit
                             // grabs file drags itself (expanded mode = the textarea covers the whole
@@ -3816,6 +3950,7 @@ function GalleryInner() {
                             }
                           }}
                           onFocus={e => {
+                            setExpandedPromptIdx(blockIdx);
                             activeBlockRef.current = e.currentTarget;
                             activeBlockIdxRef.current = blockIdx;
                             const ta = e.currentTarget;
@@ -3841,6 +3976,7 @@ function GalleryInner() {
                             }
                           }}
                           onChange={e => {
+                            resizeTextarea(e.currentTarget, 132);
                             const newVal = e.target.value;
                             const cursor = e.target.selectionStart ?? newVal.length;
                             const match = newVal.slice(0, cursor).match(/@(\w*)$/);
@@ -3876,6 +4012,9 @@ function GalleryInner() {
                             }
                           }}
                           onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(block.trim())) {
+                              e.preventDefault(); void expandPrompt(block, blockIdx); return;
+                            }
                             if (atMenuOpen) {
                               if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                               if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3883,20 +4022,6 @@ function GalleryInner() {
                               if (e.key === "Escape") { setMentionQuery(null); return; }
                             }
                             if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); return; }
-                            if (e.key === "Enter" && !isExpanded) {
-                              // Expand collapsed block on Enter instead of inserting newline
-                              e.preventDefault();
-                              setExpandedPromptIdx(blockIdx);
-                              requestAnimationFrame(() => {
-                                const stack = document.querySelector('[data-prompt-stack]');
-                                const ta = stack?.querySelectorAll<HTMLTextAreaElement>('textarea')[blockIdx];
-                                if (ta) {
-                                  ta.focus();
-                                  ta.setSelectionRange(ta.value.length, ta.value.length);
-                                }
-                              });
-                              return;
-                            }
                             if ((e.key === "Backspace" || e.key === "Delete") && !block.trim() && blocks.length > 1) {
                               e.preventDefault();
                               const updated = blocks.filter((_, i) => i !== blockIdx);
@@ -3914,7 +4039,7 @@ function GalleryInner() {
                               });
                             }
                           }}
-                          disabled={submitting}
+                          disabled={submitting || expandingPrompt}
                           style={{
                             display: "block", width: "100%",
                             background: "transparent", border: "none", outline: "none",
@@ -3926,8 +4051,8 @@ function GalleryInner() {
                             letterSpacing: promptTextMode !== "text" ? "normal" : "-0.01em",
                             padding: 0, resize: "none",
                             ...(isExpanded
-                              ? { fieldSizing: "content", maxHeight: "330px", overflowY: "auto", scrollbarWidth: "none" }
-                              : { height: "22px", maxHeight: "22px", overflowY: "hidden", whiteSpace: "nowrap" }
+                              ? { minHeight: "44px", maxHeight: "132px", overflowY: "auto", scrollbarWidth: "thin" }
+                              : { height: "44px", minHeight: "44px", maxHeight: "44px", overflowY: "hidden" }
                             ),
                           } as React.CSSProperties}
                         />
@@ -3937,7 +4062,7 @@ function GalleryInner() {
                               data-block-overlay=""
                               style={{
                                 fontSize: "13.5px", fontFamily: "monospace", lineHeight: "22px",
-                                whiteSpace: isExpanded ? "pre-wrap" : "nowrap",
+                                whiteSpace: "pre-wrap",
                                 wordBreak: "break-word",
                               }}
                             >
@@ -3953,7 +4078,7 @@ function GalleryInner() {
                               style={{
                                 fontSize: "13.5px", fontFamily: "inherit", lineHeight: "22px",
                                 letterSpacing: "-0.01em",
-                                whiteSpace: isExpanded ? "pre-wrap" : "nowrap",
+                                whiteSpace: "pre-wrap",
                                 wordBreak: "break-word",
                                 willChange: "transform",
                               }}
@@ -3978,54 +4103,23 @@ function GalleryInner() {
                           </div>
                         )}
                         </div>
-                        {isNonEmpty && promptMaxLength !== null && (
-                          <span style={{
-                            fontSize: "10px", fontWeight: 600,
-                            color: block.length > promptMaxLength ? "#f87171" : "rgba(255,255,255,0.25)",
-                            fontFamily: "monospace", lineHeight: "22px",
-                            fontVariantNumeric: "tabular-nums",
-                            ...(isExpanded
-                              ? { position: "absolute", bottom: "6px", right: "24px" }
-                              : { flexShrink: 0 }
-                            ),
-                          } as React.CSSProperties}>
-                            {block.length}/{promptMaxLength}
-                          </span>
-                        )}
-                        {blocks.length > 1 && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              const updated = blocks.filter((_, i) => i !== blockIdx);
-                              setPrompt(updated.join('\n\n'));
-                              setExpandedPromptIdx(prev => {
-                                if (prev === null) return null;
-                                if (prev === blockIdx) return null;
-                                return prev > blockIdx ? prev - 1 : prev;
-                              });
-                            }}
-                            disabled={submitting}
-                            style={{
-                              position: "absolute", top: "50%", right: "5px",
-                              transform: "translateY(-50%)",
-                              width: "16px", height: "16px",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              background: "none", border: "none", padding: 0,
-                              color: "rgba(255,255,255,0.3)",
-                              cursor: submitting ? "not-allowed" : "pointer",
-                              borderRadius: "4px",
-                              fontSize: "12px", lineHeight: 1,
-                              transition: "color 120ms",
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.75)")}
-                            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
-                          >
-                            ×
-                          </button>
-                        )}
                       </div>
                     );
                   })}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, padding: "10px 2px 0" }}>
+                  <button type="button" disabled={submitting || expandingPrompt} aria-label="Add prompt"
+                    onClick={() => {
+                      const empty = blocks.findIndex(block => !block.trim());
+                      if (empty >= 0) { focusBlock(empty); return; }
+                      setPrompt([...blocks, ""].join('\n\n'));
+                      focusBlock(blocks.length);
+                    }}
+                    className="disabled:opacity-30" style={{ padding: "5px 9px", borderRadius: 6, fontSize: 11, color: "#2DD4BF", border: "1px solid rgba(45,212,191,0.25)", background: "rgba(45,212,191,0.06)", cursor: "pointer" }}>
+                    + Add prompt
+                  </button>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>Blank lines separate prompts.</span>
+                </div>
                 </div>
               );
             })()}
@@ -4033,12 +4127,12 @@ function GalleryInner() {
             {/* Bottom row: controls + generate button — always stays at the bottom, never moves on expand */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px", marginTop: promptExpanded ? "auto" : "4px" }}>
               {/* Controls group */}
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
                 {/* Model picker */}
                 <CustomDropdown
                   value={modelId}
                   onChange={setModelId}
-                  disabled={submitting}
+                  disabled={submitting || expandingPrompt}
                   options={models.map(m => ({
                     value: m.id,
                     label: m.name,
@@ -4053,7 +4147,7 @@ function GalleryInner() {
                   <CustomDropdown
                     value={providerId}
                     onChange={(v) => setModelProvider(modelId, v as (typeof PROVIDERS)[number]["id"])}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     options={PROVIDERS.map(p => ({ value: p.id, label: p.label, providerIcon: <ProviderBackendIcon id={p.id} /> }))}
                     showChevron
                   />
@@ -4064,7 +4158,7 @@ function GalleryInner() {
                   <CustomDropdown
                     value={quality}
                     onChange={setQuality}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     options={qualityOpts.map(q => ({ value: q, label: q.toUpperCase() }))}
                     icon={<DiamondIcon />}
                   />
@@ -4075,7 +4169,7 @@ function GalleryInner() {
                   <CustomDropdown
                     value={azureResolution}
                     onChange={setAzureResolution}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     options={azureResolutionOpts.map(r => ({ value: r, label: r.toUpperCase() }))}
                     icon={<DiamondIcon />}
                   />
@@ -4086,7 +4180,7 @@ function GalleryInner() {
                   <AspectRatioDropdown
                     value={aspectRatio}
                     onChange={setAspectRatio}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     ratios={ratios}
                     allowCustom={isAzureProvider && azureResolutionOpts.length > 0}
                     customWidth={azureCustomWidth}
@@ -4119,14 +4213,14 @@ function GalleryInner() {
                     <button
                       ref={durPillRef}
                       onClick={() => durPickerOpen ? closeDurPicker() : openDurPicker()}
-                      disabled={submitting}
+                      disabled={submitting || expandingPrompt}
                       style={{
                         display: "flex", alignItems: "center", gap: "5px",
                         height: "36px", padding: "0 9px",
                         border: "none",
                         background: durPickerOpen ? "rgba(255,255,255,0.08)" : "transparent",
                         color: "#fff", fontSize: "13px", fontFamily: "inherit",
-                        cursor: submitting ? "not-allowed" : "pointer",
+                        cursor: submitting || expandingPrompt ? "not-allowed" : "pointer",
                         transition: "background 140ms",
                         flexShrink: 0,
                       }}>
@@ -4157,7 +4251,7 @@ function GalleryInner() {
                   <CustomDropdown
                     value={mode}
                     onChange={setMode}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     options={vidModes.map(m => ({ value: m.value, label: m.label }))}
                   />
                 )}
@@ -4167,7 +4261,7 @@ function GalleryInner() {
                   <CustomDropdown
                     value={resolution || vidModel!.defaultResolution!}
                     onChange={setResolution}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     options={vidModel!.resolutions!.map(r => ({ value: r, label: r }))}
                   />
                 )}
@@ -4176,7 +4270,7 @@ function GalleryInner() {
                 {isVideo && vidModel?.sound && (
                   <button
                     onClick={() => setSound(s => !s)}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     style={{
                       display: "flex", alignItems: "center", gap: "7px",
                       height: "36px", padding: "0 12px",
@@ -4185,7 +4279,7 @@ function GalleryInner() {
                       background: sound ? "rgba(94,234,212,0.12)" : "rgba(255,255,255,0.05)",
                       color: sound ? "#5EEAD4" : "rgba(255,255,255,0.55)",
                       fontSize: "13px", fontFamily: "inherit",
-                      cursor: submitting ? "not-allowed" : "pointer",
+                      cursor: submitting || expandingPrompt ? "not-allowed" : "pointer",
                       transition: "background 150ms, color 150ms, border-color 150ms",
                       flexShrink: 0,
                     }}>
@@ -4212,7 +4306,7 @@ function GalleryInner() {
                 {isVideo && (modelId === "veo3" || modelId === "veo3_fast") && (
                   <button
                     onClick={() => setVeoMode(m => m === "frames" ? "references" : "frames")}
-                    disabled={submitting}
+                    disabled={submitting || expandingPrompt}
                     style={{
                       display: "flex", alignItems: "center", gap: "7px",
                       height: "36px", padding: "0 12px",
@@ -4221,7 +4315,7 @@ function GalleryInner() {
                       background: veoMode === "references" ? "rgba(251,146,60,0.12)" : "rgba(255,255,255,0.05)",
                       color: veoMode === "references" ? "#fb923c" : "rgba(255,255,255,0.55)",
                       fontSize: "13px", fontFamily: "inherit",
-                      cursor: submitting ? "not-allowed" : "pointer",
+                      cursor: submitting || expandingPrompt ? "not-allowed" : "pointer",
                       transition: "background 150ms, color 150ms, border-color 150ms",
                       flexShrink: 0,
                     }}>
@@ -4261,13 +4355,13 @@ function GalleryInner() {
                       placeholder="—"
                       value={seed ?? 0}
                       onChange={(e) => setSeed(e.target.value === "" ? 0 : Math.max(0, Math.min(2147483647, parseInt(e.target.value, 10))))}
-                      disabled={submitting}
+                      disabled={submitting || expandingPrompt}
                       className="seed-input"
                       style={{
                         width: "72px", background: "transparent", border: "none", outline: "none",
                         color: "#fff", fontSize: "12px", fontFamily: "inherit",
                         textAlign: "right", fontVariantNumeric: "tabular-nums",
-                        cursor: submitting ? "not-allowed" : "text",
+                        cursor: submitting || expandingPrompt ? "not-allowed" : "text",
                         MozAppearance: "textfield", appearance: "textfield",
                       }}
                     />
@@ -4288,7 +4382,7 @@ function GalleryInner() {
                   }}>
                     <button
                       onClick={() => setCount(c => Math.max(1, c - 1))}
-                      disabled={submitting || count <= 1}
+                      disabled={submitting || expandingPrompt || count <= 1}
                       style={{
                         width: "34px", height: "100%", border: "none", background: "transparent",
                         color: count <= 1 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
@@ -4306,7 +4400,7 @@ function GalleryInner() {
                     </span>
                     <button
                       onClick={() => setCount(c => Math.min(4, c + 1))}
-                      disabled={submitting || count >= 4}
+                      disabled={submitting || expandingPrompt || count >= 4}
                       style={{
                         width: "34px", height: "100%", border: "none", background: "transparent",
                         color: count >= 4 ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.55)",
@@ -4320,6 +4414,8 @@ function GalleryInner() {
 
                 {/* Multi-prompt toggle */}
                 <button
+                  type="button" role="switch" aria-checked={multiPromptMode} aria-label="Multi"
+                  title="Multiple prompts, one output each. Model and provider settings apply to all."
                   onClick={() => {
                     setMultiPromptMode(m => {
                       if (m) {
@@ -4332,7 +4428,7 @@ function GalleryInner() {
                     });
                     setExpandedPromptIdx(null);
                   }}
-                  disabled={submitting}
+                  disabled={submitting || expandingPrompt}
                   style={{
                     display: "flex", alignItems: "center", gap: "7px",
                     height: "36px", padding: "0 12px",
@@ -4341,7 +4437,7 @@ function GalleryInner() {
                     background: multiPromptMode ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.05)",
                     color: multiPromptMode ? "#2DD4BF" : "rgba(255,255,255,0.55)",
                     fontSize: "13px", fontFamily: "inherit",
-                    cursor: submitting ? "not-allowed" : "pointer",
+                    cursor: submitting || expandingPrompt ? "not-allowed" : "pointer",
                     transition: "background 150ms, color 150ms",
                     flexShrink: 0,
                   }}>
@@ -4364,6 +4460,36 @@ function GalleryInner() {
 
                 {/* Text / JSON / YAML mode toggle */}
                 <button
+                  type="button" role="switch" aria-checked={enhancePrompt} aria-label="Enhance"
+                  title="Enhance with Codex Luna, then review before generating. Uses Kie only if Codex is not configured."
+                  disabled={submitting || expandingPrompt}
+                  onClick={() => setEnhancePrompt(value => !value)}
+                  style={{ display: "flex", alignItems: "center", gap: "7px", height: "36px", padding: "0 12px",
+                    borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0,
+                    background: enhancePrompt ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.05)",
+                    color: enhancePrompt ? "#2DD4BF" : "rgba(255,255,255,0.55)", fontSize: "13px",
+                    cursor: submitting || expandingPrompt ? "not-allowed" : "pointer" }}>
+                  <span style={{ width: "28px", height: "16px", borderRadius: "8px", position: "relative",
+                    background: enhancePrompt ? "#2DD4BF" : "rgba(255,255,255,0.18)" }}>
+                    <span style={{ position: "absolute", top: "2px", left: enhancePrompt ? "14px" : "2px",
+                      width: "12px", height: "12px", borderRadius: "50%", background: enhancePrompt ? "#0B3B38" : "#fff" }} />
+                  </span>
+                  Enhance
+                </button>
+
+                {promptUndo?.enhanced === prompt && (
+                  <button type="button" onClick={restoreOriginalPrompt}
+                    disabled={submitting || expandingPrompt}
+                    title="Restore the exact text and display mode from before enhancement."
+                    style={{ height: "36px", padding: "0 10px", borderRadius: "8px",
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
+                      color: "rgba(255,255,255,0.55)", fontSize: "13px", fontFamily: "inherit",
+                      cursor: submitting || expandingPrompt ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                    Restore original
+                  </button>
+                )}
+
+                <button
                   onClick={() => {
                     if (promptTextMode !== "text") {
                       setPromptTextMode("text");
@@ -4381,7 +4507,7 @@ function GalleryInner() {
                       }
                     }
                   }}
-                  disabled={submitting}
+                  disabled={submitting || expandingPrompt}
                   style={{
                     display: "flex", alignItems: "center", gap: "7px",
                     height: "36px", padding: "0 12px",
@@ -4390,7 +4516,7 @@ function GalleryInner() {
                     background: promptTextMode !== "text" ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.05)",
                     color: promptTextMode !== "text" ? "#2DD4BF" : "rgba(255,255,255,0.55)",
                     fontSize: "13px", fontFamily: "inherit",
-                    cursor: submitting ? "not-allowed" : "pointer",
+                    cursor: submitting || expandingPrompt ? "not-allowed" : "pointer",
                     transition: "background 150ms, color 150ms, border-color 150ms",
                     flexShrink: 0,
                   }}>
@@ -4433,11 +4559,12 @@ function GalleryInner() {
                 <Button
                   onClick={generate}
                   disabled={!canGenerate}
+                  aria-label={primaryActionLabel}
                   variant="outline"
                   size="sm"
                   className="border-none bg-[rgba(45,212,191,0.25)] text-[rgba(45,212,191,0.9)] hover:bg-[rgba(45,212,191,0.38)] hover:text-[rgba(45,212,191,0.9)] disabled:bg-[rgba(45,212,191,0.1)] disabled:text-[rgba(45,212,191,0.3)]"
                 >
-                  {submitting ? (
+                  {submitting || expandingPrompt ? (
                     <span style={{
                       width: "11px", height: "11px", borderRadius: "50%",
                       border: "2px solid rgba(45,212,191,0.25)", borderTopColor: "rgba(45,212,191,0.9)",
@@ -4449,12 +4576,13 @@ function GalleryInner() {
                       <path d="m21.854 2.147-10.94 10.939" />
                     </svg>
                   )}
-                  {!submitting && (
+                  {expandingPrompt && <span role="status">Enhancing…</span>}
+                  {!submitting && !expandingPrompt && (multiPromptMode || needsEnhancement || enhancePrompt ? <span>{primaryActionLabel}</span> : (
                     <KbdGroup data-icon="inline-end" className="gap-0.5">
                       <Kbd>⌘</Kbd>
                       <Kbd>↵</Kbd>
                     </KbdGroup>
-                  )}
+                  ))}
                 </Button>
               </div>
             </div>{/* end bottom row */}
