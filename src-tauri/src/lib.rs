@@ -59,9 +59,19 @@ fn resolve_user_path() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     let mut parts: Vec<String> = Vec::new();
     if let Some(sp) = shell_path {
-        parts.extend(sp.split(':').map(String::from));
+        #[cfg(windows)]
+    let sep = ';';
+    #[cfg(not(windows))]
+    let sep = ':';
+    #[cfg(windows)]
+    { parts.extend(sp.split(';').map(String::from)); }
+    #[cfg(not(windows))]
+    { parts.extend(sp.split(':').map(String::from)); }
     }
-    parts.extend(base.split(':').map(String::from));
+    #[cfg(windows)]
+    { parts.extend(base.split(';').map(String::from)); }
+    #[cfg(not(windows))]
+    { parts.extend(base.split(':').map(String::from)); }
     let extras = [
         "/opt/homebrew/bin".to_string(),
         "/usr/local/bin".to_string(),
@@ -74,7 +84,10 @@ fn resolve_user_path() -> String {
         }
     }
     parts.retain(|p| !p.is_empty());
-    parts.join(":")
+    #[cfg(windows)]
+    { parts.join(";") }
+    #[cfg(not(windows))]
+    { parts.join(":") }
 }
 
 /// Same problem as `resolve_user_path`, for a single scalar var: a GUI-launched
@@ -141,10 +154,34 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .path()
         .resolve(node_rel, tauri::path::BaseDirectory::Resource)?;
 
+    // Windows: Tauri's path resolve() can return verbatim (\\?\-prefixed) paths.
+    // Node's module resolver cannot handle \\?\ paths (lstat reduces them to 'C:'
+    // and dies with EISDIR), so strip the prefix back to a plain Win32 path.
+    #[cfg(windows)]
+    fn unverbatim(p: std::path::PathBuf) -> std::path::PathBuf {
+        let s = p.as_os_str().to_string_lossy();
+        let s = if let Some(r) = s.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{}", r)
+        } else if let Some(r) = s.strip_prefix(r"\\?\") {
+            r.to_string()
+        } else {
+            s.to_string()
+        };
+        std::path::PathBuf::from(s)
+    }
+    #[cfg(not(windows))]
+    fn unverbatim(p: std::path::PathBuf) -> std::path::PathBuf { p }
+
+    let server_entry = unverbatim(server_entry);
+    let node_bin = unverbatim(node_bin);
+    let server_dir = unverbatim(server_dir);
+
+    eprintln!("[tauri] server_entry={} node_bin={} server_dir={}",
+        server_entry.display(), node_bin.display(), server_dir.display());
     let mut cmd = app
         .shell()
         .sidecar("helios-node")?
-        .current_dir(server_dir)
+        .current_dir(&server_dir)
         .args([
             "--disable-warning=ExperimentalWarning".to_string(), // node:sqlite
             "-r".to_string(),
