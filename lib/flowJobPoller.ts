@@ -7,7 +7,9 @@ import { refreshFlowJob, getFlowJob, downloadFlowJob } from "./flowAdapter";
 import { dlog } from "./debugLog";
 import { flowDeadlineMs, flowErrorMessage, isFatalFlowError } from "./flowPollPolicy";
 
-const active = new Set<string>();
+// Per process, not per route bundle: job-status and the submit route must share it.
+const ACTIVE_KEY = Symbol.for("heliosgen.flow-poller.active");
+const active = ((globalThis as typeof globalThis & { [ACTIVE_KEY]?: Set<string> })[ACTIVE_KEY] ??= new Set<string>());
 const POLL_MS = 4_000;
 
 type FlowJobResult =

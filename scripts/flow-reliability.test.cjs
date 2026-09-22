@@ -71,3 +71,16 @@ test("error message carries the diagnostic screenshot path when present", () => 
   assert.equal(flowErrorMessage("boom", "C:/diag/job-1.png"), "boom (screenshot: C:/diag/job-1.png)");
   assert.equal(flowErrorMessage("boom"), "boom");
 });
+
+test("getFlowEngine is one per process even when the module is bundled twice", async () => {
+  // Next gives every route its own copy of lib/flowAdapter.ts; simulate that.
+  const file = require.resolve("../lib/flowAdapter.ts");
+  const first = require(file);
+  delete require.cache[file];
+  const second = require(file);
+  assert.notEqual(first.getFlowEngine, second.getFlowEngine);
+  const a = first.getFlowEngine();
+  const b = second.getFlowEngine();
+  assert.equal(a, b);
+  await Promise.allSettled([a, b]);
+});

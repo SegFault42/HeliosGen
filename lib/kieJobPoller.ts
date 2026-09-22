@@ -30,7 +30,9 @@ const MAX_POLL_MS = 12 * 60 * 1000; // matches the SSE hard cap in job-status
 type Kind = "image" | "video";
 
 // Tasks currently being polled by this process — guards against double-starts.
-const active = new Set<string>();
+// Per process, not per route bundle: job-status and the submit route must share it.
+const ACTIVE_KEY = Symbol.for("heliosgen.kie-poller.active");
+const active = ((globalThis as typeof globalThis & { [ACTIVE_KEY]?: Set<string> })[ACTIVE_KEY] ??= new Set<string>());
 
 export function isPolling(taskId: string): boolean {
   return active.has(taskId);

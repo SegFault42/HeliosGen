@@ -74,10 +74,6 @@ export async function renderPromptImage(prompt: string, outDir: string): Promise
 
 const FLOW_DIST = "F:/CLAUDE/AGENT_AI/google-flow-mcp/dist";
 
-let storeInstance: any = null;
-let browsersInstance: any = null;
-let flowInstance: any = null;
-
 async function getFlowModules() {
   const storeUrl = pathToFileURL(path.join(FLOW_DIST, "store.js")).href;
   const browserUrl = pathToFileURL(path.join(FLOW_DIST, "browser-manager.js")).href;
@@ -96,18 +92,25 @@ async function getFlowModules() {
   };
 }
 
-export async function getFlowEngine() {
-  if (!flowInstance) {
-    const { FlowStore, BrowserManager, FlowAdapter } = await getFlowModules();
-    storeInstance = new FlowStore();
-    browsersInstance = new BrowserManager(storeInstance);
-    flowInstance = new FlowAdapter(storeInstance, browsersInstance, null);
-  }
-  return {
-    store: storeInstance,
-    browsers: browsersInstance,
-    flow: flowInstance,
-  };
+type FlowEngine = { store: any; browsers: any; flow: any };
+const ENGINE_KEY = Symbol.for("heliosgen.flow-engine");
+
+// One engine per server process. Next bundles each route separately, so a
+// module-level singleton gave every route its own browser queue, and those
+// queues then starved each other on the MCP's per-account lock file.
+export function getFlowEngine(): Promise<FlowEngine> {
+  const g = globalThis as typeof globalThis & { [ENGINE_KEY]?: Promise<FlowEngine> };
+  g[ENGINE_KEY] ??= getFlowModules()
+    .then(({ FlowStore, BrowserManager, FlowAdapter }) => {
+      const store = new FlowStore();
+      const browsers = new BrowserManager(store);
+      return { store, browsers, flow: new FlowAdapter(store, browsers, null) };
+    })
+    .catch((error) => {
+      delete g[ENGINE_KEY];
+      throw error;
+    });
+  return g[ENGINE_KEY];
 }
 
 export function getFlowOutputDir(): string {
