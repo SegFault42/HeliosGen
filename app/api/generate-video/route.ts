@@ -28,6 +28,10 @@ interface KlingElementInput {
 
 
 export async function POST(req: NextRequest) {
+  // text/plain is a CORS "simple" request, so a cross-site page could POST here without a preflight.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
   try {
   const body = await req.json();
   const {

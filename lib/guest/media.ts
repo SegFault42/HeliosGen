@@ -6,20 +6,38 @@
  * forever; `removeMediaIfOrphan` unlinks a file once nothing references it,
  * and `sweepOrphans` catches whatever slipped through.
  */
-import { existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
-import { join, normalize, sep } from "node:path";
+import { existsSync, readdirSync, realpathSync, statSync, unlinkSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { MEDIA_DIR } from "./paths";
 import { db } from "./sqlite";
 
 const URL_PREFIX = "/generated/";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** `/generated/...` for one of our media URLs, including the absolute
+ *  `http://localhost:<port>/generated/...` form CLI callers (anvil) send; else null. */
+export function toMediaUrl(url: string): string | null {
+  if (url.startsWith(URL_PREFIX)) return url;
+  let u: URL;
+  try { u = new URL(url); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol) || !LOOPBACK_HOSTS.has(u.hostname)) return null;
+  return u.pathname.startsWith(URL_PREFIX) ? u.pathname : null;
+}
+
 /** Absolute path for a `/generated/...` URL, or null if it is not one of ours. */
 export function mediaPathFor(url: string): string | null {
   if (!url.startsWith(URL_PREFIX)) return null;
-  const rel = decodeURIComponent(url.slice(URL_PREFIX.length)).replace(/\?.*$/, "");
-  const abs = normalize(join(MEDIA_DIR, rel));
+  let rel: string;
+  try { rel = decodeURIComponent(url.slice(URL_PREFIX.length).replace(/[?#].*$/, "")); } catch { return null; }
+  const root = resolve(MEDIA_DIR);
+  const abs = join(root, rel);
   // path traversal guard: must stay inside MEDIA_DIR
-  if (!abs.startsWith(normalize(MEDIA_DIR) + sep)) return null;
+  if (!abs.startsWith(root + sep)) return null;
+  // symlink/junction guard: a file on disk must really live inside MEDIA_DIR too
+  try {
+    if (!realpathSync(abs).startsWith(realpathSync(root) + sep)) return null;
+  } catch { /* not on disk (yet): the lexical check above is all there is */ }
   return abs;
 }
 

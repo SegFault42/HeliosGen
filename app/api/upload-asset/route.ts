@@ -21,9 +21,15 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
+// Content types a cross-site page can POST without a CORS preflight.
+const CORS_SIMPLE_TYPE = /^\s*(text\/plain|application\/x-www-form-urlencoded|multipart\/form-data)\b/i;
+
 export async function POST(req: NextRequest) {
+  const mimeType = req.headers.get("content-type");
+  if (mimeType === null || CORS_SIMPLE_TYPE.test(mimeType)) {
+    return NextResponse.json({ error: "Content-Type must be the file's media type" }, { status: 415 });
+  }
   try {
-    const mimeType = req.headers.get("content-type") ?? "application/octet-stream";
 
     const contentLength = Number(req.headers.get("content-length") ?? 0);
     if (contentLength > MAX_BYTES) {

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import sharp from "sharp";
 import { MEDIA_DIR } from "@/lib/guest/paths";
+import { mediaPathFor, toMediaUrl } from "@/lib/guest/media";
 import { dlog } from "@/lib/debugLog";
 
 // ponytail: length threshold is a heuristic guess at when Omni Flash chokes on
@@ -145,24 +146,12 @@ export interface SubmitFlowImageParams {
   accountId?: string;
 }
 
-function resolveLocalPath(fileUrlOrPath?: string): string | null {
-  if (!fileUrlOrPath || typeof fileUrlOrPath !== "string") return null;
-  const trimmed = fileUrlOrPath.trim();
-  if (!trimmed) return null;
-
-  // Root-relative media URL: /generated/...
-  if (trimmed.startsWith("/generated/")) {
-    const rel = trimmed.slice("/generated/".length).split(/[?#]/)[0];
-    const abs = path.join(MEDIA_DIR, decodeURIComponent(rel));
-    if (fs.existsSync(abs)) return abs;
-  }
-
-  // File path directly on filesystem
-  if (fs.existsSync(trimmed)) {
-    return path.resolve(trimmed);
-  }
-
-  return null;
+/** Local file for a `/generated/...` URL, or null. Everything resolved here is
+ *  uploaded to Google Flow, so only files inside MEDIA_DIR are allowed. */
+export function resolveLocalPath(url?: string): string | null {
+  const media = typeof url === "string" ? toMediaUrl(url.trim()) : null;
+  const abs = media && mediaPathFor(media);
+  return abs && fs.existsSync(abs) ? abs : null;
 }
 
 export async function submitFlowVideo(params: SubmitFlowVideoParams) {
