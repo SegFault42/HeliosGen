@@ -49,3 +49,25 @@ test("flowProjectUrl: returns a valid project URL", () => {
     if (saved === undefined) delete process.env.FLOW_PROJECT_URL; else process.env.FLOW_PROJECT_URL = saved;
   }
 });
+
+const { flowDeadlineMs, isFatalFlowError, flowErrorMessage } = require("../lib/flowPollPolicy.ts");
+
+test("poll deadline is wall clock: 5 min image, 20 min video", () => {
+  assert.equal(flowDeadlineMs(false), 5 * 60_000);
+  assert.equal(flowDeadlineMs(true), 20 * 60_000);
+});
+
+test("fatal Flow errors stop polling, transient ones do not", () => {
+  for (const code of ["generated_asset_not_found", "job_asset_identity_missing", "ui_changed", "login_required", "download_failed", "download_type_mismatch"]) {
+    const error = Object.assign(new Error("x"), { code });
+    assert.equal(isFatalFlowError(error), true, code);
+  }
+  assert.equal(isFatalFlowError(Object.assign(new Error("x"), { code: "browser_error" })), false);
+  assert.equal(isFatalFlowError(new Error("socket hang up")), false);
+  assert.equal(isFatalFlowError(null), false);
+});
+
+test("error message carries the diagnostic screenshot path when present", () => {
+  assert.equal(flowErrorMessage("boom", "C:/diag/job-1.png"), "boom (screenshot: C:/diag/job-1.png)");
+  assert.equal(flowErrorMessage("boom"), "boom");
+});

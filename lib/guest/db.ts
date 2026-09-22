@@ -131,7 +131,7 @@ export function updateGeneration(
 
 export function recoverJob(
   taskId: string,
-): Pick<Generation, "status" | "generation_type" | "video_url" | "image_url" | "image_urls" | "error_msg"> | null {
+): Pick<Generation, "status" | "generation_type" | "video_url" | "image_url" | "image_urls" | "error_msg" | "created_at"> | null {
   const r = db().prepare("SELECT * FROM generations WHERE task_id = ?").get(taskId) as GenRow | undefined;
   return r ? rowToGeneration(r) : null;
 }

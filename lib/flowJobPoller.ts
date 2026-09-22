@@ -5,10 +5,10 @@ import * as guestDb from "./guest/db";
 import { MEDIA_DIR } from "./guest/paths";
 import { refreshFlowJob, getFlowJob, downloadFlowJob } from "./flowAdapter";
 import { dlog } from "./debugLog";
+import { flowDeadlineMs, flowErrorMessage, isFatalFlowError } from "./flowPollPolicy";
 
 const active = new Set<string>();
 const POLL_MS = 4_000;
-const MAX_POLLS = 150; // ~10 minutes
 
 type FlowJobResult =
   | { status: "pending"; type?: "video" | "image" }
@@ -39,17 +39,16 @@ async function poll(taskId: string): Promise<void> {
   const isImage = taskId.startsWith("flow-image:");
   if (!isVideo && !isImage) return;
 
-  const jobId = isVideo
-    ? taskId.slice("flow-video:".length)
-    : taskId.slice("flow-image:".length);
+  const jobId = isVideo ? taskId.slice("flow-video:".length) : taskId.slice("flow-image:".length);
+  const createdAt = Date.parse(guestDb.recoverJob(taskId)?.created_at ?? "") || Date.now();
+  const deadline = createdAt + flowDeadlineMs(isVideo);
 
   dlog(`[FlowPoller] Polling started for ${taskId} (job ${jobId})`);
 
-  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+  while (Date.now() < deadline) {
     try {
-      // 1. Verifica no banco se ja foi finalizado
       const dbGen = guestDb.recoverJob(taskId);
-      if (dbGen && dbGen.status === "done") {
+      if (dbGen?.status === "done") {
         if (isVideo && dbGen.video_url) {
           settle(taskId, { status: "done", videoUrl: dbGen.video_url }, true);
           return;
@@ -60,57 +59,45 @@ async function poll(taskId: string): Promise<void> {
         }
       }
 
-      const job = await refreshFlowJob(jobId);
+      let job = await refreshFlowJob(jobId);
       const status = (job?.status ?? "").toLowerCase();
 
-      if (status === "completed" || status === "ready" || (job?.generatedAssets && job.generatedAssets.length > 0)) {
-        let files: string[] = job.downloadedFiles ?? [];
-        if (files.length === 0 && job.generatedAssets?.length) {
-          // Let the MCP's own downloadTracked() resolve the real asset (it re-checks
-          // the live DOM identity and distinguishes video src from poster/thumbnail).
-          // Grabbing the first "url:https://" key here ourselves used to race the
-          // video element before its real src populated, silently saving the poster
-          // frame (or the reference start-frame) as the "video".
-          try {
-            const downloaded = await downloadFlowJob(jobId);
-            files = downloaded?.downloadedFiles ?? [];
-          } catch (error) {
-            dlog(`[FlowPoller] downloadFlowJob failed for ${jobId}: ${error}`);
-          }
+      if (status === "failed" || status === "needs_attention") {
+        const message = flowErrorMessage(job?.error || `Flow generation failed with status: ${status}`, job?.diagnosticScreenshot);
+        console.error(`[FlowPoller] ${taskId} failed: ${message}`);
+        settle(taskId, { status: "error", error: message }, isVideo);
+        return;
+      }
+
+      if (status === "completed" || status === "ready" || (job?.generatedAssets?.length ?? 0) > 0) {
+        if (!(job.downloadedFiles?.length) && job.generatedAssets?.length) {
+          job = await downloadFlowJob(jobId);
         }
+        const files: string[] = job?.downloadedFiles ?? [];
         if (files.length > 0) {
           const mediaUrl = resolveMediaUrl(files[0]);
-          dlog(`[FlowPoller] Job ${jobId} finished successfully: ${mediaUrl}`);
-          if (isVideo) {
-            settle(taskId, { status: "done", videoUrl: mediaUrl }, true);
-          } else {
-            settle(taskId, { status: "done", imageUrl: mediaUrl }, false);
-          }
+          dlog(`[FlowPoller] ${taskId} finished: ${mediaUrl}`);
+          settle(taskId, isVideo ? { status: "done", videoUrl: mediaUrl } : { status: "done", imageUrl: mediaUrl }, isVideo);
           return;
         }
       }
-
-      if (status === "failed" || status === "needs_attention") {
-        const errMsg = job?.error || `Flow generation failed with status: ${status}`;
-        dlog(`[FlowPoller] Job ${jobId} failed: ${errMsg}`);
-        settle(taskId, { status: "error", error: errMsg }, isVideo);
-        return;
-      }
     } catch (error) {
-      dlog(`[FlowPoller] Transient error polling ${jobId}: ${error}`);
-      if (attempt === MAX_POLLS - 1) {
-        settle(
-          taskId,
-          { status: "error", error: error instanceof Error ? error.message : "Flow polling timed out" },
-          isVideo
-        );
+      const message = error instanceof Error ? error.message : String(error);
+      if (isFatalFlowError(error)) {
+        const job = await getFlowJob(jobId).catch(() => null);
+        const full = flowErrorMessage(message, job?.diagnosticScreenshot);
+        console.error(`[FlowPoller] ${taskId} fatal: ${full}`);
+        settle(taskId, { status: "error", error: full }, isVideo);
         return;
       }
+      console.warn(`[FlowPoller] ${taskId} transient error: ${message}`);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 
-  settle(taskId, { status: "error", error: "Flow generation timed out" }, isVideo);
+  const minutes = Math.round(flowDeadlineMs(isVideo) / 60_000);
+  console.error(`[FlowPoller] ${taskId} timed out after ${minutes} min`);
+  settle(taskId, { status: "error", error: `Flow timed out after ${minutes} min` }, isVideo);
 }
 
 export function resumeFlowJob(taskId: string): void {
