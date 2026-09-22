@@ -12,18 +12,19 @@ export const runtime = "nodejs";
 
 function opener(): { cmd: string; args: string[] } {
   if (process.platform === "darwin") return { cmd: "open", args: [] };
-  if (process.platform === "win32") return { cmd: "cmd", args: ["/c", "start", ""] };
+  // Never `cmd /c start`: cmd.exe parses the URL, so `http://x/&calc` ran calc.
+  if (process.platform === "win32") return { cmd: "rundll32.exe", args: ["url.dll,FileProtocolHandler"] };
   return { cmd: "xdg-open", args: [] };
 }
 
 export async function POST(req: NextRequest) {
   let url: string;
   try {
-    url = (await req.json()).url;
-    const parsed = new URL(url);
+    const parsed = new URL((await req.json()).url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return NextResponse.json({ error: "unsupported protocol" }, { status: 400 });
     }
+    url = parsed.href;
   } catch {
     return NextResponse.json({ error: "invalid url" }, { status: 400 });
   }
