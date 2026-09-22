@@ -17,6 +17,18 @@ export function shouldUseReadThis(model: string, prompt: string, explicit?: bool
   return model === "Omni Flash" && prompt.trim().length > READ_THIS_MIN_CHARS;
 }
 
+const FLOW_PROJECT_URL_PATTERN = /^https:\/\/flow\.google\.com\/project\/[0-9a-f-]+$/i;
+
+export function flowProjectUrl(): string {
+  const url = process.env.FLOW_PROJECT_URL?.trim();
+  if (!url || !FLOW_PROJECT_URL_PATTERN.test(url)) {
+    throw new Error(
+      `FLOW_PROJECT_URL ausente ou inválida (${url ?? "vazia"}). Crie um projeto no Google Flow e cole a URL https://flow.google.com/project/<id> em .env.local.`,
+    );
+  }
+  return url;
+}
+
 function escapePangoMarkup(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -209,6 +221,7 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
     outputDirectory,
     download: true,
     timeoutSeconds: 600,
+    flowProjectUrl: flowProjectUrl(),
   });
 
   return {
@@ -262,6 +275,7 @@ export async function submitFlowImage(params: SubmitFlowImageParams) {
     outputDirectory,
     download: true,
     timeoutSeconds: 300,
+    flowProjectUrl: flowProjectUrl(),
   });
 
   return {
