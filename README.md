@@ -63,6 +63,25 @@ settings live in a local database; media is saved to a local folder:
 
 Delete that folder to reset the app.
 
+### HeyGen via MCP
+
+ANVIL includes a native HeyGen provider in the real workflow runtime. It uses the
+HeyGen remote MCP OAuth session, so it consumes the existing HeyGen web-plan
+credits instead of the separate REST API wallet.
+
+1. Authenticate HeyGen in Hermes with `hermes mcp login heygen --flow browser`.
+2. Start ANVIL on the same machine. By default it reads
+   `F:\CLAUDE\hermes\mcp-tokens\heygen.json`; override this with
+   `HEYGEN_MCP_TOKEN_FILE` when needed.
+3. In a Video node, choose **HeyGen Video Agent**. The optional avatar ID field
+   passes a selected HeyGen avatar through to the Video Agent. Leave it blank for
+   HeyGen's automatic presenter selection.
+4. Run the node or **Run Workflow**. ANVIL submits through MCP, persists the
+   session task, polls it, and restores the poller after a server restart.
+
+No HeyGen REST API key is required by this path. Kie models keep their existing
+provider and balance gate.
+
 ---
 
 # 📸 Screenshots

@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import NodeLabel, { requestRename } from "@/components/nodes/NodeLabel";
 import { Handle, Position, NodeProps, Node, useViewport } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
+import { IMAGE_MODELS, VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 import { thumbSrc } from "@/lib/galleryUtils";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { detectTextMode } from "@/lib/textFormat";
@@ -172,7 +172,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
       if (!hasImages && m.textOnlyPromptMaxLength) return m.textOnlyPromptMaxLength;
       return m.apiInput.promptMaxLength;
     }
-    const m = VIDEO_MODELS.find((m) => m.id === ((target.data?.videoModel as string) ?? "kling-3.0"));
+    const m = VIDEO_MODELS.find((m) => m.id === ((target.data?.videoModel as string) ?? DEFAULT_VIDEO_MODEL));
     return m?.apiInput.promptMaxLength ?? null;
   })();
 

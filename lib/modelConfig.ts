@@ -52,6 +52,12 @@ export interface ImageModel {
     outputFormat?: string;
     /** Any other static fields to include in the input object */
     extra?: Record<string, unknown>;
+    /** Route this image model through Google Flow */
+    useFlow?: boolean;
+    /** Flow model name in UI dropdown (e.g. "Nano Banana 2", "Nano Banana Pro") */
+    flowModel?: string;
+    /** Route this image model through local xAI Grok pool */
+    useGrok?: boolean;
   };
   /**
    * When set, the route switches the model field to this alternative apiId
@@ -127,6 +133,55 @@ export function validateAzureCustomSize(width: number, height: number): string |
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
+  // ── xAI Grok ────────────────────────────────────────────────────────────────
+  {
+    id: "grok-imagine",
+    apiId: "grok-imagine-image-lite",
+    name: "Grok Imagine (Flux)",
+    provider: "xAI Grok",
+    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"],
+    supportsImages: false,
+    maxImages: 0,
+    supportsQuality: false,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      promptMaxLength: 20000,
+      useGrok: true,
+    },
+  },
+  // ── Google Flow ─────────────────────────────────────────────────────────────
+  {
+    id: "flow-nano-banana-2",
+    apiId: "flow-nano-banana-2",
+    name: "Nano Banana 2 (Flow)",
+    provider: "Google Flow",
+    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    supportsImages: true,
+    maxImages: 1,
+    supportsQuality: false,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      promptMaxLength: 20000,
+      useFlow: true,
+      flowModel: "Nano Banana 2",
+    },
+  },
+  {
+    id: "flow-nano-banana-pro",
+    apiId: "flow-nano-banana-pro",
+    name: "Nano Banana Pro (Flow)",
+    provider: "Google Flow",
+    ratios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    supportsImages: true,
+    maxImages: 1,
+    supportsQuality: false,
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      promptMaxLength: 20000,
+      useFlow: true,
+      flowModel: "Nano Banana Pro",
+    },
+  },
   // ── Google ──────────────────────────────────────────────────────────────────
   {
     id: "google-nano-banana",
@@ -158,7 +213,7 @@ export const IMAGE_MODELS: ImageModel[] = [
       qualityKey: "quality",
       qualityMap: { "1k": "basic", "2k": "basic", "4k": "high" },
       qualityOptions: ["1k", "2k", "4k"],
-      promptMaxLength: 10000,
+      promptMaxLength: 20000,
       outputFormat: "jpg",
     },
   },
@@ -177,7 +232,7 @@ export const IMAGE_MODELS: ImageModel[] = [
       qualityKey: "quality",
       qualityMap: { "1k": "basic", "2k": "basic", "4k": "high" },
       qualityOptions: ["1k", "2k", "4k"],
-      promptMaxLength: 10000,
+      promptMaxLength: 20000,
       outputFormat: "jpg",
     },
   },
@@ -344,6 +399,19 @@ export const IMAGE_MODELS: ImageModel[] = [
 
 // ── Video models ──────────────────────────────────────────────────────────────
 
+/** Default video model — Kling is vetoed by agency policy; Omni Flash is the safe default. */
+export const DEFAULT_VIDEO_MODEL = "flow-omni-flash";
+
+/**
+ * Agency policy: Kling video models are vetoed. Allowed video providers are
+ * Google Flow Omni Flash and HeyGen Video Agent. Set ALLOW_VETOED_KLING=true
+ * to explicitly opt back in (e.g. local testing).
+ */
+export function isVetoedVideoModel(id: string, env: Record<string, string | undefined> = process.env): boolean {
+  if (env.ALLOW_VETOED_KLING === "true") return false;
+  return id.startsWith("kling");
+}
+
 export type VideoHandle = "prompt" | "startFrame" | "endFrame" | "resource" | "videoRef" | "referenceVideo" | "audioRef";
 
 export interface VideoModelMode {
@@ -467,10 +535,112 @@ export interface VideoModel {
      * - otherwise → apiId (t2v): prompt + aspect_ratio + duration + resolution
      */
     useMinimaxH3?: boolean;
+    /** Route this video model through ANVIL's HeyGen MCP adapter instead of Kie.ai. */
+    useHeyGenMcp?: boolean;
+    /** Route this video model through Google Flow (Antigravity pool) instead of Kie.ai. */
+    useFlow?: boolean;
+    /** Flow model name (e.g. "Omni Flash", "Veo 3.1 - Fast", "Veo 3.1 - Quality") */
+    flowModel?: string;
+    /** When true, operates in start+end frame interpolation mode */
+    isInterpolation?: boolean;
   };
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
+  // ── Google Flow ─────────────────────────────────────────────────────────────
+  {
+    id: "flow-omni-flash",
+    apiId: "flow-omni-flash",
+    name: "Omni Flash 1.1 (Flow)",
+    provider: "Google Flow",
+    ratios: ["16:9", "9:16"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame"],
+    sound: true,
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "1080p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 20000,
+      durationMin: 0,
+      durationMax: 0,
+      useFlow: true,
+      flowModel: "Omni Flash",
+    },
+  },
+  {
+    id: "flow-veo-3.1-fast",
+    apiId: "flow-veo-3.1-fast",
+    name: "Veo 3.1 Fast (Flow)",
+    provider: "Google Flow",
+    ratios: ["16:9", "9:16"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame", "endFrame"],
+    sound: true,
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "1080p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 20000,
+      durationMin: 0,
+      durationMax: 0,
+      useFlow: true,
+      flowModel: "Veo 3.1 - Fast",
+    },
+  },
+  {
+    id: "flow-veo-3.1-quality",
+    apiId: "flow-veo-3.1-quality",
+    name: "Veo 3.1 Quality (Flow)",
+    provider: "Google Flow",
+    ratios: ["16:9", "9:16"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame", "endFrame"],
+    sound: true,
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "1080p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 20000,
+      durationMin: 0,
+      durationMax: 0,
+      useFlow: true,
+      flowModel: "Veo 3.1 - Quality",
+    },
+  },
+  {
+    id: "flow-veo-interpolation",
+    apiId: "flow-veo-interpolation",
+    name: "Veo Frame A->B (Flow)",
+    provider: "Google Flow",
+    ratios: ["16:9", "9:16"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame", "endFrame"],
+    sound: true,
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "1080p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 20000,
+      durationMin: 0,
+      durationMax: 0,
+      useFlow: true,
+      flowModel: "Veo 3.1 - Fast",
+      isInterpolation: true,
+    },
+  },
   // ── Google ──────────────────────────────────────────────────────────────────
   {
     id: "veo3_lite",
@@ -488,7 +658,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
-      promptMaxLength: 10000,
+      promptMaxLength: 20000,
       durationMin: 0,
       durationMax: 0,
       extra: {
@@ -514,7 +684,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
-      promptMaxLength: 10000,
+      promptMaxLength: 20000,
       durationMin: 0,
       durationMax: 0,
       extra: {
@@ -540,7 +710,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
-      promptMaxLength: 10000,
+      promptMaxLength: 20000,
       durationMin: 0,
       durationMax: 0,
       extra: {
@@ -988,6 +1158,29 @@ export const VIDEO_MODELS: VideoModel[] = [
       videoRefMaxDuration: 30,           // reference video may not exceed 30 s
       promptMaxLength: 2500,
       extra: { background_source: "input_video" }, // background_source not user-selectable yet — default to video background
+    },
+  },
+  // ── HeyGen MCP ─────────────────────────────────────────────────────────────
+  {
+    id: "heygen-video-agent",
+    apiId: "heygen-video-agent",
+    name: "HeyGen Video Agent",
+    provider: "HeyGen",
+    ratios: ["9:16", "16:9", "1:1", "4:5", "5:4"],
+    durations: [],
+    defaultDuration: 0,
+    defaultRatio: "9:16",
+    handles: ["prompt", "resource", "referenceVideo", "audioRef"],
+    sound: false,
+    promptOptional: false,
+    maxResources: 20,
+    maxReferenceVideos: 20,
+    maxReferenceAudios: 20,
+    apiInput: {
+      durationMin: 0,
+      durationMax: 0,
+      promptMaxLength: 20000,
+      useHeyGenMcp: true,
     },
   },
 ];

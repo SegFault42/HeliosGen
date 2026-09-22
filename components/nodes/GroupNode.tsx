@@ -6,7 +6,7 @@ import { useReadOnly } from "@/lib/readOnlyContext";
 import { arrangeNodes } from "@/lib/arrangeNodes";
 import { usePipelineRunner } from "@/lib/usePipelineRunner";
 import { makeZip } from "@/lib/makeZip";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 
 export type GroupNodeType = Node<NodeData, "groupNode">;
 
@@ -218,7 +218,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
       if (genNode.type === "generateNode") {
         if (!promptConnected) missingInputs.push("A text node is required");
       } else {
-        const videoModelId = (genNode.data.videoModel as string) ?? "kling-3.0";
+        const videoModelId = (genNode.data.videoModel as string) ?? DEFAULT_VIDEO_MODEL;
         const cfg = VIDEO_MODELS.find((m) => m.id === videoModelId) ?? VIDEO_MODELS[0];
         if (!cfg.promptOptional && !promptConnected) missingInputs.push("A text node is required");
       }
@@ -280,7 +280,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<GroupNodeTyp
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(objUrl);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
     } finally {
       setIsDownloading(false);
     }

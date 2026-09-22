@@ -4,10 +4,14 @@ import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { rewriteLocalMediaForKie } from "@/lib/kieUpload";
 import { ensureR2 } from "@/lib/storage";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL, isVetoedVideoModel } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { submitHeyGenVideo } from "@/lib/heygenMcp";
+import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
+import { submitFlowVideo } from "@/lib/flowAdapter";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -27,7 +31,7 @@ export async function POST(req: NextRequest) {
   try {
   const body = await req.json();
   const {
-    videoModel      = body.model || "kling-3.0",
+    videoModel      = body.model || DEFAULT_VIDEO_MODEL,
     prompt,
     startFrameUrl:  rawStartFrame,
     endFrameUrl:    rawEndFrame,
@@ -47,18 +51,86 @@ export async function POST(req: NextRequest) {
     generationType: rawGenerationType,
     callBackUrl:    rawCallBackUrl,
     debugOnly       = false,
+    avatarId,
+    voiceId,
   } = body;
 
   const userId = GUEST_USER_ID;
+  if (isVetoedVideoModel(videoModel)) {
+    return NextResponse.json(
+      { error: `Video model ${videoModel} is vetoed by agency policy (Kling). Use flow-omni-flash or heygen-video-agent, or set ALLOW_VETOED_KLING=true.` },
+      { status: 403 },
+    );
+  }
+  const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
+  if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
+
+  if (cfg.apiInput.useHeyGenMcp) {
+    if (debugOnly) return NextResponse.json({ debugProvider: "heygen-mcp", videoModel, prompt, aspectRatio });
+    const heygen = await submitHeyGenVideo({
+      prompt: String(prompt ?? ""),
+      aspectRatio: String(aspectRatio),
+      avatarId: typeof avatarId === "string" ? avatarId : undefined,
+      voiceId: typeof voiceId === "string" ? voiceId : undefined,
+      resources: resources as Resource[],
+      referenceImageUrls: rawRefImages as string[],
+      referenceVideoUrls: rawRefVideoUrls as string[],
+      referenceAudioUrls: rawRefAudioUrls as string[],
+      startFrameUrl: typeof rawStartFrame === "string" ? rawStartFrame : undefined,
+      endFrameUrl: typeof rawEndFrame === "string" ? rawEndFrame : undefined,
+    });
+    jobStore.set(heygen.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: heygen.taskId,
+      user_id: userId,
+      generation_type: "video",
+      status: "pending",
+      model: videoModel,
+      prompt: String(prompt ?? ""),
+      aspect_ratio: String(aspectRatio),
+      reference_image_urls: [...(rawRefImages as string[]), ...(rawRefVideoUrls as string[])],
+    });
+    resumeHeyGenJob(heygen.taskId);
+    return NextResponse.json({ taskId: heygen.taskId, provider: "heygen" });
+  }
+
+  if (cfg.apiInput.useFlow) {
+    if (debugOnly) return NextResponse.json({ debugProvider: "google-flow", videoModel, prompt, aspectRatio });
+    const flowRes = await submitFlowVideo({
+      prompt: String(prompt ?? ""),
+      modelName: cfg.apiInput.flowModel || "Omni Flash",
+      aspectRatio: String(aspectRatio),
+      startFrame: typeof rawStartFrame === "string" ? rawStartFrame : undefined,
+      endFrame: typeof rawEndFrame === "string" ? rawEndFrame : undefined,
+      referenceImages: Array.isArray(rawRefImages) ? (rawRefImages as string[]) : undefined,
+      upscale: rawResolution === "1080p" || cfg.defaultResolution === "1080p" ? "1080p" : "none",
+      readThis: typeof body.readThis === "boolean" ? body.readThis : undefined,
+    });
+    jobStore.set(flowRes.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: flowRes.taskId,
+      user_id: userId,
+      generation_type: "video",
+      status: "pending",
+      model: videoModel,
+      prompt: String(prompt ?? ""),
+      aspect_ratio: String(aspectRatio),
+      reference_image_urls: [
+        ...(typeof rawStartFrame === "string" ? [rawStartFrame] : []),
+        ...(typeof rawEndFrame === "string" ? [rawEndFrame] : []),
+        ...(Array.isArray(rawRefImages) ? (rawRefImages as string[]) : []),
+      ],
+    });
+    resumeFlowJob(flowRes.taskId);
+    return NextResponse.json({ taskId: flowRes.taskId, provider: "flow" });
+  }
+
 
   const apiKey = (await getKieTokenForUser()) ?? process.env.KIE_API_TOKEN ?? null;
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   // The app polls kie.ai directly (lib/kieJobPoller) — no callback URL needed.
   const callBackUrl = rawCallBackUrl || undefined;
-
-  const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
-  if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
 
   const resolution = rawResolution || cfg.defaultResolution || "480p";
   const { apiInput } = cfg;

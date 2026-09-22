@@ -14,7 +14,7 @@ function stripAnsi(s: string): string {
 
 function checkLoginStatus(): Promise<boolean> {
   return new Promise((resolve) => {
-    const proc = spawn("codex", ["login", "status"]);
+    const proc = spawn("codex", ["login", "status"], { shell: process.platform === "win32" });
     let out = "";
     proc.stdout.on("data", (d: Buffer) => out += d.toString());
     // "Logged in using ChatGPT" vs "Not logged in" both contain "logged in" as a
@@ -65,7 +65,7 @@ export async function POST() {
     let buf = "";
     let settled = false;
 
-    const proc = spawn("codex", ["login", "--device-auth"]);
+    const proc = spawn("codex", ["login", "--device-auth"], { shell: process.platform === "win32" });
 
     const trySettle = () => {
       if (settled) return;

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
+import { jobEvents } from "@/lib/jobEvents";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/storage";
@@ -17,6 +18,8 @@ import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 import { orderedCodexAuthFiles, markCodexLimited, isUsageLimitError } from "@/lib/codexAccounts";
+import { submitFlowImage } from "@/lib/flowAdapter";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -334,6 +337,107 @@ export async function POST(req: NextRequest) {
   }
 
   const currentUserId = GUEST_USER_ID;
+
+  // ── Google Flow branch ────────────────────────────────────────────────────────
+  if (cfg.apiInput?.useFlow) {
+    try {
+      const flowRes = await submitFlowImage({
+        prompt: prompt.trim(),
+        modelName: cfg.apiInput.flowModel || "Nano Banana 2",
+        aspectRatio,
+        referenceImages: r2ImageUrls.length > 0 ? r2ImageUrls : (imageUrls as string[]),
+      });
+      jobStore.set(flowRes.taskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+      guestDb.insertGeneration({
+        task_id: flowRes.taskId,
+        user_id: currentUserId,
+        generation_type: "image",
+        status: "pending",
+        model,
+        prompt: prompt.trim(),
+        aspect_ratio: aspectRatio,
+        reference_image_urls: imageUrls,
+      });
+      resumeFlowJob(flowRes.taskId);
+      return NextResponse.json({ taskId: flowRes.taskId, provider: "flow" });
+    } catch (err: any) {
+      console.error("[generate] Google Flow image error:", err);
+      return NextResponse.json({ error: err?.message || "Google Flow image generation failed" }, { status: 500 });
+    }
+  }
+
+  // ── xAI Grok Imagine branch ───────────────────────────────────────────────────
+  if (cfg.apiInput?.useGrok) {
+    const grokTaskId = `grok-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    jobStore.set(grokTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: grokTaskId,
+      user_id: currentUserId,
+      generation_type: "image",
+      status: "pending",
+      model,
+      prompt: prompt.trim(),
+      aspect_ratio: aspectRatio,
+    });
+
+    (async () => {
+      try {
+        let clientKey = process.env.GROK_CLIENT_KEY || "";
+        if (!clientKey) {
+          try {
+            clientKey = (await readFile("F:/grok-pool/.client_key", "utf8")).trim();
+          } catch {}
+        }
+        const payload = {
+          model: cfg.apiId || "grok-imagine-image-lite",
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio || "1:1",
+          response_format: "url",
+        };
+
+        const res = await fetch("http://127.0.0.1:8000/v1/images/generations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${clientKey}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          let msg = `Grok Imagine error HTTP ${res.status}`;
+          try {
+            const parsed = JSON.parse(errText);
+            msg = parsed?.error?.message || msg;
+          } catch {}
+          throw new Error(msg);
+        }
+
+        const data = (await res.json()) as { data?: Array<{ url?: string }> };
+        const rawUrl = data?.data?.[0]?.url;
+        if (!rawUrl) throw new Error("Grok Imagine returned no image URL");
+
+        const buf = await fetchBuffer(rawUrl);
+        const imageUrl = await uploadBuffer(buf, "image/jpeg", "generated");
+
+        const doneResult = { status: "done" as const, imageUrl };
+        jobStore.set(grokTaskId, doneResult);
+        jobEvents.emit(`job:${grokTaskId}`, doneResult);
+
+        guestDb.updateGeneration(grokTaskId, { status: "done", image_url: imageUrl });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[grok-imagine] error:", msg, e);
+        const errResult = { status: "error" as const, error: msg };
+        jobStore.set(grokTaskId, errResult);
+        jobEvents.emit(`job:${grokTaskId}`, errResult);
+        guestDb.updateGeneration(grokTaskId, { status: "error", error_msg: msg });
+      }
+    })();
+
+    return NextResponse.json({ taskId: grokTaskId, provider: "grok" });
+  }
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {

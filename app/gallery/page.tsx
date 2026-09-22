@@ -648,7 +648,7 @@ function GalleryInner() {
   const [seed, setSeed] = useState<number | undefined>(0);
   const [durPickerOpen, setDurPickerOpen] = useState(false);
   const [durPickerClosing, setDurPickerClosing] = useState(false);
-  const [durPickerPos, setDurPickerPos] = useState<{ left: number; bottom: number } | null>(null);
+  const [durPickerPos, setDurPickerPos] = useState<{ left: number; bottom?: number; top?: number } | null>(null);
   const durPillRef = useRef<HTMLButtonElement>(null);
   const durCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingGens, setPendingGens] = useState<PendingGen[]>(() => {
@@ -2067,7 +2067,14 @@ function GalleryInner() {
   const openDurPicker = useCallback(() => {
     const r = durPillRef.current?.getBoundingClientRect();
     if (!r) return;
-    setDurPickerPos({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+    const spaceBelow = window.innerHeight - r.bottom - 16;
+    const spaceAbove = r.top - 16;
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+    setDurPickerPos({
+      left: Math.min(r.left, window.innerWidth - 240),
+      top: openUp ? undefined : r.bottom + 6,
+      bottom: openUp ? (window.innerHeight - r.top + 6) : undefined,
+    });
     setDurPickerOpen(true);
   }, []);
 
@@ -2407,28 +2414,23 @@ function GalleryInner() {
     });
   }, [hasMore, items, clearDeletedFromNodes]);
 
-  const handleDownload = useCallback(async (url: string, itemIsVideo: boolean): Promise<void> => {
+  const handleDownload = useCallback((url: string, itemIsVideo: boolean) => {
     const urlExt = url.split("?")[0].split(".").pop()?.toLowerCase();
     const ext = itemIsVideo ? "mp4" : (urlExt && ["png","jpg","jpeg","webp","gif"].includes(urlExt) ? urlExt : "png");
     const filename = `${Date.now()}.${ext}`;
     const taskId = randomUUID();
-    setDownloads(prev => [...prev, { id: taskId, filename, status: "preparing" }]);
-    try {
-      const res = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${filename}`);
-      if (!res.ok) throw new Error("Failed");
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-      setDownloads(prev => prev.map(t => t.id === taskId ? { ...t, status: "ready" } : t));
-    } catch {
-      setDownloads(prev => prev.map(t => t.id === taskId ? { ...t, status: "error" } : t));
-    }
+    setDownloads(prev => [...prev, { id: taskId, filename, status: "ready" }]);
+
+    const downloadUrl = url.startsWith("data:")
+      ? url
+      : `/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }, []);
 
   // Auto-dismiss download toast when all tasks complete
@@ -4727,15 +4729,16 @@ function GalleryInner() {
           style={{
             position: "fixed",
             left: durPickerPos.left,
+            top: durPickerPos.top,
             bottom: durPickerPos.bottom,
-            zIndex: 9200,
+            zIndex: 99999,
             background: "var(--bg-1)",
             border: "1px solid var(--border-2)",
             borderRadius: "12px",
             padding: "12px 14px",
             boxShadow: "0 12px 40px var(--bg-0)",
             minWidth: "220px",
-            transformOrigin: "bottom left",
+            transformOrigin: durPickerPos.top ? "top left" : "bottom left",
           }}>
           <p style={{ margin: "0 0 10px", fontSize: "12px", fontWeight: 600, color: "var(--text-1)" }}>Duration</p>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", borderRadius: "8px", background: "var(--bg-1)" }}>
@@ -5172,7 +5175,14 @@ function CustomDropdown({
 }) {
   const bare = !!cardLabel;
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ left: 0, bottom: 0, minW: 0 });
+  const [pos, setPos] = useState<{
+    left: number;
+    top?: number;
+    bottom?: number;
+    minW: number;
+    maxH: number;
+    openUp: boolean;
+  }>({ left: 0, minW: 0, maxH: 320, openUp: true });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -5183,7 +5193,23 @@ function CustomDropdown({
   const openDrop = () => {
     if (disabled || !triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
-    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6, minW: r.width });
+    const spaceBelow = window.innerHeight - r.bottom - 16;
+    const spaceAbove = r.top - 16;
+    const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+    const maxH = Math.min(380, Math.max(160, openUp ? spaceAbove : spaceBelow));
+    const targetW = Math.max(r.width, 240);
+    let left = r.left;
+    if (left + targetW > window.innerWidth - 16) {
+      left = Math.max(16, window.innerWidth - targetW - 16);
+    }
+    setPos({
+      left,
+      top: openUp ? undefined : r.bottom + 6,
+      bottom: openUp ? (window.innerHeight - r.top + 6) : undefined,
+      minW: targetW,
+      maxH,
+      openUp,
+    });
     setOpen(true);
   };
 
@@ -5275,17 +5301,28 @@ function CustomDropdown({
           style={{
             position: "fixed",
             left: pos.left,
+            top: pos.top,
             bottom: pos.bottom,
-            minWidth: Math.max(pos.minW, 160),
+            minWidth: pos.minW,
+            maxWidth: "calc(100vw - 32px)",
             background: "var(--surface)",
             border: "1px solid var(--border-2)",
             borderRadius: "12px",
+            boxShadow: "0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08)",
             overflow: "hidden",
-            zIndex: 9999,
+            zIndex: 99999,
             animation: "dropIn var(--dur-2) var(--ease)",
           }}
         >
-          <div style={{ padding: "6px", maxHeight: "320px", overflowY: "auto" }}>
+          <div
+            style={{
+              padding: "6px",
+              maxHeight: `${pos.maxH}px`,
+              overflowY: "auto",
+              scrollbarWidth: "thin",
+              scrollbarColor: "var(--border-2) transparent",
+            }}
+          >
             {hasGroups ? (
               groupKeys.map((gk, gi) => (
                 <div key={gk}>
@@ -5354,7 +5391,14 @@ function AspectRatioDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"list" | "custom">("list");
-  const [pos, setPos] = useState({ left: 0, bottom: 0, minW: 0 });
+  const [pos, setPos] = useState<{
+    left: number;
+    top?: number;
+    bottom?: number;
+    minW: number;
+    maxH: number;
+    openUp: boolean;
+  }>({ left: 0, minW: 0, maxH: 300, openUp: true });
   const [widthDraft, setWidthDraft] = useState(1024);
   const [heightDraft, setHeightDraft] = useState(1024);
   const [customError, setCustomError] = useState<string | null>(null);
@@ -5366,7 +5410,23 @@ function AspectRatioDropdown({
   const openDrop = () => {
     if (disabled || !triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
-    setPos({ left: r.left, bottom: window.innerHeight - r.top + 6, minW: r.width });
+    const spaceBelow = window.innerHeight - r.bottom - 16;
+    const spaceAbove = r.top - 16;
+    const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+    const maxH = Math.min(380, Math.max(160, openUp ? spaceAbove : spaceBelow));
+    const targetW = Math.max(r.width, 180);
+    let left = r.left;
+    if (left + targetW > window.innerWidth - 16) {
+      left = Math.max(16, window.innerWidth - targetW - 16);
+    }
+    setPos({
+      left,
+      top: openUp ? undefined : r.bottom + 6,
+      bottom: openUp ? (window.innerHeight - r.top + 6) : undefined,
+      minW: targetW,
+      maxH,
+      openUp,
+    });
     setView("list");
     setOpen(true);
   };
@@ -5453,19 +5513,29 @@ function AspectRatioDropdown({
           style={{
             position: "fixed",
             left: pos.left,
+            top: pos.top,
             bottom: pos.bottom,
-            minWidth: view === "custom" ? 240 : Math.max(pos.minW, 160),
-            background: "var(--bg-0)",
+            minWidth: view === "custom" ? 240 : pos.minW,
+            maxWidth: "calc(100vw - 32px)",
+            background: "var(--surface)",
             border: "1px solid var(--border-2)",
             borderRadius: "14px",
-            boxShadow: "0 8px 48px var(--bg-0), 0 2px 12px var(--bg-0), inset 0 1px 0 var(--border-1)",
+            boxShadow: "0 12px 36px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08)",
             overflow: "hidden",
-            zIndex: 9999,
+            zIndex: 99999,
             animation: "dropIn 130ms cubic-bezier(0.16,1,0.3,1)",
           }}
         >
           {view === "list" ? (
-            <div style={{ padding: "5px", maxHeight: "300px", overflowY: "auto" }}>
+            <div
+              style={{
+                padding: "5px",
+                maxHeight: `${pos.maxH}px`,
+                overflowY: "auto",
+                scrollbarWidth: "thin",
+                scrollbarColor: "var(--border-2) transparent",
+              }}
+            >
               {ratios.map(r => (
                 <DropItem
                   key={r}
@@ -5593,15 +5663,15 @@ function DropItem({ label, active, onClick, preview, providerIcon }: { label: st
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "8px",
+        gap: "10px",
         width: "100%",
-        padding: "8px 10px",
+        padding: "8px 12px",
         borderRadius: "8px",
         border: "none",
-        background: active || hovered ? "var(--bg-2)" : "transparent",
-        color: active || hovered ? "var(--text-1)" : "var(--text-2)",
+        background: active ? "var(--accent)" : hovered ? "var(--bg-2)" : "transparent",
+        color: active ? "var(--on-accent)" : hovered ? "var(--text-1)" : "var(--text-2)",
         fontSize: "13px",
-        fontWeight: 500,
+        fontWeight: active ? 600 : 500,
         cursor: "pointer",
         textAlign: "left",
         transition: "background 100ms, color 100ms",
@@ -5611,12 +5681,15 @@ function DropItem({ label, active, onClick, preview, providerIcon }: { label: st
       }}
     >
       {providerIcon && (
-        <span style={{ display: "flex", alignItems: "center", color: "var(--accent)", flexShrink: 0, opacity: active ? 1 : 0.7 }}>
+        <span style={{ display: "flex", alignItems: "center", color: active ? "var(--on-accent)" : "var(--accent)", flexShrink: 0, opacity: 1 }}>
           {providerIcon}
         </span>
       )}
       {preview}
-      {label}
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+      {active && (
+        <span style={{ fontSize: "12px", opacity: 0.9, marginLeft: "auto", paddingLeft: "8px" }}>✓</span>
+      )}
     </button>
   );
 }
@@ -6521,22 +6594,19 @@ function Lightbox({ item, thumbUrl, onClose, onCopyPrompt, onPrev, onNext }: { i
 
   const download = async () => {
     if (downloading) return;
-    setDownloading(true);
-    try {
-      const urlExt = lightboxUrl.split("?")[0].split(".").pop()?.toLowerCase();
-      const ext = isVideo ? "mp4" : (urlExt && ["png","jpg","jpeg","webp","gif"].includes(urlExt) ? urlExt : "png");
-      const filename = `${isVideo ? "video" : "image"}-${item.id.slice(0, 8)}.${ext}`;
-      const res = await fetch(`/api/download?url=${encodeURIComponent(lightboxUrl)}&filename=${filename}`);
-      if (!res.ok) throw new Error("Download failed");
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } finally {
-      setDownloading(false);
-    }
+    const urlExt = lightboxUrl.split("?")[0].split(".").pop()?.toLowerCase();
+    const ext = isVideo ? "mp4" : (urlExt && ["png","jpg","jpeg","webp","gif"].includes(urlExt) ? urlExt : "png");
+    const filename = `${isVideo ? "video" : "image"}-${item.id.slice(0, 8)}.${ext}`;
+    const downloadUrl = lightboxUrl.startsWith("data:")
+      ? lightboxUrl
+      : `/api/download?url=${encodeURIComponent(lightboxUrl)}&filename=${encodeURIComponent(filename)}`;
+
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const formatDate = (iso: string) =>

@@ -7,7 +7,7 @@ import NextImage from "next/image";
 import { Handle, Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import CornerResizer from "./CornerResizer";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 import { findCachedAsset, uploadAsset } from "@/lib/uploadAsset";
 
 type VideoInputNodeType = Node<NodeData, "videoInputNode">;
@@ -445,7 +445,7 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
     for (const edge of outgoingEdges) {
       const target = nodes.find((n) => n.id === edge.target);
       if (target?.type !== "videoGeneratorNode") continue;
-      const modelId = (target.data?.videoModel as string | undefined) ?? "kling-3.0";
+      const modelId = (target.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
       const cfg = VIDEO_MODELS.find((m) => m.id === modelId);
       if (!cfg) continue;
       const cap = edge.targetHandle === "videoRef"

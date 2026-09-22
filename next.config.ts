@@ -26,6 +26,7 @@ const nextConfig: NextConfig = {
     "/**": ["src-tauri/**/*"],
   },
   images: {
+    qualities: [30, 75],
     remotePatterns: [
       // Read-only public bucket holding the bundled workflow-template sample media
       // (lib/templates.ts). Not app storage — just an image CDN allow-list entry.

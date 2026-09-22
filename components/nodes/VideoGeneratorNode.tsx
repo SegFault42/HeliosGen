@@ -15,7 +15,7 @@ import { resolveInputs } from "@/lib/executor";
 import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
-import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
+import { VIDEO_MODELS as VIDEO_MODEL_CFG, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import MissingInputWarning from "./MissingInputWarning";
 
@@ -230,23 +230,23 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       }));
   }, [id, addNode, insertEdge, onNodesChange]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     const url = data.videoUrl as string | undefined;
-    if (!url || isSaving) return;
+    if (!url) return;
     const filename = `video-${Date.now()}.mp4`;
+    const downloadUrl = url.startsWith("data:")
+      ? url
+      : `/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
     setIsSaving(true);
-    try {
-      const resp = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${filename}`);
-      const blob = await resp.blob();
-      const obj = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = obj; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(obj);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [data.videoUrl, isSaving]);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => setIsSaving(false), 600);
+  }, [data.videoUrl]);
 
   const deleteGen = useCallback((idx: number) => {
     const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
@@ -296,7 +296,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
   }, [id, updateNodeData]);
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const videoModelId = (data.videoModel as string) ?? "kling-3.0";
+  const videoModelId = (data.videoModel as string) ?? DEFAULT_VIDEO_MODEL;
   const cfg = VIDEO_MODEL_CFG.find((m) => m.id === videoModelId) ?? VIDEO_MODEL_CFG[0];
 
   const mode = (data.klingMode as string) ?? cfg.defaultMode ?? "";
@@ -1731,6 +1731,19 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
                   </FloatMenu>
                 </div>
 
+                {cfg.apiInput.useHeyGenMcp && (
+                  <input
+                    value={String(data.heygenAvatarId ?? "")}
+                    onChange={(e) => updateNodeData(id, { heygenAvatarId: e.target.value || undefined })}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    placeholder="avatar ID (optional)"
+                    aria-label="HeyGen avatar ID (optional)"
+                    className="nodrag h-7 w-[150px] rounded-full px-2.5 text-[12px] text-[var(--text-2)] outline-none placeholder:text-[var(--text-3)]"
+                    style={{ background: "var(--bg-0)", border: "1px solid var(--border-1)" }}
+                  />
+                )}
+
                 {/* Duration */}
                 {durations.length > 0 && (
                   <div className="relative flex items-center gap-1">
@@ -2174,6 +2187,7 @@ function NodeProviderIcon({ provider }: { provider: string }) {
   switch (provider) {
     case "OpenAI":
       return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" clipRule="evenodd" d="M22.408 9.80741C22.9487 8.17778 22.7685 6.37037 21.8974 4.88889C20.5758 2.60741 17.9024 1.45185 15.2891 1.98519C14.1477 0.711111 12.4656 0 10.7234 0C8.0501 0 5.70717 1.68889 4.86612 4.17778C3.15398 4.53333 1.68214 5.57037 0.811051 7.08148C-0.510601 9.36296 -0.210226 12.2074 1.56199 14.163C1.02131 15.8222 1.23158 17.6 2.10267 19.0815C3.42432 21.363 6.09766 22.5481 8.71093 21.9852C9.88239 23.2593 11.5345 24 13.2766 24C15.95 24 18.2929 22.3111 19.134 19.8222C20.8461 19.4667 22.3179 18.4296 23.189 16.9185C24.5107 14.637 24.2103 11.763 22.408 9.80741ZM13.2766 22.4296C12.1953 22.4296 11.174 22.0741 10.363 21.3926C10.393 21.363 10.4831 21.3333 10.5132 21.3037L15.3492 18.5481C15.5895 18.4 15.7397 18.163 15.7397 17.8667V11.1407L17.7823 12.2963C17.8123 12.2963 17.8123 12.3259 17.8123 12.3556V17.9259C17.8423 20.4148 15.7998 22.4296 13.2766 22.4296ZM3.48439 18.3111C2.94372 17.3926 2.76349 16.3259 2.94372 15.2889C2.97375 15.3185 3.03383 15.3481 3.0939 15.3778L7.92995 18.1333C8.17025 18.2815 8.47063 18.2815 8.71093 18.1333L14.6283 14.7556V17.0963C14.6283 17.1259 14.6283 17.1556 14.5983 17.1556L9.70216 19.9407C7.53946 21.1852 4.74597 20.4444 3.48439 18.3111ZM2.22282 7.88148C2.76349 6.96296 3.60454 6.28148 4.59578 5.8963V11.5852C4.59578 11.8519 4.74597 12.1185 4.98627 12.2667L10.9037 15.6444L8.86111 16.8C8.83108 16.8 8.80104 16.8296 8.80104 16.8L3.90492 14.0148C1.68214 12.7704 0.961239 10.0148 2.22282 7.88148ZM19.0438 11.7333L13.1264 8.35556L15.169 7.2C15.199 7.2 15.2291 7.17037 15.2291 7.2L20.1252 9.98519C22.3179 11.2296 23.0388 13.9852 21.7773 16.1185C21.2366 17.037 20.3955 17.7185 19.4043 18.0741V12.4148C19.4343 12.1481 19.2841 11.8815 19.0438 11.7333ZM21.0564 8.71111C21.0263 8.68148 20.9662 8.65185 20.9062 8.62222L16.0701 5.86667C15.8298 5.71852 15.5294 5.71852 15.2891 5.86667L9.37175 9.24444V6.9037C9.37175 6.87407 9.37175 6.84444 9.40179 6.84444L14.2979 4.05926C16.4906 2.81481 19.2541 3.55556 20.5157 5.71852C21.0564 6.60741 21.2366 7.67407 21.0564 8.71111ZM8.26036 12.8593L6.21781 11.7037C6.18777 11.7037 6.18777 11.6741 6.18777 11.6444V6.07407C6.18777 3.58519 8.23032 1.57037 10.7535 1.57037C11.8348 1.57037 12.8561 1.92593 13.6671 2.60741C13.6371 2.63704 13.577 2.66667 13.5169 2.6963L8.68089 5.45185C8.44059 5.6 8.2904 5.83704 8.2904 6.13333V12.8593H8.26036ZM9.37175 10.4889L12.0151 8.97778L14.6584 10.4889V13.4815L12.0151 14.9926L9.37175 13.4815V10.4889Z" /></svg>;
+    case "Google Flow":
     case "Google":
       return <svg className="text-[var(--accent)]" width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M2.55464 6.25768C3.24798 4.87705 4.31161 3.71644 5.62666 2.90557C6.94171 2.0947 8.45636 1.66553 10.0013 1.66602C12.2471 1.66602 14.1338 2.49102 15.5763 3.83685L13.1871 6.22685C12.323 5.40102 11.2246 4.98018 10.0013 4.98018C7.83047 4.98018 5.99297 6.44685 5.3388 8.41602C5.17214 8.91602 5.07714 9.44935 5.07714 9.99935C5.07714 10.5493 5.17214 11.0827 5.3388 11.5827C5.9938 13.5527 7.83047 15.0185 10.0013 15.0185C11.1221 15.0185 12.0763 14.7227 12.823 14.2227C13.2558 13.9377 13.6264 13.5679 13.9123 13.1356C14.1982 12.7033 14.3935 12.2176 14.4863 11.7077H10.0013V8.48435H17.8496C17.948 9.02935 18.0013 9.59768 18.0013 10.1885C18.0013 12.7268 17.093 14.8635 15.5163 16.3135C14.138 17.5868 12.2513 18.3327 10.0013 18.3327C8.90683 18.3331 7.823 18.1179 6.81176 17.6992C5.80051 17.2806 4.88168 16.6668 4.10777 15.8929C3.33386 15.119 2.72005 14.2001 2.30141 13.1889C1.88278 12.1777 1.66753 11.0938 1.66797 9.99935C1.66797 8.65435 1.98964 7.38268 2.55464 6.25768Z" /></svg>;
     case "Seedream":

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { GuestSpace } from "../guest/spaces";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store";
-import { IMAGE_MODELS, VIDEO_MODELS } from "../modelConfig";
+import { IMAGE_MODELS, VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "../modelConfig";
 import { resolveNodeInputs, buildImagePayload, buildVideoPayload } from "./generationPayloads";
 import { WorkflowRuntimeError, type Plan, type PlanInput, type PlanStep, type WorkflowSnapshot, type RuntimeError } from "./contracts";
 
@@ -46,16 +46,28 @@ export function compilePlan(space: GuestSpace, input: PlanInput, now = new Date(
   const snapshot = clone(space) as WorkflowSnapshot;
   snapshot.providers = clone(providers); snapshot.outputNodeIds = [...input.outputNodeIds];
   snapshot.nodes = nodes as unknown[]; snapshot.edges = edges as unknown[];
+  // Apply user inputs before building the review and execution snapshot.
+  for (const n of nodes) {
+    const o = input.overrides?.[n.id];
+    if (!o || !INPUTS.has(n.type ?? "")) continue;
+    n.data = { ...n.data, ...(o.prompt !== undefined ? { prompt: o.prompt } : {}),
+      ...(o.assetUrl !== undefined ? { r2Url: o.assetUrl, imageUrl: o.assetUrl } : {}) };
+  }
   for (const id of ordered) {
     const n = byId.get(id)!; const d = dataOf(n); const kind = n.type === "generateNode" ? "image" : "video";
-    const modelId = String(kind === "image" ? d.model ?? "nano-banana-2" : d.videoModel ?? "kling-3.0");
+    const modelId = String(kind === "image" ? d.model ?? "nano-banana-2" : d.videoModel ?? DEFAULT_VIDEO_MODEL);
     const model = (kind === "image" ? IMAGE_MODELS : VIDEO_MODELS).find(m => m.id === modelId);
-    const provider = kind === "image" ? providers[id] : "kie";
+    const isHeyGenVideo = kind === "video" && !!model && "useHeyGenMcp" in model.apiInput && model.apiInput.useHeyGenMcp === true;
+    const isFlow = !!model && "useFlow" in model.apiInput && model.apiInput.useFlow === true;
+    const isGrok = !!model && "useGrok" in model.apiInput && model.apiInput.useGrok === true;
+    const provider = isFlow ? "flow" : (isGrok ? "grok" : (kind === "image" ? providers[id] : (isHeyGenVideo ? "heygen" : "kie")));
     if (!model) errors.push(err("invalid_model", `Unknown ${kind} model '${modelId}'`, id));
-    if (kind === "image" && !provider) errors.push(err("provider_required", "Choose a provider for every image generator", id));
-    if (kind === "image" && provider && provider !== "codex" && provider !== "kie") errors.push(err("invalid_provider", "Unsupported image provider", id));
+    if (kind === "image" && !isFlow && !isGrok && !provider) errors.push(err("provider_required", "Choose a provider for every image generator", id));
+    if (kind === "image" && !isFlow && !isGrok && provider && provider !== "codex" && provider !== "kie") errors.push(err("invalid_provider", "Unsupported image provider", id));
     const inps = resolveNodeInputs(id, nodes, edges);
-    const payload = kind === "image" ? buildImagePayload(d, inps, provider ?? "kie") : buildVideoPayload(d, inps);
+    const payload = kind === "image"
+      ? buildImagePayload(d, inps, provider === "codex" ? "codex" : "kie")
+      : buildVideoPayload(d, inps);
     const payloadPreview: Record<string, unknown> = { ...payload };
     for (const key of ["imageUrls", "startFrameUrl", "endFrameUrl", "videoRefUrl", "referenceImageUrls", "referenceVideoUrls", "referenceAudioUrls"]) if (key in payloadPreview) payloadPreview[key] = "resolved_at_runtime";
     const inputOverride = input.overrides?.[id]; if (inputOverride) errors.push(err("invalid_override", "Overrides may target prompt/image input nodes only", id));

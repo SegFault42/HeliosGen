@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, statSync } from "fs";
 import { join } from "path";
 import { DATA_DIR } from "./guest/paths";
 
@@ -14,17 +14,21 @@ type Stored = JobResult & { ts?: number };
 const FILE = join(DATA_DIR, ".job-store.json");
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // settled jobs older than a week are dropped
 
-// Single-process server: keep the map in memory and only touch disk on writes.
-// The old version re-read and rewrote the whole file on every get/set, with no
-// atomicity and no expiry, so it grew forever.
 let cache: Record<string, Stored> | null = null;
+let lastMtime = 0;
 
 function load(): Record<string, Stored> {
+  try {
+    if (existsSync(FILE)) {
+      const mtime = statSync(FILE).mtimeMs;
+      if (cache && mtime === lastMtime) return cache;
+      lastMtime = mtime;
+      cache = JSON.parse(readFileSync(FILE, "utf8"));
+      return cache!;
+    }
+  } catch {}
   if (cache) return cache;
-  if (!existsSync(FILE)) return (cache = {});
-  try { cache = JSON.parse(readFileSync(FILE, "utf8")); }
-  catch { cache = {}; }
-  return cache!;
+  return (cache = {});
 }
 
 function prune(data: Record<string, Stored>): void {

@@ -19,7 +19,7 @@ import "@xyflow/react/dist/style.css";
 
 import { getNodeLabel, useWorkflowStore, NodeData } from "@/lib/store";
 import { requestWorkflowSync } from "@/lib/workflowSyncBus";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 import CuttableEdge from "@/components/edges/CuttableEdge";
 import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
@@ -154,7 +154,7 @@ function nodeAcceptsPromptInput(node: Node<NodeData>, edges: Edge[]): boolean {
   if (node.type === "generateNode") return true;
 
   if (node.type === "videoGeneratorNode") {
-    const videoModelId = (node.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const videoModelId = (node.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
     const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
     return videoCfg?.handles.includes("prompt" as never) ?? false;
   }
@@ -910,7 +910,7 @@ export default function WorkflowCanvas() {
     if (sourceNode?.type !== "videoInputNode") return;
     if (targetNode?.type !== "videoGeneratorNode") return;
 
-    const videoModelId = (targetNode.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const videoModelId = (targetNode.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
     const cfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
     if (!cfg) return;
 
@@ -1042,7 +1042,7 @@ export default function WorkflowCanvas() {
 
       // Video generator: prompt/startFrame/endFrame accept 1 each; resource accepts up to 3
       if (target?.type === "videoGeneratorNode") {
-        const videoModelId = (target.data?.videoModel as string | undefined) ?? "kling-3.0";
+        const videoModelId = (target.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
         const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
         const isMotionControl = videoCfg?.apiInput.useMotionControl === true;
 
@@ -1324,21 +1324,32 @@ export default function WorkflowCanvas() {
         }
       }
 
-      // ── Video generator (Kling 3.0) ─────────────────────────────────────────
+      // ── Video generator ─────────────────────────────────────────────────────
       if (node.type === "videoGeneratorNode") {
         const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
+        const videoModel = (node.data.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
+        const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModel);
         const prompt = upstream.prompt ?? "";
-        const duration = node.data.duration ?? 5;
-        const aspectRatio = node.data.aspectRatio ?? "16:9";
-        const klingMode = node.data.klingMode ?? "pro";
+        const duration = node.data.duration ?? videoCfg?.defaultDuration ?? 5;
+        const aspectRatio = node.data.aspectRatio ?? videoCfg?.defaultRatio ?? "16:9";
+        const klingMode = node.data.klingMode ?? videoCfg?.defaultMode ?? "pro";
+        const resolution = node.data.grokResolution ?? videoCfg?.defaultResolution;
         const sound = node.data.sound ?? false;
         const payload = {
+          videoModel,
           prompt,
           startFrameUrl: upstream.startFrameUrl,
           endFrameUrl: upstream.endFrameUrl,
+          videoRefUrl: upstream.videoRefUrl,
           resources: upstream.resources,
+          referenceImageUrls: upstream.resources.map((r) => r.url),
+          referenceVideoUrls: upstream.referenceVideoUrls,
+          referenceAudioUrls: upstream.referenceAudioUrls,
+          ...(node.data.heygenAvatarId ? { avatarId: node.data.heygenAvatarId } : {}),
+          ...(node.data.heygenVoiceId ? { voiceId: node.data.heygenVoiceId } : {}),
           sound, duration, aspectRatio,
           mode: klingMode,
+          ...(resolution ? { resolution } : {}),
         };
 
         if (!prompt.trim()) {
@@ -1356,7 +1367,7 @@ export default function WorkflowCanvas() {
           continue;
         }
 
-        push(`[${node.id}] Kling 3.0 · ${klingMode} · ${duration}s…`);
+        push(`[${node.id}] ${videoCfg?.name ?? videoModel}…`);
         updateNodeData(nodeId, { status: "running", videoUrl: undefined });
 
         try {

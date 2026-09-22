@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
 import * as guestDb from "@/lib/guest/db";
 
 function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" {
@@ -17,11 +19,11 @@ function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" 
     jobStore.set(taskId, { status: "error", error: gen.error_msg ?? "Generation failed" });
     return "error";
   }
-  // Server restarted mid-job: jobStore forgot it but the DB still says pending.
-  // Re-arm the poller so the result can still land instead of hanging forever.
-  const kind = gen.generation_type === "video" ? "video" : "image";
-  jobStore.set(taskId, { status: "pending", type: kind });
-  resumeKieJob(taskId, kind);
+  // Server restarted mid-job: re-arm the provider-specific poller.
+  jobStore.set(taskId, { status: "pending", type: gen.generation_type === "video" ? "video" : "image" });
+  if (taskId.startsWith("heygen-agent:")) resumeHeyGenJob(taskId);
+  else if (taskId.startsWith("flow-video:") || taskId.startsWith("flow-image:")) resumeFlowJob(taskId);
+  else if (!taskId.startsWith("azure-") && !taskId.startsWith("grok-img-")) resumeKieJob(taskId, gen.generation_type === "video" ? "video" : "image");
   return "pending";
 }
 
@@ -37,8 +39,10 @@ export async function GET(req: NextRequest) {
   if (result) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
-    if (result.status === "pending" && !taskId.startsWith("azure-")) {
-      resumeKieJob(taskId, result.type === "video" ? "video" : "image");
+    if (result.status === "pending") {
+      if (taskId.startsWith("heygen-agent:")) resumeHeyGenJob(taskId);
+      else if (taskId.startsWith("flow-video:") || taskId.startsWith("flow-image:")) resumeFlowJob(taskId);
+      else if (!taskId.startsWith("azure-") && !taskId.startsWith("grok-img-")) resumeKieJob(taskId, result.type === "video" ? "video" : "image");
     }
     return NextResponse.json(result);
   }

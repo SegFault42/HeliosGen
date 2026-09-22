@@ -226,23 +226,25 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
       }));
   }, [id, addNode, insertEdge, onNodesChange]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     const url = data.imageUrl as string | undefined;
-    if (!url || isSaving) return;
-    const filename = `image-${Date.now()}.png`;
+    if (!url) return;
+    const urlExt = url.split("?")[0].split(".").pop()?.toLowerCase();
+    const ext = urlExt && ["png", "jpg", "jpeg", "webp", "gif"].includes(urlExt) ? urlExt : "png";
+    const filename = `image-${Date.now()}.${ext}`;
+    const downloadUrl = url.startsWith("data:")
+      ? url
+      : `/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+
     setIsSaving(true);
-    try {
-      const resp = await fetch(`/api/download?url=${encodeURIComponent(url)}&filename=${filename}`);
-      const blob = await resp.blob();
-      const obj = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = obj; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(obj);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [data.imageUrl, isSaving]);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => setIsSaving(false), 600);
+  }, [data.imageUrl]);
 
   const handleCancel = useCallback(() => {
     if (pendingTimerRef.current !== null) {

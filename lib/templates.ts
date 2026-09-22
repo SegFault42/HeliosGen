@@ -266,3 +266,140 @@ export function makeUGCTemplate(): {
     nodeCounters: { promptNode: 8, generateNode: 4, videoGeneratorNode: 4, imageInputNode: 1 },
   };
 }
+
+// ── Split Reaction + Demo starter ────────────────────────────────────────────
+// Reaction prompt wording follows F:/CLAUDE/hermes/skills/social-media/
+// ugc-foto-realista/templates/prompts.md, "Modo Reaction Shot (Split Funnel:
+// IA Reage + Produto Real)".
+//
+//   Text (avatar still) → Image Generator (gpt-image-2, 9:16 still)
+//     → Text (reaction video) → Video Generator (flow-omni-flash, 9:16)
+//   Video (demo_input.mp4, filmed by hand) — fed manually, no upstream node
+//   Comment — instructs the final POST /api/compose-split step
+//
+// No compose/concat node exists in the canvas yet; the comment node names the
+// manual step until one is built.
+
+const REACTION_STILL_PROMPT =
+  "A photorealistic close-up selfie portrait. Subject: the same young woman from reference images, candid close-up selfie framing, phone held at arm's length. " +
+  "Action: subtle authentic reaction of surprise/disbelief to something she is viewing on a phone screen positioned just off-lens, one relaxed hand with palm softly covering her mouth in quiet disbelief. " +
+  "Camera: front-facing iPhone camera, casual bedroom or bathroom setting, natural side lighting, realistic sensor grain. " +
+  "ANTI-AI: locked natural skin with visible pores, no beauty filters, no studio lighting, no gloss.";
+
+const REACTION_VIDEO_PROMPT =
+  "Subject: the same young woman from reference images, candid close-up selfie framing.\n" +
+  "Action: subtle authentic reaction of surprise/disbelief to something she is viewing on a phone screen positioned just off-lens. Her eyes widen slightly with genuine interest, looking directly ahead at her screen. She raises one relaxed hand with her palm softly covering her mouth in quiet disbelief.\n" +
+  "Movement: restrained, natural human micro-motion, gentle inhale, subtle head tilt. Absolutely NO theatrical over-acting, NO exaggerated gasps, NO waving arms.\n" +
+  "Camera: front-facing iPhone camera, handheld subtle float, casual bedroom or bathroom setting, natural side lighting, realistic sensor grain.\n" +
+  "ANTI-AI: locked natural skin with visible pores, no beauty filters, no studio lighting, no gloss.\n" +
+  "Duration: keep the clip 4-5 seconds, static reaction only, no cut.";
+
+export function makeSplitReactionTemplate(): {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+  nodeCounters: Record<string, number>;
+} {
+  const stillPromptId = "tpl-split-pt-still";
+  const stillImgId = "tpl-split-ig-still";
+  const videoPromptId = "tpl-split-pt-video";
+  const videoGenId = "tpl-split-vg-reaction";
+  const demoInputId = "tpl-split-demo";
+  const commentId = "tpl-split-comment";
+
+  const nodes: Node<NodeData>[] = [
+    {
+      id: stillPromptId,
+      type: "promptNode",
+      position: { x: 0, y: 0 },
+      style: { width: 260, height: 360 },
+      data: { label: "Text #1", status: "idle", prompt: REACTION_STILL_PROMPT },
+    },
+    {
+      id: stillImgId,
+      type: "generateNode",
+      position: { x: 380, y: 0 },
+      style: { width: 280, height: 280 },
+      data: {
+        label: "Image Generator #1",
+        status: "idle",
+        model: "gpt-image-2",
+        aspectRatio: "9:16",
+        quality: "2k",
+      },
+    },
+    {
+      id: videoPromptId,
+      type: "promptNode",
+      position: { x: 380, y: 380 },
+      style: { width: 260, height: 360 },
+      data: { label: "Text #2", status: "idle", prompt: REACTION_VIDEO_PROMPT },
+    },
+    {
+      id: videoGenId,
+      type: "videoGeneratorNode",
+      position: { x: 760, y: 0 },
+      style: { width: 320, height: 220 },
+      data: {
+        label: "Video Generator #1",
+        status: "idle",
+        videoModel: "flow-omni-flash",
+        aspectRatio: "9:16",
+        grokResolution: "1080p",
+        sound: true,
+      },
+    },
+    {
+      id: demoInputId,
+      type: "videoInputNode",
+      position: { x: 760, y: 380 },
+      style: { width: 280, height: 200 },
+      data: { label: "demo_input.mp4 (real product demo, filmed by hand)", status: "idle" },
+    },
+    {
+      id: commentId,
+      type: "commentNode",
+      position: { x: 1140, y: 190 },
+      style: { width: 300, height: 160 },
+      data: {
+        label: "Comment #1",
+        comment:
+          "Final step (manual, no canvas node yet): POST /api/compose-split with " +
+          "{ reactionUrl: <this Video Generator output>, demoUrl: <demo_input.mp4 above>, overlayText }. " +
+          "It hard-cuts the reaction into the real demo and burns in the typography overlay.",
+      },
+    },
+  ];
+
+  const edges: Edge[] = [
+    {
+      id: "tpl-split-e-pt-still-ig",
+      source: stillPromptId,
+      target: stillImgId,
+      targetHandle: "prompt",
+      animated: false,
+      style: edgeStyle("prompt"),
+    },
+    {
+      id: "tpl-split-e-ig-vg",
+      source: stillImgId,
+      target: videoGenId,
+      targetHandle: "startFrame",
+      animated: false,
+      style: edgeStyle("startFrame"),
+    },
+    {
+      id: "tpl-split-e-pt-video-vg",
+      source: videoPromptId,
+      target: videoGenId,
+      targetHandle: "prompt",
+      animated: false,
+      style: edgeStyle("prompt"),
+    },
+  ];
+
+  return {
+    nodes,
+    edges,
+    nodeCounters: { promptNode: 2, generateNode: 1, videoGeneratorNode: 1, videoInputNode: 1, commentNode: 1 },
+  };
+}
