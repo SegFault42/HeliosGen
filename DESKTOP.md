@@ -111,7 +111,74 @@ spctl -a -vvv "src-tauri/target/release/bundle/macos/HeliosGen.app"   # → acce
 xcrun stapler validate "src-tauri/target/release/bundle/dmg/HeliosGen_1.2.0_aarch64.dmg"
 ```
 
+## Updates from Settings
+
+Settings includes **Check for updates**, linking to the official release page.
+Published/downloaded bundles do not self-install unsigned releases.
+
+For a local macOS source installation, opt in at build time:
+
+```bash
+HELIOS_LOCAL_UPDATER=1 pnpm desktop:build --bundles app
+```
+
+Install the resulting bundle at `/Applications/HeliosGen.app` and keep this Git
+checkout plus Node, pnpm, Rust, and Xcode tools available. Settings then offers
+**Update HeliosGen**: confirm to fetch the latest official stable release, merge
+it into the current branch, build, install, and restart. This can take several
+minutes. The checkout must be clean and on a branch; conflicts abort the merge
+and leave the installed app untouched. Nothing is pushed to any Git remote.
+
+The installer stages the build before quitting the app, moves Next's writable
+cache into app data, applies a local ad-hoc signature, and verifies the bundle.
+It backs up and checks SQLite before replacing the application, then checks the
+restarted server. Save work and finish any generations before updating.
+The bundle identifier, localhost port preference, saved media, and WebKit storage
+are retained. This is not a signed/notarized binary auto-update mechanism.
+
+Previous apps stay under `/Applications/.HeliosGen-backups/`. Database backups,
+progress, and `update.log` stay in the app-data `app-updater/` directory. Backups
+are not automatically deleted. If startup verification fails, the prior bundle
+and database remain available for manual recovery; no database rollback is done
+automatically. Normal release builds omit the local checkout configuration.
+
+## Prompt enhancement
+
+The **Enhance** switch beside JSON/YAML starts off and remembers its setting per
+image/video tab and folder. When on, the composer action is **Enhance prompt**.
+Submit to enhance, review the inserted text, then press **Generate** to generate
+with the unchanged result. Editing it enables enhancement again; switch Enhance
+off to generate exact edited text. Typing/toggling never calls a model.
+
+`/prompt <idea>` plus Enter remains an explicit shortcut regardless of the switch;
+Shift+Enter inserts a newline. Multi-prompt enhancement processes nonempty blocks
+sequentially and replaces the draft only after all succeed. Video enhancement
+includes motion and camera direction. Errors preserve the original text, and
+changing tab/folder cancels the request. Enhancement never creates generation tiles.
+
+The backend checks the actual `codex` CLI and ChatGPT login, then uses
+`gpt-5.6-luna` with low reasoning in an ephemeral, read-only session that ignores
+the user's model configuration. Only missing Codex/ChatGPT setup allows fallback
+to Kie's `gpt-5-6-luna` via `/codex/v1/responses` and the saved Settings API key.
+The fallback consumes Kie text credits and is identified by a brief toast.
+Configured Codex errors, timeouts, model-access failures and limits do not trigger
+paid fallback. The selected image/video generation provider is never changed.
+
+Provider-boundary checks: `node --experimental-strip-types --test lib/codexPrompt.test.mjs`.
+
 ## Local data store
+
+### Codex connection checks
+
+Settings reports image-CLI installation and the local ChatGPT login separately.
+Checks run only local, bounded commands; they never generate an image, refresh
+authentication, or initiate login. Image capability is **Not verified**: even a
+local signed-in session does not prove current quota/model access. The most
+recent successful Codex image timestamp is historical evidence only.
+API-key sessions are distinguished from ChatGPT, and an auth file alone never
+counts as signed in. Explicit Connect/Reauth still starts the device-login flow.
+The status endpoint returns `imageCli`, `chatgptLogin`, `imageGeneration`, and
+`lastSuccessAt` instead of the old `ready`/`authFound` interpretation.
 
 `lib/guest/sqlite.ts` (SQLite via `node:sqlite`, built into Node 22 — no native
 dep) backs `lib/guest/db.ts` (generations, uploads, folders, settings, asset
@@ -151,7 +218,7 @@ plus every referenced image/video — portable and shareable as a file
 - [x] External CLIs — the shell resolves the login-shell `$PATH` for the sidecar
       so `ffmpeg`/`ffprobe` (video trim, frame extract) and `codex`/
       `codex-imagegen` (optional Codex provider) are found. They're not bundled;
-      if absent the feature degrades cleanly (Codex badge shows NOT CONFIGURED,
+      if absent the feature degrades cleanly (Codex checks report missing tools,
       video-trim errors). Codex still needs a one-time `codex login` in Settings.
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to

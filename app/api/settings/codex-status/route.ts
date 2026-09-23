@@ -1,27 +1,13 @@
-import { NextResponse } from "next/server";
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { checkCodexLogin, checkImageCli } from "@/lib/codexStatus.mjs";
+import { lastSuccessfulCodexImage } from "@/lib/guest/db";
+import { GUEST_USER_ID } from "@/lib/guestMode";
 
-/**
- * codex-imagegen has no per-user credentials to save from the browser — it's a
- * single shared `codex login` session on this host. This just reports whether
- * that host-level setup is in place, for the "READY / NOT CONFIGURED" badge.
- */
-function binaryOnPath(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn("codex-imagegen", ["--help"]);
-    proc.on("error", () => resolve(false));
-    proc.on("close", (code) => resolve(code === 0));
-  });
-}
+export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const authPath = join(process.env.CODEX_HOME ?? join(homedir(), ".codex"), "auth.json");
-  const [installed, authFound] = await Promise.all([
-    binaryOnPath(),
-    Promise.resolve(existsSync(authPath)),
+export async function GET(request: Request) {
+  const [imageCli, chatgptLogin] = await Promise.all([
+    checkImageCli(request.signal), checkCodexLogin(request.signal),
   ]);
-  return NextResponse.json({ installed, authFound, ready: installed && authFound });
+  return Response.json({ imageCli, chatgptLogin, imageGeneration: "not_verified",
+    lastSuccessAt: lastSuccessfulCodexImage(GUEST_USER_ID) });
 }

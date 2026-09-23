@@ -173,7 +173,7 @@ More models are coming.
 
 # 🤖 Codex CLI (optional — alternate GPT Image 2 backend)
 
-Instead of routing GPT Image 2 through kie.ai credits, HeliosGen can generate through your own ChatGPT Codex subscription via [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli). The desktop app picks up `codex` from your `PATH` automatically; if it's missing, the feature just shows **NOT CONFIGURED** and everything else keeps working.
+Instead of routing GPT Image 2 through kie.ai credits, HeliosGen can generate through your own ChatGPT Codex subscription via [`codex-imagegen-cli`](https://github.com/jdmnk/codex-imagegen-cli). Settings reports CLI installation and local ChatGPT sign-in separately; missing tools do not prevent using other providers.
 
 Requirements:
 - A ChatGPT Plus/Pro/Team/Enterprise account with Codex access
@@ -207,11 +207,11 @@ Either:
 - run `codex login` in a terminal (opens a browser to sign in), **or**
 - open the app → **Settings → API Keys → Codex CLI → Connect Codex**, which walks you through a device-code login — visit the printed URL and enter the code, no terminal needed.
 
-> ⚠️ Starting a new login (either way) immediately invalidates any existing session on that machine — the CLI clears old credentials the moment a login attempt begins, whether or not it's ever completed. Only start one when the status badge below shows **NOT CONFIGURED**.
+> ⚠️ Start Connect/Reauth only when you intend to replace the current login. Local status checks do not initiate login or refresh credentials.
 
 ### 4. Enable it for GPT Image 2
 
-In **Settings → Image Models**, set GPT Image 2's provider toggle to **Codex CLI**. The status badge in **Settings → API Keys** shows **READY** once both the CLI and login are in place.
+In **Settings → Image Models**, set GPT Image 2's provider toggle to **Codex CLI**. **Settings → API Keys** shows installation, local ChatGPT sign-in, and **Image generation: Not verified** separately. A historical last-success time is shown when available, but does not guarantee current quota or model access. Refresh checks never generates a test image.
 
 ---
 
@@ -302,4 +302,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-
