@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, extname, join } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
+import { ensureStorage } from "@/lib/storage";
+import { mediaPathFor } from "@/lib/guest/media";
 
 const MCP_URL = process.env.HEYGEN_MCP_URL ?? "https://mcp.heygen.com/mcp/v1/";
 const OAUTH_TOKEN_URL = process.env.HEYGEN_MCP_TOKEN_URL ?? "https://api2.heygen.com/v1/oauth/token";
@@ -8,7 +10,6 @@ const DEFAULT_HERMES_HOME = process.env.HERMES_HOME ?? "F:/CLAUDE/hermes";
 const DEFAULT_TOKEN_FILE = join(DEFAULT_HERMES_HOME, "mcp-tokens", "heygen.json");
 const DEFAULT_CLIENT_FILE = join(DEFAULT_HERMES_HOME, "mcp-tokens", "heygen.client.json");
 const DEFAULT_CLIENT_ID = "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json";
-const LOCAL_ORIGIN = process.env.ANVIL_URL ?? "http://127.0.0.1:3000";
 const REFRESH_SKEW_MS = 90_000;
 
 interface OAuthTokenFile {
@@ -265,13 +266,15 @@ async function readMedia(url: string): Promise<{ bytes: Buffer; contentType: str
   const data = decodeDataUrl(url);
   if (data) return { ...data, filename: `anvil-${randomUUID()}.bin` };
   if (url.startsWith("blob:")) throw new Error("HeyGen cannot use a browser blob URL; save the asset in ANVIL first");
-  const requestUrl = url.startsWith("/") ? new URL(url, LOCAL_ORIGIN).toString() : url;
-  const response = await fetch(requestUrl);
-  if (!response.ok) throw new Error(`Could not read ANVIL media (${response.status})`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const pathPart = requestUrl.split("?")[0].split("#")[0];
+  // ensureStorage passes already-local /generated/ URLs through untouched and mirrors
+  // remote URLs through the SSRF-guarded fetch in lib/guest/localStorage.ts.
+  const local = await ensureStorage(url, "references");
+  const abs = mediaPathFor(local);
+  if (!abs) throw new Error("Could not read ANVIL media");
+  const bytes = await readFile(abs);
+  const pathPart = local.split("?")[0].split("#")[0];
   const filename = basename(pathPart) || `anvil-${randomUUID()}.bin`;
-  return { bytes, contentType: response.headers.get("content-type")?.split(";")[0] ?? defaultContentType(filename), filename };
+  return { bytes, contentType: defaultContentType(filename), filename };
 }
 
 async function uploadBytes(filename: string, contentType: string, bytes: Buffer): Promise<string> {

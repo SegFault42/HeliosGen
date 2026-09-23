@@ -5,8 +5,9 @@
  * Returns: { cdnUrl: string }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { uploadBuffer } from "@/lib/storage";
-import { writeFile, readFile, unlink, mkdtemp } from "fs/promises";
+import { uploadBuffer, ensureStorage } from "@/lib/storage";
+import { mediaPathFor } from "@/lib/guest/media";
+import { readFile, unlink, mkdtemp } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { execFile } from "child_process";
@@ -17,7 +18,6 @@ const execFileAsync = promisify(execFile);
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  let inputPath: string | null  = null;
   let outputPath: string | null = null;
 
   try {
@@ -30,19 +30,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "endTime must be greater than startTime" }, { status: 400 });
     }
 
-    // Download the video
-    const res = await fetch(videoUrl);
-    if (!res.ok) {
-      return NextResponse.json({ error: `Failed to fetch video: ${res.status}` }, { status: 400 });
+    // Resolve to a local file: mirrors remote URLs through the SSRF-guarded
+    // fetch, decodes data: URLs, and passes already-local /generated/ paths through.
+    let inputPath: string | null;
+    try {
+      const local = await ensureStorage(videoUrl, "references");
+      inputPath = mediaPathFor(local);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ error: `Failed to fetch video: ${msg}` }, { status: 400 });
     }
-    const videoBuffer = Buffer.from(await res.arrayBuffer());
-    const contentType = res.headers.get("content-type") ?? "video/mp4";
+    if (!inputPath) {
+      return NextResponse.json({ error: "Could not resolve video" }, { status: 400 });
+    }
 
-    // Write to temp files
     const tmpDir  = await mkdtemp(join(tmpdir(), "trim-"));
-    inputPath  = join(tmpDir, "input.mp4");
     outputPath = join(tmpDir, "output.mp4");
-    await writeFile(inputPath, videoBuffer);
 
     // Trim with ffmpeg: -ss before -i = fast seek; -t = duration; -c copy = no re-encode
     await execFileAsync("ffmpeg", [
@@ -56,7 +59,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const outputBuffer = await readFile(outputPath);
-    const cdnUrl = await uploadBuffer(outputBuffer, contentType.startsWith("video/") ? contentType : "video/mp4", "references");
+    const cdnUrl = await uploadBuffer(outputBuffer, "video/mp4", "references");
 
     return NextResponse.json({ cdnUrl });
   } catch (e: unknown) {
@@ -64,10 +67,7 @@ export async function POST(req: NextRequest) {
     console.error("[trim-video] error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   } finally {
-    // Cleanup temp files
-    await Promise.all([
-      inputPath  ? unlink(inputPath).catch(() => {})  : Promise.resolve(),
-      outputPath ? unlink(outputPath).catch(() => {}) : Promise.resolve(),
-    ]);
+    // Cleanup temp output file (the resolved input lives under MEDIA_DIR, not ours to delete)
+    if (outputPath) await unlink(outputPath).catch(() => {});
   }
 }

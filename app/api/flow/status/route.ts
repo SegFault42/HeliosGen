@@ -3,6 +3,20 @@ import { listFlowAccounts, getFlowCredits } from "@/lib/flowAdapter";
 
 export const runtime = "nodejs";
 
+// Allowlist: never spread raw account records. They carry an OAuth/session
+// token, plus local-only fields (CDP debug endpoint, browser executable
+// path) that any LAN client hitting this route should not learn.
+function publicAccount(account: any) {
+  return {
+    id: account.id,
+    label: account.label,
+    email: account.email,
+    connectionStatus: account.connectionStatus,
+    lastOpenedAt: account.lastOpenedAt,
+    lastValidatedAt: account.lastValidatedAt,
+  };
+}
+
 export async function GET() {
   try {
     const data = await listFlowAccounts();
@@ -21,7 +35,7 @@ export async function GET() {
       provider: "google-flow",
       defaultAccountId: data.defaultAccountId,
       accountsCount: data.accounts.length,
-      accounts: data.accounts,
+      accounts: data.accounts.map(publicAccount),
       credits: creditsInfo,
     });
   } catch (error) {

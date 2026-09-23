@@ -18,14 +18,15 @@ function isAllowed(url: string, origin?: string): boolean {
   if (url.startsWith("/generated/")) return true; // local disk, served same-origin
   try {
     const parsed = new URL(url);
-    if (parsed.pathname.startsWith("/generated/")) return true;
-    if (origin && parsed.origin === origin) return true;
-    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") return true;
-    if (ALLOWED_ORIGINS.includes(parsed.origin)) return true;
+    if (parsed.username || parsed.password) return false; // userinfo can't hide a foreign host from origin checks below
+    // Same-origin /generated/ file, e.g. a caller that already has the full URL of this server.
+    if (origin && parsed.origin === origin && parsed.pathname.startsWith("/generated/")) return true;
+    // Exact match against an allow-listed CDN origin (https, no path games).
+    if (parsed.protocol === "https:" && ALLOWED_ORIGINS.includes(parsed.origin)) return true;
   } catch {
     // not an absolute URL
   }
-  return ALLOWED_ORIGINS.some((allowed) => url.startsWith(allowed));
+  return false;
 }
 
 export const runtime = "edge";
