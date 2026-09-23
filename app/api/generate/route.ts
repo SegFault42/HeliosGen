@@ -15,6 +15,7 @@ import { ensureR2, uploadBuffer } from "@/lib/storage";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
+import { validateAzureEndpoint } from "@/lib/azureEndpoint";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 import { orderedCodexAuthFiles, markCodexLimited, isUsageLimitError } from "@/lib/codexAccounts";
@@ -139,8 +140,10 @@ async function curlMultipartPost(
     for (let i = 0; i < images.length; i++) {
       args.push("-F", `image[]=@${tmpFiles[i]};type=${images[i].mime}`);
     }
+    // --form-string (not -F) for text fields: curl never treats a --form-string
+    // value starting with @ or < as a file/header reference, unlike -F.
     for (const [k, v] of Object.entries(textFields)) {
-      args.push("-F", `${k}=${v}`);
+      args.push("--form-string", `${k}=${v}`);
     }
 
     dlog("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
@@ -288,6 +291,10 @@ async function runCodexImagegen(opts: {
 export const maxDuration = 1000;
 
 export async function POST(req: NextRequest) {
+  // text/plain is a CORS "simple" request, so a cross-site page could POST here without a preflight.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
   const {
     model       = "nano-banana-2",
     prompt,
@@ -441,6 +448,10 @@ export async function POST(req: NextRequest) {
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
+    const validatedBase = validateAzureEndpoint(azureBaseUrl);
+    if (!validatedBase) {
+      return NextResponse.json({ error: "Azure base URL is missing or invalid. Add a valid Azure endpoint in Settings." }, { status: 400 });
+    }
     const azureKey = (await getAzureKeyForUser()) ?? process.env.AZURE_API_KEY ?? null;
     if (!azureKey) return NextResponse.json({ error: "Azure API key is not configured. Add it in Settings." }, { status: 500 });
 
@@ -453,7 +464,7 @@ export async function POST(req: NextRequest) {
       ? `${azureCustomWidth}x${azureCustomHeight}`
       : (sizeMap[aspectRatio] ?? "1024x1024");
     const quality         = azureQuality || "medium";
-    const base            = azureBaseUrl.replace(/\/$/, "");
+    const base            = validatedBase;
     const azureApiVersion = cfg.azureApiVersion ?? "2025-04-01-preview";
     const truncatedPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000);
 

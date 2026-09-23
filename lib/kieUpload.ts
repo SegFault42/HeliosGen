@@ -8,8 +8,7 @@
  * is used instead.
  */
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { MEDIA_DIR } from "./guest/paths";
+import { mediaPathFor } from "./guest/media";
 
 // kie.ai's temp file store lives on this host, not api.kie.ai (their docs are
 // stale). Files land on tempfile.redpandaai.co and are purged after 3 days.
@@ -44,9 +43,10 @@ function isLocalMedia(url: string): boolean {
 async function toDataUrl(input: string): Promise<string> {
   if (input.startsWith("data:")) return input;
 
-  const rel = input.replace(/^\/generated\//, "").replace(/^\/+/, "");
-  const buf = await readFile(join(MEDIA_DIR, rel));
-  const ext = rel.split(".").pop()?.toLowerCase() ?? "";
+  const abs = mediaPathFor(input);
+  if (!abs) throw new Error(`Not a media file: ${input}`);
+  const buf = await readFile(abs);
+  const ext = abs.split(".").pop()?.toLowerCase() ?? "";
   const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
   return `data:${mime};base64,${buf.toString("base64")}`;
 }
