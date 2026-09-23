@@ -57,6 +57,14 @@ settings live in a local database; media is saved to a local folder:
 
 Delete that folder to reset the app.
 
+### Review enhanced prompts
+
+After **Enhance** or `/prompt` inserts a result, **Restore original** restores the
+entire previous draft and its text/JSON/YAML display mode, including multi-prompt
+drafts. It is available only until you edit the enhanced text or change tabs or
+folders. This is a single temporary undo, not saved history. Editing while an
+enhancement runs cancels it so a late result cannot replace your newer draft.
+
 ---
 
 # 📸 Screenshots
@@ -302,4 +310,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-

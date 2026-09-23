@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -292,6 +292,7 @@ interface SavedSettings {
   azureCustomHeight?: number;
   promptTextMode?: "text" | "json" | "yaml";
   multiPromptMode?: boolean;
+  enhancePrompt?: boolean;
   vidStartFrameUrl?: string | null;
   vidEndFrameUrl?: string | null;
   vidResourceUrls?: string[];
@@ -703,6 +704,25 @@ function GalleryInner() {
     }
   }, []);
   const [submitting, setSubmitting] = useState(false);
+  const [expandingPrompt, setExpandingPrompt] = useState(false);
+  const [enhancePrompt, setEnhancePrompt] = useState(() => loadSettings(tab, selectedFolderId)?.enhancePrompt ?? false);
+  const [reviewedPrompt, setReviewedPrompt] = useState<string | null>(null);
+  const [promptUndo, setPromptUndo] = useState<{
+    original: string; mode: "text" | "json" | "yaml"; enhanced: string;
+  } | null>(null);
+  const promptExpansion = useRef<AbortController | null>(null);
+  const latestPromptDraft = useRef({ prompt, tab, folderId: selectedFolderId });
+  // An edit (even one later undone) invalidates an in-flight enhancement.
+  // Layout cleanup runs synchronously with the committed change, before a late
+  // response can insert its result while passive effects are still pending.
+  useLayoutEffect(() => {
+    latestPromptDraft.current = { prompt, tab, folderId: selectedFolderId };
+    return () => { promptExpansion.current?.abort(); };
+  }, [tab, selectedFolderId, prompt]);
+  useEffect(() => {
+    setPromptUndo(current => current?.enhanced === prompt ? current : null);
+    setReviewedPrompt(current => current === prompt ? current : null);
+  }, [prompt]);
   const [veoMode, setVeoMode] = useState<"frames" | "references">("frames");
   const [promptTextMode, setPromptTextMode] = useState<"text" | "json" | "yaml">(() => loadSettings(tab, selectedFolderId)?.promptTextMode ?? "text");
   const [multiPromptMode, setMultiPromptMode] = useState<boolean>(() => loadSettings(tab, selectedFolderId)?.multiPromptMode ?? false);
@@ -1073,6 +1093,9 @@ function GalleryInner() {
     }
     const newModels = tab === "videos" ? VIDEO_MODELS : IMAGE_MODELS;
     const saved = loadSettings(tab, prevFolderIdRef.current);
+    setEnhancePrompt(saved?.enhancePrompt ?? false);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
     const model = (saved?.modelId ? newModels.find(m => m.id === saved.modelId) : null) ?? newModels[0];
     const azureOpts = (model as { azureResolutionOptions?: string[] }).azureResolutionOptions;
     const savedIsCustom = saved?.aspectRatio === "custom" && Number.isFinite(saved.azureCustomWidth) && Number.isFinite(saved.azureCustomHeight) && isAzureActiveForModel(model.id, azureOpts);
@@ -1237,7 +1260,7 @@ function GalleryInner() {
       .map(r => r.cdnUrl!))];
     const readyCdnUrl = (r: RefImage) => !r.uploading && !r.error && !!r.cdnUrl;
     const s: SavedSettings = {
-      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode,
+      prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImageUrls, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, enhancePrompt,
       vidStartFrameUrl: vidStartFrame?.cdnUrl ?? null,
       vidEndFrameUrl: vidEndFrame?.cdnUrl ?? null,
       vidResourceUrls: vidResources.filter(readyCdnUrl).map(r => r.cdnUrl!),
@@ -1249,7 +1272,7 @@ function GalleryInner() {
     };
     settingsSnapshotRef.current = s;
     saveSettings(tab, prevFolderIdRef.current, s);
-  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
+  }, [tab, prompt, modelId, aspectRatio, quality, count, duration, mode, sound, refImages, azureResolution, azureCustomWidth, azureCustomHeight, promptTextMode, multiPromptMode, enhancePrompt, vidStartFrame, vidEndFrame, vidResources, vidVideoRef, vidRefVideos, vidRefAudios, vidElements, taggedImages]);
 
   // Save/restore all settings when switching folders
   useEffect(() => {
@@ -1281,6 +1304,9 @@ function GalleryInner() {
     setAzureResolution(saved?.azureResolution ?? "1k");
     setPromptTextMode(saved?.promptTextMode ?? "text");
     setMultiPromptMode(saved?.multiPromptMode ?? false);
+    setEnhancePrompt(saved?.enhancePrompt ?? false);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
     setRefImages(prev => { prev.forEach(r => URL.revokeObjectURL(r.objectUrl)); return savedUrls.map(toRef); });
     setTaggedImages(
       saved?.taggedImages?.length
@@ -1783,7 +1809,90 @@ function GalleryInner() {
     throw new Error("Timed out");
   };
 
+  const expandPrompt = async (source: string, blockIndex?: number, allBlocks = false) => {
+    if (promptExpansion.current || submitting) return;
+    const snapshot = prompt;
+    const blocks = allBlocks ? snapshot.split(/\n\n+/) : [source];
+    const tasks = blocks.map((text, index) => ({ index, text,
+      idea: text.trim().replace(/^\/prompt(?:\s+|$)/i, "").trim() })).filter(item => item.text.trim());
+    if (!tasks.length || tasks.some(item => !item.idea)) { setGenError("Add an idea after /prompt."); return; }
+    const controller = new AbortController();
+    promptExpansion.current = controller;
+    setExpandingPrompt(true);
+    setGenError("");
+    try {
+      let usedKie = false;
+      for (const task of tasks) {
+        controller.signal.throwIfAborted();
+        const response = await fetch("/api/expand-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-helios-prompt": "1" },
+          body: JSON.stringify({ idea: task.idea, kind: isVideo ? "video" : "image" }),
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not enhance prompt.");
+        if (typeof result.prompt !== "string" || !result.prompt.trim()) throw new Error("Enhancement returned no prompt. Original text preserved.");
+        blocks[task.index] = result.prompt;
+        usedKie ||= result.provider === "kie";
+      }
+      controller.signal.throwIfAborted();
+      let enhanced = blocks.join("\n\n");
+      if (!allBlocks && blockIndex !== undefined) {
+        const originalBlocks = snapshot.split(/\n\n+/);
+        originalBlocks[blockIndex] = enhanced;
+        enhanced = originalBlocks.join("\n\n");
+      }
+      const latest = latestPromptDraft.current;
+      if (latest.prompt !== snapshot || latest.tab !== tab || latest.folderId !== selectedFolderId) return;
+      // Guard all insertion-related state together, not only the text setter.
+      // There is no await between the latest-draft check and these updates.
+      setPrompt(enhanced);
+      setPromptUndo({ original: snapshot, mode: promptTextMode, enhanced });
+      setReviewedPrompt(allBlocks || !multiPromptMode ? enhanced : null);
+      setPromptTextMode("text");
+      if (usedKie) addToast("Enhanced with Kie Luna — Codex ChatGPT is not configured.", "info");
+      requestAnimationFrame(() => {
+        if (inputRef.current && !multiPromptMode && !controller.signal.aborted) {
+          resizeTextarea(inputRef.current, promptExpanded ? window.innerHeight * 0.75 - 220 : 264);
+          inputRef.current.focus();
+        }
+      });
+    } catch (error) {
+      if (!controller.signal.aborted) setGenError((error as Error).message);
+    } finally {
+      promptExpansion.current = null;
+      setExpandingPrompt(false);
+    }
+  };
+
+  const restoreOriginalPrompt = () => {
+    if (!promptUndo || promptUndo.enhanced !== prompt || expandingPrompt) return;
+    setPrompt(promptUndo.original);
+    setPromptTextMode(promptUndo.mode);
+    setReviewedPrompt(null);
+    setPromptUndo(null);
+    requestAnimationFrame(() => {
+      const inputs = multiPromptMode
+        ? Array.from(document.querySelectorAll<HTMLTextAreaElement>("[data-prompt-stack] textarea"))
+        : inputRef.current ? [inputRef.current] : [];
+      inputs.forEach(input => resizeTextarea(input, promptExpanded ? window.innerHeight * 0.75 - 220 : 264));
+      inputs[0]?.focus();
+    });
+  };
+
   const generate = async () => {
+    if (promptExpansion.current || expandingPrompt) return;
+    const blocks = multiPromptMode ? prompt.split(/\n\n+/) : [prompt];
+    const commandIndex = blocks.findIndex(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+    if (commandIndex >= 0) {
+      await expandPrompt(blocks[commandIndex], multiPromptMode ? commandIndex : undefined, enhancePrompt && multiPromptMode);
+      return; // Expanding text never starts media generation or creates a tile.
+    }
+    if (enhancePrompt && prompt.trim() && reviewedPrompt !== prompt) {
+      await expandPrompt(prompt, undefined, multiPromptMode);
+      return; // Pause for review; a second submission uses the reviewed text.
+    }
     if (kieKeySet === false) return;
     if (!prompt.trim() && !isVideo) return;
     requestNotificationPermission();
@@ -2198,7 +2307,9 @@ function GalleryInner() {
   const displayVidRefAudios = getDisplayOrder(vidRefAudios, draggingId, reorderOverId);
 
   const vidRequiresPrompt = isVideo && !!(vidModel?.apiInput.promptMaxLength);
-  const canGenerate = kieKeySet === false ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const hasPromptCommand = (multiPromptMode ? prompt.split(/\n\n+/) : [prompt]).some(p => /^\/prompt(?:\s|$)/i.test(p.trim()));
+  const needsEnhancement = hasPromptCommand || (enhancePrompt && !!prompt.trim() && reviewedPrompt !== prompt);
+  const canGenerate = expandingPrompt || submitting ? false : needsEnhancement ? true : kieKeySet === false ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
@@ -3633,6 +3744,9 @@ function GalleryInner() {
                     overlayInnerRef.current.style.transform = `translateY(-${e.currentTarget.scrollTop}px)`;
                 }}
                 onKeyDown={e => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(prompt.trim())) {
+                    e.preventDefault(); void expandPrompt(prompt); return;
+                  }
                   if (atMenuOpen) {
                     if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                     if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3641,7 +3755,7 @@ function GalleryInner() {
                   }
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !submitting) { e.preventDefault(); generate(); }
                 }}
-                disabled={submitting}
+                disabled={submitting || expandingPrompt}
                 style={{
                   position: "relative",
                   display: "block",
@@ -3876,6 +3990,9 @@ function GalleryInner() {
                             }
                           }}
                           onKeyDown={e => {
+                            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && /^\/prompt(?:\s|$)/i.test(block.trim())) {
+                              e.preventDefault(); void expandPrompt(block, blockIdx); return;
+                            }
                             if (atMenuOpen) {
                               if (e.key === "ArrowDown") { e.preventDefault(); setMentionSelIdx(i => (i + 1) % filteredMentions.length); return; }
                               if (e.key === "ArrowUp") { e.preventDefault(); setMentionSelIdx(i => (i - 1 + filteredMentions.length) % filteredMentions.length); return; }
@@ -3914,7 +4031,7 @@ function GalleryInner() {
                               });
                             }
                           }}
-                          disabled={submitting}
+                          disabled={submitting || expandingPrompt}
                           style={{
                             display: "block", width: "100%",
                             background: "transparent", border: "none", outline: "none",
@@ -4364,6 +4481,36 @@ function GalleryInner() {
 
                 {/* Text / JSON / YAML mode toggle */}
                 <button
+                  type="button" role="switch" aria-checked={enhancePrompt} aria-label="Enhance"
+                  title="Enhance with Codex Luna, then review before generating. Uses Kie only if Codex is not configured."
+                  disabled={submitting || expandingPrompt}
+                  onClick={() => setEnhancePrompt(value => !value)}
+                  style={{ display: "flex", alignItems: "center", gap: "7px", height: "36px", padding: "0 12px",
+                    borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", flexShrink: 0,
+                    background: enhancePrompt ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.05)",
+                    color: enhancePrompt ? "#2DD4BF" : "rgba(255,255,255,0.55)", fontSize: "13px",
+                    cursor: submitting || expandingPrompt ? "not-allowed" : "pointer" }}>
+                  <span style={{ width: "28px", height: "16px", borderRadius: "8px", position: "relative",
+                    background: enhancePrompt ? "#2DD4BF" : "rgba(255,255,255,0.18)" }}>
+                    <span style={{ position: "absolute", top: "2px", left: enhancePrompt ? "14px" : "2px",
+                      width: "12px", height: "12px", borderRadius: "50%", background: enhancePrompt ? "#0B3B38" : "#fff" }} />
+                  </span>
+                  Enhance
+                </button>
+
+                {promptUndo?.enhanced === prompt && (
+                  <button type="button" onClick={restoreOriginalPrompt}
+                    disabled={submitting || expandingPrompt}
+                    title="Restore the exact text and display mode from before enhancement."
+                    style={{ height: "36px", padding: "0 10px", borderRadius: "8px",
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
+                      color: "rgba(255,255,255,0.55)", fontSize: "13px", fontFamily: "inherit",
+                      cursor: submitting || expandingPrompt ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                    Restore original
+                  </button>
+                )}
+
+                <button
                   onClick={() => {
                     if (promptTextMode !== "text") {
                       setPromptTextMode("text");
@@ -4433,11 +4580,12 @@ function GalleryInner() {
                 <Button
                   onClick={generate}
                   disabled={!canGenerate}
+                  aria-label={needsEnhancement ? "Enhance prompt" : "Generate"}
                   variant="outline"
                   size="sm"
                   className="border-none bg-[rgba(45,212,191,0.25)] text-[rgba(45,212,191,0.9)] hover:bg-[rgba(45,212,191,0.38)] hover:text-[rgba(45,212,191,0.9)] disabled:bg-[rgba(45,212,191,0.1)] disabled:text-[rgba(45,212,191,0.3)]"
                 >
-                  {submitting ? (
+                  {submitting || expandingPrompt ? (
                     <span style={{
                       width: "11px", height: "11px", borderRadius: "50%",
                       border: "2px solid rgba(45,212,191,0.25)", borderTopColor: "rgba(45,212,191,0.9)",
@@ -4449,12 +4597,13 @@ function GalleryInner() {
                       <path d="m21.854 2.147-10.94 10.939" />
                     </svg>
                   )}
-                  {!submitting && (
+                  {expandingPrompt && <span role="status">Enhancing…</span>}
+                  {!submitting && !expandingPrompt && (needsEnhancement ? <span>Enhance prompt</span> : enhancePrompt ? <span>Generate</span> : (
                     <KbdGroup data-icon="inline-end" className="gap-0.5">
                       <Kbd>⌘</Kbd>
                       <Kbd>↵</Kbd>
                     </KbdGroup>
-                  )}
+                  ))}
                 </Button>
               </div>
             </div>{/* end bottom row */}
