@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
 import { useFolderStore } from "@/lib/folderStore";
+import { shouldClearJob, type JobCleanupScope, type PendingJobPlaceholder } from "@/lib/pendingJobCleanup";
 import {
   Workflow,
   Image as ImageIcon,
@@ -169,20 +170,30 @@ const FOLDER_COLORS: { color: string | null; label: string }[] = [
 ];
 
 // ── Clean failed pending generations from localStorage + notify gallery page ──
-function cleanFailedJobs(folderId: string | null) {
+function cleanFailedJobs(scope: JobCleanupScope) {
   try {
     const stored = localStorage.getItem("aiui-pending-gens");
     if (stored) {
-      const parsed = JSON.parse(stored) as Array<{ error?: string; folderId?: string | null }>;
-      const cleaned = parsed.filter(pg => {
-        if (!pg.error) return true;
-        if (folderId === null) return false;
-        return pg.folderId !== folderId;
-      });
+      const parsed = JSON.parse(stored) as PendingJobPlaceholder[];
+      const cleaned = parsed.filter(pg => !shouldClearJob(pg, scope));
       localStorage.setItem("aiui-pending-gens", JSON.stringify(cleaned));
     }
   } catch {}
-  window.dispatchEvent(new CustomEvent("clean-failed-jobs", { detail: { folderId } }));
+  window.dispatchEvent(new CustomEvent("clean-failed-jobs", { detail: scope }));
+}
+
+function useClearFailedJobs(folderId: string | null) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { selectedFolderId, folders } = useFolderStore();
+  if (pathname !== "/gallery" || searchParams.get("source") === "uploaded" || selectedFolderId !== folderId) return undefined;
+  return () => {
+    const folderIds = folderId === null ? null : [folderId];
+    if (folderIds) for (let i = 0; i < folderIds.length; i++) {
+      for (const folder of folders) if (folder.parentId === folderIds[i] && !folderIds.includes(folder.id)) folderIds.push(folder.id);
+    }
+    cleanFailedJobs({ tab: searchParams.get("tab") === "videos" ? "videos" : "images", folderIds });
+  };
 }
 
 // ── FolderRow — defined at module level so React never remounts it on parent re-renders ──
@@ -215,6 +226,7 @@ const FolderRow = React.memo(function FolderRow({
   creatingInFolderId, newFolderName, onNameChange, onNameKeyDown, onNameBlur, inputRef,
   getCount, generatingFolderIds, unseenFolderIds,
 }: FolderRowProps) {
+  const clearFailedJobs = useClearFailedJobs(folder.id);
   const [drop, setDrop] = React.useState<"before" | "after" | "inside" | null>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [menuPos, setMenuPos] = React.useState<{ x: number; y: number } | null>(null);
@@ -472,7 +484,10 @@ const FolderRow = React.memo(function FolderRow({
             Rename
           </button>
           <button
-            onClick={e => { e.stopPropagation(); setMenuOpen(false); cleanFailedJobs(folder.id); }}
+            disabled={!clearFailedJobs}
+            className="disabled:opacity-40"
+            title="Remove failed or interrupted placeholders in the current view only. Saved media is kept."
+            onClick={e => { e.stopPropagation(); setMenuOpen(false); clearFailedJobs?.(); }}
             style={{
               display: "block", width: "100%", textAlign: "left",
               padding: "6px 10px", borderRadius: 5, fontSize: 12,
@@ -481,7 +496,7 @@ const FolderRow = React.memo(function FolderRow({
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
             onMouseLeave={e => (e.currentTarget.style.background = "none")}
           >
-            Clean failed jobs
+            Clear failed/stuck jobs
           </button>
           <button
             onClick={e => { e.stopPropagation(); setMenuOpen(false); onDelete(folder.id); }}
@@ -539,6 +554,7 @@ interface AllAssetsRowProps {
 }
 
 const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelect, isGenerating, hasUnseen }: AllAssetsRowProps) {
+  const clearFailedJobs = useClearFailedJobs(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [menuPos, setMenuPos] = React.useState<{ x: number; y: number } | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -630,7 +646,10 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
           }}
         >
           <button
-            onClick={e => { e.stopPropagation(); setMenuOpen(false); cleanFailedJobs(null); }}
+            disabled={!clearFailedJobs}
+            className="disabled:opacity-40"
+            title="Remove failed or interrupted placeholders in the current view only. Saved media is kept."
+            onClick={e => { e.stopPropagation(); setMenuOpen(false); clearFailedJobs?.(); }}
             style={{
               display: "block", width: "100%", textAlign: "left",
               padding: "6px 10px", borderRadius: 5, fontSize: 12,
@@ -639,7 +658,7 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
             onMouseLeave={e => (e.currentTarget.style.background = "none")}
           >
-            Clean failed jobs
+            Clear failed/stuck jobs
           </button>
         </div>
       )}
