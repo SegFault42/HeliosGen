@@ -320,9 +320,14 @@ export function updateFolder(
 export function deleteFolder(id: string, userId: string): void {
   const d = db();
   d.exec("BEGIN");
-  d.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?").run(id, userId);
-  d.prepare("DELETE FROM folder_items WHERE folder_id = ?").run(id);
-  d.exec("COMMIT");
+  try {
+    d.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?").run(id, userId);
+    d.prepare("DELETE FROM folder_items WHERE folder_id = ?").run(id);
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
 }
 
 // ── Folder Items ───────────────────────────────────────────────────────────

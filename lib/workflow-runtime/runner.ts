@@ -24,7 +24,9 @@ export function createRunner(store: ReturnType<typeof createRuntimeStore>, trans
         if (deps.some(d => d.state !== "done")) continue;
         if (!store.claimStep(fresh.runId,step.nodeId,owner,now)) continue;
         try {
-          if (step.provider === "kie") { const approval=(fresh as Run & {approval?:Approval}).approval; if (!approval?.allowPaid) throw new Error("paid_provider_not_approved"); const credit=await transport.balance(); if (!Number.isFinite(credit) || credit < 20) throw new Error("kie_balance_unavailable_or_below_minimum"); store.updateStep(fresh.runId,step.nodeId,{creditBefore:credit}); }
+          // Every provider except "codex" (the user's own key, not billed through us) is paid and
+          // needs prior approval — fail closed for any provider we don't explicitly know is free.
+          if (step.provider !== "codex") { const approval=(fresh as Run & {approval?:Approval}).approval; if (!approval?.allowPaid) throw new Error("paid_provider_not_approved"); if (step.provider === "kie") { const credit=await transport.balance(); if (!Number.isFinite(credit) || credit < 20) throw new Error("kie_balance_unavailable_or_below_minimum"); store.updateStep(fresh.runId,step.nodeId,{creditBefore:credit}); } }
           const p = store.getPlan(fresh.planId); if (!p) throw new Error("plan_not_found");
           const nodes = structuredClone(p.snapshot.nodes) as Node<NodeData>[];
           for (const completed of fresh.steps.filter(s => s.state === "done")) {

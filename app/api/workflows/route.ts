@@ -6,7 +6,7 @@
  *        partial: upsert only these spaces (no orphan deletion)
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSpaces, saveSpaces, type GuestSpace } from "@/lib/guest/spaces";
+import { getSpaces, saveSpaces, InvalidSpaceError, type GuestSpace } from "@/lib/guest/spaces";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,16 @@ export async function PUT(req: NextRequest) {
   if (!Array.isArray(body.spaces)) {
     return NextResponse.json({ error: "spaces[] required" }, { status: 400 });
   }
+  const partial = body.partial === true;
+  if (!partial && body.spaces.length === 0) {
+    return NextResponse.json({ error: "empty spaces[] would delete every workflow; pass partial:true to no-op" }, { status: 400 });
+  }
 
-  saveSpaces(body.spaces, { partial: body.partial === true });
+  try {
+    saveSpaces(body.spaces, { partial });
+  } catch (e) {
+    if (e instanceof InvalidSpaceError) return NextResponse.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
   return NextResponse.json({ ok: true });
 }
