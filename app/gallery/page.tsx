@@ -57,6 +57,10 @@ interface PendingGen {
   error?: string;
   taskId?: string;
   createdAt?: string;
+  phase?: "queued" | "generating" | "interrupted";
+  provider?: "codex" | "azure" | "kie";
+  startedAt?: string;
+  finishedAt?: string;
   tab?: Tab;
   prePending?: boolean;
   retried?: boolean;
@@ -340,6 +344,19 @@ function saveKlingElements(elements: KlingElement[]) {
 
 // ── Pending generation tile (needs hooks, must be a component) ────────────────
 
+function JobTiming({ pg }: { pg: PendingGen }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (pg.finishedAt || pg.error) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [pg.finishedAt, pg.error]);
+  const start = pg.createdAt ? Date.parse(pg.createdAt) : NaN;
+  const end = pg.finishedAt ? Date.parse(pg.finishedAt) : now;
+  const seconds = Math.max(0, Math.floor((end - start) / 1000));
+  return <span style={{ fontSize: 10, color: "#aaa" }}>{pg.provider ?? "Provider pending"}{Number.isFinite(seconds) ? ` · ${Math.floor(seconds / 60)}m ${seconds % 60}s` : ""}</span>;
+}
+
 function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void }) {
   return (
     <>
@@ -377,8 +394,9 @@ function PendingGenTile({ pg, onCancel }: { pg: PendingGen; onCancel: () => void
             </svg>
           )}
           <span style={{ fontSize: "11px", color: pg.prePending ? "#888" : "#2DD4BF", fontWeight: 500 }}>
-            {pg.prePending ? "Pending" : "Generating…"}
+            {pg.prePending || pg.phase === "queued" || !pg.taskId ? "Queued" : "Generating"}
           </span>
+          <JobTiming pg={pg} />
         </div>
 
         {/* Cancel pill — only before generation starts */}
@@ -656,9 +674,10 @@ function GalleryInner() {
     if (typeof window === "undefined") return [];
     try {
       const stored = localStorage.getItem("aiui-pending-gens");
-      // Strip prePending on restore — on page refresh, skip the 3-second delay
       const parsed = stored ? (JSON.parse(stored) as PendingGen[]) : [];
-      return parsed.map(p => ({ ...p, prePending: false }));
+      return parsed.map(p => ({ ...p, prePending: false, finishedAt: p.finishedAt ?? (p.error ? new Date().toISOString() : undefined),
+        ...(!p.taskId && !p.error ? { phase: "interrupted" as const, error: "Submission was interrupted before a task ID was saved. It was not automatically retried.", finishedAt: new Date().toISOString() } : {}),
+      }));
     } catch { return []; }
   });
   const prePendingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -925,22 +944,11 @@ function GalleryInner() {
 
   // On mount, resume polling for any pending gens that were in-flight before the refresh
   useEffect(() => {
-    const toResume = pendingGens.filter(p => p.taskId && !p.error);
+    const toResume = pendingGens.filter(p => p.taskId && (!p.error || p.phase === "interrupted"));
     toResume.forEach(async (pending) => {
       try {
         // Check immediately (no 3s delay) before entering the regular poll loop
-        const immediateRes = await fetch(`/api/job-status?taskId=${pending.taskId!}`);
-        const immediateResult = await immediateRes.json() as { status: string; error?: string };
-        if (immediateResult.status === "error") throw new Error(immediateResult.error ?? "Generation failed");
-        if (immediateResult.status === "not_found") {
-          // Task expired from server memory — image was likely already saved; just remove the spinner
-          setPendingGens(prev => prev.filter(p => p.id !== pending.id));
-          return;
-        }
-        if (immediateResult.status !== "done") {
-          // Still generating — enter the regular poll loop
-          await pollTask(pending.taskId!);
-        }
+        await pollTask(pending.taskId!);
         const existingIds = new Set((galleryCache.get(`${tabRef.current}-generation`)?.items ?? []).map((i: GalleryItem) => i.id));
         const fresh = await fetchNewItems(tabRef.current);
         setPendingGens(prev => prev.filter(p => p.id !== pending.id));
@@ -966,7 +974,7 @@ function GalleryInner() {
         window.dispatchEvent(new Event("credits-refresh"));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+        setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: msg } : p));
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1773,14 +1781,29 @@ function GalleryInner() {
       document.addEventListener("visibilitychange", onVisible);
     });
 
-    for (let i = 0; i < 150; i++) {
-      await waitOrVisible(3_000);
-      const poll = await fetch(`/api/job-status?taskId=${taskId}`);
-      const result = await poll.json() as { status: string; error?: string };
+    let networkFailures = 0;
+    while (true) {
+      let result: { status: string; error?: string; phase?: PendingGen["phase"]; provider?: PendingGen["provider"]; createdAt?: string; startedAt?: string; finishedAt?: string };
+      try {
+        const poll = await fetch(`/api/job-status?taskId=${taskId}`, { signal: AbortSignal.timeout(30_000) });
+        if (!poll.ok) throw new Error("Status service unavailable");
+        result = await poll.json();
+        networkFailures = 0;
+      } catch {
+        if (++networkFailures < 3) { await waitOrVisible(3_000); continue; }
+        result = { status: "error", phase: "interrupted", error: "Status tracking was interrupted. The provider may still be running; reopen the gallery to check again.", finishedAt: new Date().toISOString() };
+      }
+      if (result.status === "not_found") result = { status: "error", phase: "interrupted", error: "Job tracking is unavailable. No request was retried automatically.", finishedAt: new Date().toISOString() };
+      const { phase, provider, createdAt, startedAt, finishedAt } = result;
+      setPendingGens(prev => prev.map(p => p.taskId === taskId ? {
+        ...p, phase, error: result.status === "pending" ? undefined : p.error, provider: provider ?? p.provider, createdAt: createdAt ?? p.createdAt,
+        startedAt: startedAt ?? p.startedAt, finishedAt: result.status === "pending" ? undefined : finishedAt ?? (result.status === "error" ? new Date().toISOString() : p.finishedAt),
+      } : p));
       if (result.status === "done") return;
       if (result.status === "error") throw new Error(result.error ?? "Generation failed");
+      // Queued time does not consume an execution deadline. The provider owns termination.
+      await waitOrVisible(3_000);
     }
-    throw new Error("Timed out");
   };
 
   const generate = async () => {
@@ -1894,35 +1917,14 @@ function GalleryInner() {
       const token = await getToken();
       if (!token) {
         setPendingGens(prev => prev.map(p =>
-          activeIds.has(p.id) ? { ...p, error: "Please sign in to generate." } : p
+          activeIds.has(p.id) ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: "Please sign in to generate." } : p
         ));
         return;
       }
 
       setSubmitting(true);
       const promptByPendingId = new Map(newPendings.map((p, i) => [p.id, multiPrompts ? multiPrompts[i] : undefined]));
-      let taskIds: string[];
-      try {
-        taskIds = await Promise.all(active.map(p => generateOne(token, promptByPendingId.get(p.id))));
-      } catch (e: unknown) {
-        setSubmitting(false);
-        const msg = e instanceof Error ? e.message : String(e);
-        setPendingGens(prev => prev.map(p =>
-          activeIds.has(p.id) ? { ...p, error: msg } : p
-        ));
-        return;
-      }
-      setSubmitting(false);
-
-      // Store taskIds so polls can be resumed after a page refresh
-      setPendingGens(prev => prev.map(p => {
-        const idx = active.findIndex(np => np.id === p.id);
-        return idx >= 0 ? { ...p, taskId: taskIds[idx] } : p;
-      }));
-
-      // ── Poll each task independently ──────────────────────────────────────
-      taskIds.forEach(async (taskId, i) => {
-        const pending = active[i];
+      const trackTask = async (pending: PendingGen, taskId: string) => {
         try {
           await pollTask(taskId);
           // Fetch fresh items before touching state so both updates land in one render.
@@ -1955,10 +1957,25 @@ function GalleryInner() {
           );
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
-          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: msg } : p));
           browserNotify("Generation failed", msg.slice(0, 100));
         }
-      });
+      };
+
+      // Save and track each accepted submission immediately. A rejected sibling
+      // must not lose task IDs or stop polling work the server already accepted.
+      await Promise.all(active.map(async pending => {
+        try {
+          const taskId = await generateOne(token, promptByPendingId.get(pending.id));
+          if (!taskId) throw new Error("Generation returned no task ID.");
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, taskId } : p));
+          void trackTask(pending, taskId);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setPendingGens(prev => prev.map(p => p.id === pending.id ? { ...p, error: msg } : p));
+        }
+      }));
+      setSubmitting(false);
     };
 
     const batchTimer = setTimeout(submitBatch, 3000);
@@ -2848,8 +2865,9 @@ function GalleryInner() {
                                 background: "rgba(120,30,30,0.35)",
                                 padding: "2px 8px", borderRadius: "4px",
                               }}>
-                                {(pg.error === "moderation_blocked" || pg.error?.includes?.("moderation_blocked") || pg.error?.includes?.("flagged as sensitive") || pg.error?.includes?.("moderation")) ? "Moderation" : "Failed"}
+                                {pg.phase === "interrupted" ? "Interrupted" : "Failed"}
                               </span>
+                              <JobTiming pg={pg} />
                               {/* Error message */}
                               <div style={{
                                 fontSize: "11px", color: "rgba(255,255,255,0.75)", textAlign: "center",
@@ -2877,7 +2895,7 @@ function GalleryInner() {
                                 const newPending: PendingGen = { id: newId, aspectRatio: pg.aspectRatio, prompt: pg.prompt, referenceImageUrls: pg.referenceImageUrls, createdAt: pg.createdAt ?? new Date().toISOString(), tab: pg.tab, retried: true, folderId: pg.folderId };
                                 setPendingGens(prev => [...prev.filter(p => p.id !== pg.id), newPending]);
                                 const token = await getToken();
-                                if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: "Please sign in." } : p)); return; }
+                                if (!token) { setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: "Please sign in." } : p)); return; }
                                 const storedRefs = pg.referenceImageUrls ?? [];
                                 const retryIsVideo = pg.tab === "videos";
                                 let taskId: string;
@@ -2912,7 +2930,7 @@ function GalleryInner() {
                                   }
                                   setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, taskId } : p));
                                 } catch (e: unknown) {
-                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } : p));
                                   return;
                                 }
                                 try {
@@ -2941,7 +2959,7 @@ function GalleryInner() {
                                   onGenComplete(newPending.folderId, fresh.filter(i => !existingIds.has(i.id)).map(i => i.id));
                                   window.dispatchEvent(new Event("credits-refresh"));
                                 } catch (e: unknown) {
-                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, error: e instanceof Error ? e.message : String(e) } : p));
+                                  setPendingGens(prev => prev.map(p => p.id === newId ? { ...p, finishedAt: p.finishedAt ?? new Date().toISOString(), error: e instanceof Error ? e.message : String(e) } : p));
                                 }
                               }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
