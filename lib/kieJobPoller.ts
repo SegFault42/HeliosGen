@@ -46,7 +46,7 @@ export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
 // comes back `{ msg: "recordInfo is null" }`, which the loop then settles as a
 // spurious error — clobbering the real job that's still running locally.
 function isKieTaskId(taskId: string): boolean {
-  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-");
+  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-") && !taskId.startsWith("higgsfield-");
 }
 
 /**

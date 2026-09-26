@@ -165,6 +165,9 @@ interface SettingsModalProps {
 /* ─── Provider brand icons (kie/azure/codex backend pills) ───────────────────── */
 
 function ProviderBrandIcon({ id, size = 12 }: { id: ProviderId; size?: number }) {
+  if (id === "higgsfield") {
+    return <span style={{ display: "flex", width: size, height: size, alignItems: "center", justifyContent: "center", color: "#a78bfa", fontSize: Math.round(size * 0.83), fontWeight: 700 }}>H</span>;
+  }
   if (id === "kie") {
     return (
       <span className="text-[#2DD4BF] shrink-0" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.83)}px`, fontWeight: 700 }}>
@@ -195,10 +198,12 @@ function ProviderToggle({
   modelId,
   value,
   onChange,
+  options,
 }: {
   modelId: string;
   value: ProviderId;
   onChange: (v: ProviderId) => void;
+  options?: ProviderId[];
 }) {
   return (
     <div
@@ -213,7 +218,7 @@ function ProviderToggle({
         flexShrink: 0,
       }}
     >
-      {PROVIDERS.map((p) => {
+      {PROVIDERS.filter((p) => options ? options.includes(p.id) : p.id !== "higgsfield").map((p) => {
         const active = value === p.id;
         return (
           <button
@@ -256,6 +261,7 @@ function ModelRow({
   value,
   onChange,
   azureSupported,
+  providerOptions,
 }: {
   id: string;
   name: string;
@@ -264,6 +270,7 @@ function ModelRow({
   value: ProviderId;
   onChange: (v: ProviderId) => void;
   azureSupported: boolean;
+  providerOptions?: ProviderId[];
 }) {
   return (
     <div
@@ -304,7 +311,7 @@ function ModelRow({
       </div>
 
       {/* Provider toggle — only shown for models with more than one backend to choose from */}
-      {azureSupported && <ProviderToggle modelId={id} value={value} onChange={onChange} />}
+      {(azureSupported || providerOptions) && <ProviderToggle modelId={id} value={value} onChange={onChange} options={providerOptions} />}
     </div>
   );
 }
@@ -322,7 +329,7 @@ function ModelGroup({
 }: {
   title: string;
   accent: string;
-  models: { id: string; name: string; provider: string; category: string; hasAzureDeployment?: boolean }[];
+  models: { id: string; name: string; provider: string; category: string; hasAzureDeployment?: boolean; providerOptions?: ProviderId[] }[];
   providers: Record<string, ProviderId>;
   onProviderChange: (modelId: string, v: ProviderId) => void;
   azureDeployments: Record<string, string>;
@@ -350,6 +357,7 @@ function ModelGroup({
               value={providers[m.id] ?? "kie"}
               onChange={(v) => onProviderChange(m.id, v)}
               azureSupported={!!m.hasAzureDeployment}
+              providerOptions={m.providerOptions}
             />
             {/* Deployment name — shown only for Azure-capable models when Azure is selected */}
             {m.hasAzureDeployment && (providers[m.id] ?? "kie") === "azure" && (
@@ -422,6 +430,9 @@ function ApiKeysPanel({
   kieKeyStatus,
   onKieKeySave,
   onKieKeyDelete,
+  higgsfieldKeyStatus,
+  onHiggsfieldKeySave,
+  onHiggsfieldKeyDelete,
   azureKeyStatus,
   onAzureKeySave,
   onAzureKeyDelete,
@@ -433,6 +444,9 @@ function ApiKeysPanel({
   kieKeyStatus: "unknown" | "set" | "unset";
   onKieKeySave: (token: string) => Promise<void>;
   onKieKeyDelete: () => Promise<void>;
+  higgsfieldKeyStatus: "unknown" | "set" | "unset";
+  onHiggsfieldKeySave: (keyId: string, keySecret: string) => Promise<void>;
+  onHiggsfieldKeyDelete: () => Promise<void>;
   azureKeyStatus: "unknown" | "set" | "unset";
   onAzureKeySave: (key: string) => Promise<void>;
   onAzureKeyDelete: () => Promise<void>;
@@ -442,6 +456,10 @@ function ApiKeysPanel({
   const [kieInput, setKieInput]       = useState("");
   const [kieSaving, setKieSaving]     = useState(false);
   const [kieError, setKieError]       = useState<string | null>(null);
+  const [higgsfieldKeyId, setHiggsfieldKeyId] = useState("");
+  const [higgsfieldKeySecret, setHiggsfieldKeySecret] = useState("");
+  const [higgsfieldSaving, setHiggsfieldSaving] = useState(false);
+  const [higgsfieldError, setHiggsfieldError] = useState<string | null>(null);
   const [azureInput, setAzureInput]   = useState("");
   const [azureSaving, setAzureSaving] = useState(false);
   const [azureError, setAzureError]   = useState<string | null>(null);
@@ -534,6 +552,21 @@ function ApiKeysPanel({
     }
   };
 
+  const handleHiggsfieldSave = async () => {
+    if (!higgsfieldKeyId.trim() || !higgsfieldKeySecret.trim()) return;
+    setHiggsfieldSaving(true);
+    setHiggsfieldError(null);
+    try {
+      await onHiggsfieldKeySave(higgsfieldKeyId, higgsfieldKeySecret);
+      setHiggsfieldKeyId("");
+      setHiggsfieldKeySecret("");
+    } catch (e: unknown) {
+      setHiggsfieldError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setHiggsfieldSaving(false);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
       {/* Header */}
@@ -542,7 +575,7 @@ function ApiKeysPanel({
           API Keys
         </h2>
         <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.28)", marginTop: "6px", lineHeight: 1.5 }}>
-          Your Kie.ai key is stored securely on the server — it is never exposed to the browser.
+          Provider keys are saved in the local app database. Secrets are never returned to the browser.
         </p>
       </div>
 
@@ -571,7 +604,7 @@ function ApiKeysPanel({
           <div>
             <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Kie.ai</div>
             <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
-              Used for all image &amp; video generation
+              Default provider for image &amp; video generation
             </div>
           </div>
           {kieKeyStatus === "set" && (
@@ -659,6 +692,26 @@ function ApiKeysPanel({
             </p>
           </div>
         )}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: 16, background: "rgba(167,139,250,0.04)", border: "1px solid rgba(167,139,250,0.14)", borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <ProviderBrandIcon id="higgsfield" size={16} />
+          <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Higgsfield</div>
+          <span style={{ marginLeft: "auto", fontSize: 10, color: higgsfieldKeyStatus === "set" ? "#4ade80" : "rgba(255,255,255,0.4)" }}>
+            {higgsfieldKeyStatus === "unknown" ? "Checking…" : higgsfieldKeyStatus === "set" ? "SAVED" : "Not configured"}
+          </span>
+        </div>
+        {higgsfieldKeyStatus === "set" ? (
+          <button type="button" onClick={onHiggsfieldKeyDelete} style={{ ...INPUT_STYLE, cursor: "pointer", color: "#f87171" }}>Remove credentials</button>
+        ) : higgsfieldKeyStatus === "unset" ? (
+          <>
+            <input type="text" autoComplete="off" placeholder="Higgsfield API Key ID" aria-label="Higgsfield API Key ID" value={higgsfieldKeyId} onChange={(e) => setHiggsfieldKeyId(e.target.value)} style={INPUT_STYLE} />
+            <input type="password" autoComplete="new-password" placeholder="Higgsfield API Key Secret" aria-label="Higgsfield API Key Secret" value={higgsfieldKeySecret} onChange={(e) => setHiggsfieldKeySecret(e.target.value)} style={INPUT_STYLE} />
+            <button type="button" onClick={handleHiggsfieldSave} disabled={higgsfieldSaving || !higgsfieldKeyId.trim() || !higgsfieldKeySecret.trim()} style={{ ...INPUT_STYLE, cursor: "pointer" }}>{higgsfieldSaving ? "Saving…" : "Save"}</button>
+            {higgsfieldError && <p style={{ margin: 0, fontSize: 11, color: "#f87171" }}>{higgsfieldError}</p>}
+          </>
+        ) : null}
       </div>
 
       {/* ──── Azure Foundry API key + endpoint ────────────────────────── */}
@@ -951,10 +1004,10 @@ function ApiKeysPanel({
 
 /* ─── Provider legend (shared) ───────────────────────────────────────────────── */
 
-function ProviderLegend() {
+function ProviderLegend({ kind }: { kind: "image" | "video" }) {
   return (
     <div style={{ display: "flex", gap: "12px", padding: "12px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "10px" }}>
-      {PROVIDERS.map((p) => (
+      {PROVIDERS.filter((p) => kind === "video" ? p.id === "kie" || p.id === "higgsfield" : p.id !== "higgsfield").map((p) => (
         <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ width: "24px", height: "24px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "rgba(255,255,255,0.55)", letterSpacing: "0.02em" }}>
             <ProviderBrandIcon id={p.id} />
@@ -997,7 +1050,7 @@ function ImageModelsPanel({
           Choose which provider serves each image model. Azure-capable models show a deployment name field when Azure is selected.
         </p>
       </div>
-      <ProviderLegend />
+      <ProviderLegend kind="image" />
       <ModelGroup
         title="Image Models"
         accent="#fb923c"
@@ -1030,6 +1083,7 @@ function VideoModelsPanel({
     provider: m.provider,
     category: "Video",
     hasAzureDeployment: false,
+    providerOptions: m.id === "seedance-2" ? (["kie", "higgsfield"] as ProviderId[]) : undefined,
   }));
 
   return (
@@ -1042,7 +1096,7 @@ function VideoModelsPanel({
           Choose which provider serves each video model.
         </p>
       </div>
-      <ProviderLegend />
+      <ProviderLegend kind="video" />
       <ModelGroup
         title="Video Models"
         accent="#5EEAD4"
@@ -1341,6 +1395,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [azureTextDeployment, setAzureTextDeployment] = useState("auto-model");
   const [azureTextModelName, setAzureTextModelName]   = useState("model-router");
   const [kieKeyStatus, setKieKeyStatus]               = useState<"unknown" | "set" | "unset">("unknown");
+  const [higgsfieldKeyStatus, setHiggsfieldKeyStatus] = useState<"unknown" | "set" | "unset">("unknown");
   const [azureKeyStatus, setAzureKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
   const [codexStatus, setCodexStatus]         = useState<CodexStatus>({ kind: "unknown" });
   const setKieKeySet    = useWorkflowStore((s) => s.setKieKeySet);
@@ -1374,6 +1429,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         .then((d) => setKieKeyStatus(d.hasToken ? "set" : "unset"))
         .catch(() => setKieKeyStatus("unset"))
     );
+    fetch("/api/settings/higgsfield-key")
+      .then((r) => r.json())
+      .then((d) => setHiggsfieldKeyStatus(d.hasToken ? "set" : "unset"))
+      .catch(() => setHiggsfieldKeyStatus("unset"));
     // Check if Azure key is saved on the server
     authHeader().then((h) =>
       fetch("/api/settings/azure-key", { headers: h })
@@ -1433,6 +1492,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     await fetch("/api/settings/kie-key", { method: "DELETE", headers: h });
     setKieKeyStatus("unset");
     setKieKeySet(false);
+  };
+
+  const handleHiggsfieldKeySave = async (keyId: string, keySecret: string) => {
+    const res = await fetch("/api/settings/higgsfield-key", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keyId, keySecret }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+    setHiggsfieldKeyStatus("set");
+    window.dispatchEvent(new Event("aiui-higgsfield-key-changed"));
+  };
+
+  const handleHiggsfieldKeyDelete = async () => {
+    const res = await fetch("/api/settings/higgsfield-key", { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to remove credentials");
+    const result = await res.json();
+    setHiggsfieldKeyStatus(result.hasToken ? "set" : "unset");
+    window.dispatchEvent(new Event("aiui-higgsfield-key-changed"));
   };
 
   const handleAzureKeySave = async (key: string) => {
@@ -1654,6 +1730,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 kieKeyStatus={kieKeyStatus}
                 onKieKeySave={handleKieKeySave}
                 onKieKeyDelete={handleKieKeyDelete}
+                higgsfieldKeyStatus={higgsfieldKeyStatus}
+                onHiggsfieldKeySave={handleHiggsfieldKeySave}
+                onHiggsfieldKeyDelete={handleHiggsfieldKeyDelete}
                 azureKeyStatus={azureKeyStatus}
                 onAzureKeySave={handleAzureKeySave}
                 onAzureKeyDelete={handleAzureKeyDelete}

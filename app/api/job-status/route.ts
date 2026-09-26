@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (result) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
-    if (result.status === "pending" && !taskId.startsWith("azure-")) {
+    if (result.status === "pending" && !taskId.startsWith("azure-") && !taskId.startsWith("higgsfield-")) {
       resumeKieJob(taskId, result.type === "video" ? "video" : "image");
     }
     return NextResponse.json(result);

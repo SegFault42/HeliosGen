@@ -740,6 +740,7 @@ export const VIDEO_MODELS: VideoModel[] = [
   {
     id: "seedance-2",
     apiId: "bytedance/seedance-2",
+    // Higgsfield maps this same logical model to bytedance/seedance-2.0/text-to-video.
     name: "Seedance 2.0",
     provider: "Bytedance",
     ratios: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"],
