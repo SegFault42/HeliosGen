@@ -11,6 +11,7 @@ import { resolveInputs } from "@/lib/executor";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG } from "@/lib/modelConfig";
+import { getModelProvider, setModelProvider, type ProviderId } from "@/lib/providers";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import MissingInputWarning from "./MissingInputWarning";
 
@@ -370,6 +371,24 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
   // ── Data ──────────────────────────────────────────────────────────────────
   const videoModelId = (data.videoModel as string) ?? "kling-3.0";
   const cfg = VIDEO_MODEL_CFG.find((m) => m.id === videoModelId) ?? VIDEO_MODEL_CFG[0];
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [currentProvider, setCurrentProvider] = useState<ProviderId>("kie");
+  const [higgsfieldConfigured, setHiggsfieldConfigured] = useState<boolean | null>(null);
+  useEffect(() => {
+    const refresh = () => setCurrentProvider(getModelProvider(videoModelId));
+    refresh();
+    window.addEventListener("aiui-providers-changed", refresh);
+    return () => window.removeEventListener("aiui-providers-changed", refresh);
+  }, [videoModelId]);
+  useEffect(() => {
+    const refresh = () => fetch("/api/settings/higgsfield-key")
+      .then((r) => r.json()).then((d) => setHiggsfieldConfigured(Boolean(d.hasToken)))
+      .catch(() => setHiggsfieldConfigured(false));
+    refresh();
+    window.addEventListener("aiui-higgsfield-key-changed", refresh);
+    return () => window.removeEventListener("aiui-higgsfield-key-changed", refresh);
+  }, []);
+  const videoProvider = videoModelId === "seedance-2" && currentProvider === "higgsfield" ? "higgsfield" : "kie";
 
   const mode = (data.klingMode as string) ?? cfg.defaultMode ?? "";
   const resolution = (data.grokResolution as string) ?? cfg.defaultResolution ?? "";
@@ -590,7 +609,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
     }
     return { ...h, label, className };
   });
-  const ratios = cfg.ratios;
+  const ratios = videoProvider === "higgsfield" ? cfg.ratios.filter((ratio) => ratio !== "adaptive") : cfg.ratios;
   const durations = cfg.durations;
 
   const closeAll = () => {
@@ -815,7 +834,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       return;
     }
 
-    if (!cfg.promptOptional && !finalPrompt.trim()) {
+    if ((!cfg.promptOptional || videoProvider === "higgsfield") && !finalPrompt.trim()) {
       setErrorHandles(new Set(["prompt"]));
       setTimeout(() => setErrorHandles(new Set()), 1400);
       updateNodeData(id, { hasError: true });
@@ -824,6 +843,14 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
         updateNodeData(textEdge.source, { hasError: true });
         flashEdgeError(textEdge.id);
       }
+      return;
+    }
+
+    if (videoProvider === "higgsfield" && (
+      upstream.startFrameUrl || upstream.endFrameUrl || upstream.videoRefUrl ||
+      orderedResources.length || upstream.referenceVideoUrls.length || upstream.referenceAudioUrls.length
+    )) {
+      addToast("Higgsfield Seedance currently supports text-to-video only. Remove media references or choose Kie.ai.", "error");
       return;
     }
 
@@ -989,6 +1016,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       referenceImageUrls: veoMode === "references" ? orderedResources.map(r => r.url).slice(0, 3) : undefined,
     } : {
       videoModel: videoModelId,
+      provider: videoProvider,
       prompt: finalPrompt,
       aspectRatio,
       duration,
@@ -1069,7 +1097,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
       }
     }, 3000);
   }, [id, nodes, edges, prompt, sound, seed, duration, aspectRatio, videoModelId, veoMode, isVeo,
-    mode, resolution, cfg, debugMode, textEdge, updateNodeData, flashEdgeError, kieKeySet, addToast]);
+    mode, resolution, cfg, debugMode, textEdge, updateNodeData, flashEdgeError, kieKeySet, addToast, videoProvider]);
 
   const handleGenerateBatch = useCallback(() => {
     generate();
@@ -1821,6 +1849,23 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
                   </FloatMenu>
                 </div>
 
+                {videoModelId === "seedance-2" && (
+                  <div className="relative">
+                    <Pill onClick={() => { setProviderOpen((open) => !open); setModelOpen(false); }}>
+                      <span className="text-[11px] text-white/70">{videoProvider === "higgsfield" ? "Higgsfield" : "Kie.ai"}</span>
+                      <ChevronIcon open={providerOpen} />
+                    </Pill>
+                    <FloatMenu open={providerOpen}>
+                      {(["kie", "higgsfield"] as const).map((provider) => (
+                        <FloatItem key={provider} active={videoProvider === provider} onClick={() => { setModelProvider(videoModelId, provider); setProviderOpen(false); }}>
+                          {provider === "kie" ? "Kie.ai" : "Higgsfield"}
+                        </FloatItem>
+                      ))}
+                    </FloatMenu>
+                  </div>
+                )}
+                {videoProvider === "higgsfield" && higgsfieldConfigured === false && <span className="text-[11px] text-red-400">Not configured — add keys in Settings</span>}
+
                 {/* Duration */}
                 {durations.length > 0 && (
                   <div className="relative flex items-center gap-1">
@@ -1990,7 +2035,7 @@ export default function VideoGeneratorNode({ id, data, selected }: NodeProps<Vid
               )}
 
               {/* Generate button — always right */}
-              {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || kieKeySet === false || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
+              {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || (videoProvider === "kie" ? kieKeySet === false : higgsfieldConfigured !== true || aspectRatio === "adaptive") || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={videoProvider === "higgsfield" && higgsfieldConfigured === false ? ["Higgsfield is not configured. Add keys in Settings."] : videoProvider === "higgsfield" && aspectRatio === "adaptive" ? ["Choose a fixed aspect ratio for Higgsfield."] : hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
             </div>
           );
         })()}

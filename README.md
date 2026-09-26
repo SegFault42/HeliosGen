@@ -13,6 +13,8 @@
 
 ---
 
+For Higgsfield Seedance 2.0 text-to-video setup and MVP limits, see [docs/HIGGSFIELD.md](docs/HIGGSFIELD.md).
+
 # ⬇️ Download
 
 **HeliosGen is a desktop app.** Grab the latest build for your OS from the
@@ -302,4 +304,3 @@ MIT License
 <p align="center">
   Built for creators building the future of AI workflows.
 </p>
-

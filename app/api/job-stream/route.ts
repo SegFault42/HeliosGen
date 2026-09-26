@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Restart the kie.ai poller if a server restart lost it.
-  if (!taskId.startsWith("azure-")) {
+  if (!taskId.startsWith("azure-") && !taskId.startsWith("higgsfield-")) {
     resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
   }
 

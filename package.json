@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start -p ${PORT:-3000}",
     "lint": "eslint",
+    "test:higgsfield": "node --test tests/higgsfield-flow.test.mjs",
     "desktop:dev": "node scripts/desktop/dev.mjs",
     "desktop:check-version": "node scripts/desktop/check-version.mjs",
     "desktop:build": "node scripts/desktop/check-version.mjs && CI=true tauri build",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@higgsfield/client": "^0.2.6",
     "@xyflow/react": "^12.10.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // PROVIDERS — single source of truth for per-model backend selection
-// (Kie.ai / Azure Foundry / Codex CLI), shared by the Settings modal, the
-// workflow GenerateNode, and the gallery generation composer.
+// (Kie.ai / Higgsfield / Azure Foundry / Codex CLI), shared by Settings and nodes.
 // ─────────────────────────────────────────────────────────────────────────────
 import { IMAGE_MODELS } from "@/lib/modelConfig";
 
 export const PROVIDERS = [
   { id: "kie",   label: "Kie.ai" },
+  { id: "higgsfield", label: "Higgsfield" },
   { id: "azure", label: "Azure Foundry" },
   { id: "codex", label: "Codex CLI" },
 ] as const;
@@ -42,11 +42,11 @@ export function setModelProvider(modelId: string, provider: ProviderId) {
 }
 
 /**
- * Models with more than one backend to choose from. Both Azure and Codex are
- * image-only, and Azure additionally needs a per-model deployment configured.
+ * Models with more than one backend to choose from. Azure/Codex are image-only;
+ * Higgsfield is supported only for Seedance 2.0 text-to-video.
  */
 const MULTI_PROVIDER_MODEL_IDS = new Set(
-  IMAGE_MODELS.filter((m) => !!m.azureSizeMap).map((m) => m.id),
+  [...IMAGE_MODELS.filter((m) => !!m.azureSizeMap).map((m) => m.id), "seedance-2"],
 );
 
 export function modelHasProviderChoice(modelId: string): boolean {
