@@ -237,6 +237,22 @@ export function deleteKieApiToken(): void {
   deleteSetting("kie_api_token");
 }
 
+export function getHiggsfieldCredentials(): { keyId: string; keySecret: string } | null {
+  const keyId = getSetting("higgsfield_key_id") || process.env.HF_API_KEY_ID;
+  const keySecret = getSetting("higgsfield_key_secret") || process.env.HF_API_KEY_SECRET;
+  return keyId && keySecret ? { keyId, keySecret } : null;
+}
+
+export function setHiggsfieldCredentials(keyId: string, keySecret: string): void {
+  setSetting("higgsfield_key_id", keyId);
+  setSetting("higgsfield_key_secret", keySecret);
+}
+
+export function deleteHiggsfieldCredentials(): void {
+  deleteSetting("higgsfield_key_id");
+  deleteSetting("higgsfield_key_secret");
+}
+
 export function getAzureApiKey(): string | null {
   const dbKey = getSetting("azure_api_key");
   if (dbKey) return dbKey;
