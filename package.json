@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-3000}",
+    "start": "next start",
     "lint": "eslint",
     "test:workflow": "node scripts/test-workflow-runtime.mjs",
     "desktop:dev": "node scripts/desktop/dev.mjs",
