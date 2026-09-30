@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
-import { PROVIDERS, getModelProvider, setModelProvider, modelHasProviderChoice } from "@/lib/providers";
+import { PROVIDERS, getModelProvider, setModelProvider, modelHasProviderChoice, providersForModel } from "@/lib/providers";
 import { useWorkflowStore } from "@/lib/store";
 import { Maximize2, Minimize2, ShieldAlert, X } from "lucide-react";
 
@@ -1635,6 +1635,7 @@ function GalleryInner() {
       const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
       const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
       const isCodex = providerForModel === "codex";
+      const isGrsai = providerForModel === "grsai";
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -1646,6 +1647,7 @@ function GalleryInner() {
             ...(aspectRatio === "custom" ? { azureCustomWidth, azureCustomHeight } : {}),
           } : {}),
           ...(isCodex ? { codexProvider: true } : {}),
+          ...(isGrsai ? { grsaiProvider: true } : {}),
         }),
       });
       const text = await res.text();
@@ -2905,7 +2907,8 @@ function GalleryInner() {
                                     const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
                                     const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
                                     const isCodex = providerForModel === "codex";
-                                    const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ prompt: resolvedPrompt, model: modelId, aspectRatio: pg.aspectRatio, quality, imageUrls, ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality } : {}), ...(isCodex ? { codexProvider: true } : {}) }) });
+                                    const isGrsai = providerForModel === "grsai";
+                                    const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ prompt: resolvedPrompt, model: modelId, aspectRatio: pg.aspectRatio, quality, imageUrls, ...(isAzure ? { azureBaseUrl, azureDeployment, azureQuality: quality } : {}), ...(isCodex ? { codexProvider: true } : {}), ...(isGrsai ? { grsaiProvider: true } : {}) }) });
                                     const d = await res.json() as { taskId?: string; error?: string };
                                     if (!res.ok) throw new Error(d.error ?? "Failed");
                                     taskId = d.taskId!;
@@ -4054,7 +4057,7 @@ function GalleryInner() {
                     value={providerId}
                     onChange={(v) => setModelProvider(modelId, v as (typeof PROVIDERS)[number]["id"])}
                     disabled={submitting}
-                    options={PROVIDERS.map(p => ({ value: p.id, label: p.label, providerIcon: <ProviderBackendIcon id={p.id} /> }))}
+                    options={providersForModel(modelId).map(p => ({ value: p.id, label: p.label, providerIcon: <ProviderBackendIcon id={p.id} /> }))}
                     showChevron
                   />
                 )}
@@ -5588,6 +5591,13 @@ function RatioPreview({ ratio }: { ratio: string }) {
 
 /** Backend brand mark for the Kie.ai/Azure Foundry/Codex CLI picker — distinct from ProviderIcon's model-brand icons. */
 function ProviderBackendIcon({ id }: { id: (typeof PROVIDERS)[number]["id"] }) {
+  if (id === "grsai") {
+    return (
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", fontSize: "11px", fontWeight: 700 }}>
+        G
+      </span>
+    );
+  }
   if (id === "kie") {
     return (
       <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "14px", height: "14px", fontSize: "11px", fontWeight: 700 }}>

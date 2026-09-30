@@ -252,6 +252,21 @@ export function deleteAzureApiKey(): void {
   deleteSetting("azure_api_key");
 }
 
+export function getGrsaiApiKey(): string | null {
+  const dbKey = getSetting("grsai_api_key");
+  if (dbKey) return dbKey;
+  const envKey = process.env.GRSAI_API_KEY ?? "";
+  return envKey || null;
+}
+
+export function setGrsaiApiKey(key: string): void {
+  setSetting("grsai_api_key", key);
+}
+
+export function deleteGrsaiApiKey(): void {
+  deleteSetting("grsai_api_key");
+}
+
 // ── Folders ────────────────────────────────────────────────────────────────
 
 function rowToFolder(r: Record<string, unknown>): FolderRecord {

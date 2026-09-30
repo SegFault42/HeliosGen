@@ -45,7 +45,7 @@ function isLocalMedia(url: string): boolean {
 }
 
 /** Read a `/generated/...` path or a `data:` URL into a base64 data URL. */
-async function toDataUrl(input: string): Promise<string> {
+export async function toDataUrl(input: string): Promise<string> {
   if (input.startsWith("data:")) return input;
 
   const rel = input.replace(/^\/generated\//, "").replace(/^\/+/, "");
