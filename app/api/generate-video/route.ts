@@ -12,6 +12,7 @@ import { submitHeyGenVideo } from "@/lib/heygenMcp";
 import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
 import { submitFlowVideo } from "@/lib/flowAdapter";
 import { resumeFlowJob } from "@/lib/flowJobPoller";
+import { asUrl, asUrlList, asResources, asKlingElements, flowUpscale, interpolationError } from "@/lib/videoRequest";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -37,14 +38,14 @@ export async function POST(req: NextRequest) {
   const {
     videoModel      = body.model || DEFAULT_VIDEO_MODEL,
     prompt,
-    startFrameUrl:  rawStartFrame,
-    endFrameUrl:    rawEndFrame,
-    videoRefUrl:    rawVideoRef,
-    resources       = [] as Resource[],
-    klingElements   = [] as KlingElementInput[],
-    referenceImageUrls:  rawRefImages     = body.imageUrls || [] as string[],
-    referenceVideoUrls:  rawRefVideoUrls  = [] as string[],
-    referenceAudioUrls:  rawRefAudioUrls  = [] as string[],
+    startFrameUrl:  inStartFrame,
+    endFrameUrl:    inEndFrame,
+    videoRefUrl:    inVideoRef,
+    resources       : inResources,
+    klingElements   : inKlingElements,
+    referenceImageUrls:  inRefImages     = body.imageUrls,
+    referenceVideoUrls:  inRefVideoUrls,
+    referenceAudioUrls:  inRefAudioUrls,
     sound           = false,
     duration        = 5,
     aspectRatio     = body.aspect_ratio || "16:9",
@@ -59,6 +60,16 @@ export async function POST(req: NextRequest) {
     voiceId,
   } = body;
 
+  // Normalize every list/URL input before any paid submit (null-safe).
+  const rawStartFrame = asUrl(inStartFrame);
+  const rawEndFrame = asUrl(inEndFrame);
+  const rawVideoRef = asUrl(inVideoRef);
+  const resources = asResources(inResources);
+  const klingElements = asKlingElements(inKlingElements);
+  const rawRefImages = asUrlList(inRefImages);
+  const rawRefVideoUrls = asUrlList(inRefVideoUrls);
+  const rawRefAudioUrls = asUrlList(inRefAudioUrls);
+
   const userId = GUEST_USER_ID;
   if (isVetoedVideoModel(videoModel)) {
     return NextResponse.json(
@@ -68,6 +79,8 @@ export async function POST(req: NextRequest) {
   }
   const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
   if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
+  const frameErr = interpolationError(cfg, rawStartFrame, rawEndFrame);
+  if (frameErr) return NextResponse.json({ error: frameErr }, { status: 400 });
 
   if (cfg.apiInput.useHeyGenMcp) {
     if (debugOnly) return NextResponse.json({ debugProvider: "heygen-mcp", videoModel, prompt, aspectRatio });
@@ -80,8 +93,8 @@ export async function POST(req: NextRequest) {
       referenceImageUrls: rawRefImages as string[],
       referenceVideoUrls: rawRefVideoUrls as string[],
       referenceAudioUrls: rawRefAudioUrls as string[],
-      startFrameUrl: typeof rawStartFrame === "string" ? rawStartFrame : undefined,
-      endFrameUrl: typeof rawEndFrame === "string" ? rawEndFrame : undefined,
+      startFrameUrl: rawStartFrame,
+      endFrameUrl: rawEndFrame,
     });
     jobStore.set(heygen.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
     guestDb.insertGeneration({
@@ -104,10 +117,10 @@ export async function POST(req: NextRequest) {
       prompt: String(prompt ?? ""),
       modelName: cfg.apiInput.flowModel || "Omni Flash",
       aspectRatio: String(aspectRatio),
-      startFrame: typeof rawStartFrame === "string" ? rawStartFrame : undefined,
-      endFrame: typeof rawEndFrame === "string" ? rawEndFrame : undefined,
-      referenceImages: Array.isArray(rawRefImages) ? (rawRefImages as string[]) : undefined,
-      upscale: rawResolution === "1080p" || cfg.defaultResolution === "1080p" ? "1080p" : "none",
+      startFrame: rawStartFrame,
+      endFrame: rawEndFrame,
+      referenceImages: rawRefImages,
+      upscale: flowUpscale(rawResolution, cfg),
       readThis: typeof body.readThis === "boolean" ? body.readThis : undefined,
     });
     jobStore.set(flowRes.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
