@@ -82,8 +82,11 @@ function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | unde
   if (FRAME_OUT_HANDLES.has(sourceHandle ?? "")) {
     return resolveVideoNodeFrameUrl(src, sourceHandle);
   }
+  // A generateNode displays imageUrl; r2Url may be a stale mirror of an earlier generation.
+  const shown = src.type === "generateNode" ? src.data.imageUrl : undefined;
   return (resolveVideoNodeFrameUrl(src, sourceHandle)
     ?? src.data.capturedFrameUrl
+    ?? shown
     ?? src.data.r2Url
     ?? src.data.inputImage
     ?? src.data.imageUrl) as string | undefined;
