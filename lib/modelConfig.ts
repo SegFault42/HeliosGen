@@ -136,7 +136,10 @@ export const IMAGE_MODELS: ImageModel[] = [
   // ── xAI Grok ────────────────────────────────────────────────────────────────
   {
     id: "grok-imagine",
-    apiId: "grok-imagine-image-lite",
+    // Rota local do pool: modelo 2.0 (grok-imagine-image-2.0) como padrão.
+    // 1.0-quality (grok-imagine-image) segue funcionando; NUNCA usar a "-lite"
+    // (às vezes devolve imagem genérica para prompt não atendido; ver POOL-STATUS.md).
+    apiId: "grok-imagine-image-2.0",
     name: "Grok Imagine (Flux)",
     provider: "xAI Grok",
     ratios: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"],
@@ -554,8 +557,8 @@ export const VIDEO_MODELS: VideoModel[] = [
     name: "Omni Flash 1.1 (Flow)",
     provider: "Google Flow",
     ratios: ["16:9", "9:16"],
-    durations: [],
-    defaultDuration: 0,
+    durations: [10], // Flow currently offers a fixed 10-second Omni Flash clip.
+    defaultDuration: 10,
     defaultRatio: "9:16",
     handles: ["prompt", "startFrame"],
     sound: true,

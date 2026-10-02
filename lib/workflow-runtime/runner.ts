@@ -1,7 +1,7 @@
 import type { Node } from "@xyflow/react";
 import type { NodeData } from "../store";
 import { resolveNodeInputs, buildImagePayload, buildVideoPayload } from "./generationPayloads";
-import type { Approval, Run, PlanStep, Output } from "./contracts";
+import type { Approval, Run } from "./contracts";
 import { createRuntimeStore } from "./store";
 import type { GenerationTransport } from "./transport";
 export function createRunner(store: ReturnType<typeof createRuntimeStore>, transport: GenerationTransport, _baseUrlOrBootId: string, bootId?: string) {
@@ -24,15 +24,26 @@ export function createRunner(store: ReturnType<typeof createRuntimeStore>, trans
         if (deps.some(d => d.state !== "done")) continue;
         if (!store.claimStep(fresh.runId,step.nodeId,owner,now)) continue;
         try {
-          // Every provider except "codex" (the user's own key, not billed through us) is paid and
-          // needs prior approval — fail closed for any provider we don't explicitly know is free.
-          if (step.provider !== "codex") { const approval=(fresh as Run & {approval?:Approval}).approval; if (!approval?.allowPaid) throw new Error("paid_provider_not_approved"); if (step.provider === "kie") { const credit=await transport.balance(); if (!Number.isFinite(credit) || credit < 20) throw new Error("kie_balance_unavailable_or_below_minimum"); store.updateStep(fresh.runId,step.nodeId,{creditBefore:credit}); } }
+          // allowPaid authorizes Kie credit spend only. Native plan approval is
+          // performed before createRun; these pinned routes use the owner's pools.
+          const ownerPoolRoute = (step.provider === "flow" && ["flow-omni-flash", "flow-nano-banana-2"].includes(step.model)) ||
+            (step.provider === "grok" && step.model === "grok-imagine");
+          // HeyGen Video Agent spends the account's premium credits: keep it behind allowPaid.
+          if (step.provider !== "codex" && !ownerPoolRoute) {
+            const approval = (fresh as Run & { approval?: Approval }).approval;
+            if (!approval?.allowPaid) throw new Error("paid_provider_not_approved");
+            if (step.provider === "kie") {
+              const credit = await transport.balance();
+              if (!Number.isFinite(credit) || credit < 20) throw new Error("kie_balance_unavailable_or_below_minimum");
+              store.updateStep(fresh.runId, step.nodeId, { creditBefore: credit });
+            }
+          }
           const p = store.getPlan(fresh.planId); if (!p) throw new Error("plan_not_found");
           const nodes = structuredClone(p.snapshot.nodes) as Node<NodeData>[];
           for (const completed of fresh.steps.filter(s => s.state === "done")) {
             const source = nodes.find(n => n.id === completed.nodeId);
             const output = completed.outputs[0];
-            if (source && output) source.data = {...source.data, ...(output.kind === "image" ? {r2Url:output.url, imageUrl:output.url, capturedFrameUrl:undefined, inputImage:undefined} : {videoUrl:output.url})};
+            if (source && output) source.data = {...source.data, ...(output.kind === "image" ? {r2Url:output.url, imageUrl:output.url, capturedFrameUrl:undefined, inputImage:undefined} : {videoUrl:output.url, eagerStartFrameUrl:undefined, eagerEndFrameUrl:undefined, capturedFrameUrl:undefined})};
           } const edges = p.snapshot.edges as never[];
           const node = nodes.find(n => n.id === step.nodeId); if (!node) throw new Error("node_not_found");
           const inputs = resolveNodeInputs(step.nodeId,nodes,edges); const payload = step.kind === "image" ? buildImagePayload(node.data,inputs,step.provider === "codex" ? "codex" : "kie") : buildVideoPayload(node.data,inputs);

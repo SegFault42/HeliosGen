@@ -375,6 +375,28 @@ export async function POST(req: NextRequest) {
 
   // ── xAI Grok Imagine branch ───────────────────────────────────────────────────
   if (cfg.apiInput?.useGrok) {
+    let clientKey = process.env.GROK_CLIENT_KEY || "";
+    if (!clientKey) {
+      try { clientKey = (await readFile("F:/grok-pool/.client_key", "utf8")).trim(); } catch {}
+    }
+    if (!clientKey) {
+      return NextResponse.json({ error: "Grok pool client key is unavailable" }, { status: 503 });
+    }
+    const grokModel = cfg.apiId || "grok-imagine-image-lite";
+    try {
+      const catalog = await fetch("http://127.0.0.1:8000/v1/models", {
+        headers: { Authorization: `Bearer ${clientKey}` },
+        signal: AbortSignal.timeout(5_000),
+        cache: "no-store",
+      });
+      if (!catalog.ok) throw new Error(`model catalog HTTP ${catalog.status}`);
+      const listing = await catalog.json() as { data?: Array<{ id?: string }> };
+      if (!listing.data?.some((entry) => entry.id === grokModel)) {
+        return NextResponse.json({ error: `Grok model ${grokModel} is unavailable in the connected pool; reauthenticate its Web/Console accounts` }, { status: 503 });
+      }
+    } catch (error) {
+      return NextResponse.json({ error: `Grok pool availability check failed: ${error instanceof Error ? error.message : "unknown error"}` }, { status: 503 });
+    }
     const grokTaskId = `grok-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobStore.set(grokTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
     guestDb.insertGeneration({
@@ -389,14 +411,8 @@ export async function POST(req: NextRequest) {
 
     (async () => {
       try {
-        let clientKey = process.env.GROK_CLIENT_KEY || "";
-        if (!clientKey) {
-          try {
-            clientKey = (await readFile("F:/grok-pool/.client_key", "utf8")).trim();
-          } catch {}
-        }
         const payload = {
-          model: cfg.apiId || "grok-imagine-image-lite",
+          model: grokModel,
           prompt: prompt.trim(),
           aspect_ratio: aspectRatio || "1:1",
           response_format: "url",

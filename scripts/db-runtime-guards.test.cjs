@@ -110,6 +110,40 @@ for (const provider of ["kie", "heygen", "flow", "grok"]) {
   });
 }
 
+test("runner: heygen-video-agent spends premium credits, so it still needs allowPaid", async () => {
+  const db = new DatabaseSync(":memory:");
+  const store = createRuntimeStore(db);
+  const { plan, snapshot } = makePlan("heygen");
+  plan.planId += "-heygen-video-agent";
+  plan.steps[0].model = "heygen-video-agent";
+  snapshot.nodes[0] = { id: "v", type: "videoGeneratorNode", data: { videoModel: "heygen-video-agent", duration: 5 } };
+  store.putPlan(plan, snapshot);
+  const run = store.createRun(plan.planId, "req-heygen-agent", { fingerprint: plan.fingerprint, maxImages: 0, maxVideos: 1, maxVideoSeconds: 5, allowPaid: false, allowPremium: false, acknowledgement: "test" }, new Date());
+  await createRunner(store, noopTransport, "test-boot").tick();
+  assert.equal(store.getRun(run.runId).steps[0].error, "paid_provider_not_approved");
+  db.close();
+});
+
+for (const [provider, model, kind] of [["flow", "flow-omni-flash", "video"], ["flow", "flow-nano-banana-2", "image"], ["grok", "grok-imagine", "image"]]) {
+  test(`runner: approved free ${provider}/${model} runs with allowPaid=false`, async () => {
+    const db = new DatabaseSync(":memory:");
+    const store = createRuntimeStore(db);
+    const { plan, snapshot } = makePlan(provider);
+    plan.planId += "-" + model;
+    plan.steps[0].model = model;
+    plan.steps[0].kind = kind;
+    snapshot.nodes[0] = { id: "v", type: kind === "image" ? "generateNode" : "videoGeneratorNode", data: kind === "image" ? { model } : { videoModel: model, duration: 5 } };
+    store.putPlan(plan, snapshot);
+    const submitted = [];
+    const transport = { ...noopTransport, async submit(step) { submitted.push(step); return { taskId: "free-task" }; } };
+    const run = store.createRun(plan.planId, "req-free-" + model, { fingerprint: plan.fingerprint, maxImages: 1, maxVideos: 1, maxVideoSeconds: 5, allowPaid: false, allowPremium: false, acknowledgement: "Approved concrete plan" }, new Date());
+    await createRunner(store, transport, "test-boot").tick();
+    assert.equal(submitted.length, 1);
+    assert.equal(store.getRun(run.runId).steps[0].state, "pending");
+    db.close();
+  });
+}
+
 test("runner: 'codex' provider runs without allowPaid approval (not billed through us)", async () => {
   const db = new DatabaseSync(":memory:");
   const store = createRuntimeStore(db);

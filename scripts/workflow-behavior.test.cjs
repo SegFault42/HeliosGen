@@ -25,6 +25,28 @@ test("transport accepts actual numeric Kie balance and recognizes lost tasks", a
   } finally { global.fetch = original; }
 });
 
+test("transport reports the MIME type of a completed PNG image", async () => {
+  const original = global.fetch;
+  try {
+    global.fetch = async () => Response.json({ status: "done", imageUrl: "/generated/generated/a.png" });
+    const result = await createProductionTransport().poll("image-task");
+    assert.equal(result.outputs[0].mimeType, "image/png");
+  } finally { global.fetch = original; }
+});
+
+test("Omni Flash plan uses the observed fixed 10-second duration", () => {
+  const flow = {
+    id: "flow-duration", name: "Flow duration",
+    nodes: [
+      { id: "prompt", type: "promptNode", data: { prompt: "Paper boat" } },
+      { id: "video", type: "videoGeneratorNode", data: { videoModel: "flow-omni-flash", duration: 5 } },
+    ],
+    edges: [{ id: "e", source: "prompt", target: "video", targetHandle: "prompt" }],
+  };
+  const { plan } = compilePlan(flow, { spaceId: flow.id, outputNodeIds: ["video"], providers: {}, overrides: {} });
+  assert.equal(plan.steps[0].payloadPreview.duration, 10);
+});
+
 const graph = {
   id: "test", name: "Test only",
   nodes: [

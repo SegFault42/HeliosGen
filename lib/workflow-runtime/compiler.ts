@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { GuestSpace } from "../guest/spaces";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store";
-import { IMAGE_MODELS, VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "../modelConfig";
+import { IMAGE_MODELS, VIDEO_MODELS, DEFAULT_VIDEO_MODEL, isVetoedVideoModel } from "../modelConfig";
 import { resolveNodeInputs, buildImagePayload, buildVideoPayload } from "./generationPayloads";
 import { WorkflowRuntimeError, type Plan, type PlanInput, type PlanStep, type WorkflowSnapshot, type RuntimeError } from "./contracts";
 
@@ -15,7 +15,6 @@ export function fingerprintSnapshot(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(normalize(value))).digest("hex");
 }
 function err(code: string, message: string, nodeId?: string): RuntimeError { return { code, message, ...(nodeId ? { nodeId } : {}) }; }
-function nodeIdOf(n: unknown): string { return String((n as { id?: unknown }).id ?? ""); }
 function dataOf(n: unknown): NodeData { return ((n as { data?: NodeData }).data ?? {}) as NodeData; }
 
 export function compilePlan(space: GuestSpace, input: PlanInput, now = new Date()): { plan: Plan; snapshot: WorkflowSnapshot } {
@@ -62,6 +61,7 @@ export function compilePlan(space: GuestSpace, input: PlanInput, now = new Date(
     const isGrok = !!model && "useGrok" in model.apiInput && model.apiInput.useGrok === true;
     const provider = isFlow ? "flow" : (isGrok ? "grok" : (kind === "image" ? providers[id] : (isHeyGenVideo ? "heygen" : "kie")));
     if (!model) errors.push(err("invalid_model", `Unknown ${kind} model '${modelId}'`, id));
+    else if (kind === "video" && isVetoedVideoModel(modelId)) errors.push(err("invalid_model", `Video model '${modelId}' is vetoed by agency policy`, id));
     if (kind === "image" && !isFlow && !isGrok && !provider) errors.push(err("provider_required", "Choose a provider for every image generator", id));
     if (kind === "image" && !isFlow && !isGrok && provider && provider !== "codex" && provider !== "kie") errors.push(err("invalid_provider", "Unsupported image provider", id));
     const inps = resolveNodeInputs(id, nodes, edges);
