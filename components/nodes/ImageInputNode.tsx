@@ -139,7 +139,9 @@ function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
         const cdnUrl = await uploadAsset(bytes, file.type || "image/jpeg");
         updateNodeData(id, { r2Url: cdnUrl, inputImage: cdnUrl });
       } catch {
-        // storage unavailable — blob URL stays as fallback until page reload
+        // A blob: URL must never travel downstream as a frame; drop it and surface the failure.
+        updateNodeData(id, { inputImage: undefined, r2Url: undefined, hasError: true });
+        useWorkflowStore.getState().addToast("Image upload failed. Pick the file again.");
       }
     },
     [id, updateNodeData]

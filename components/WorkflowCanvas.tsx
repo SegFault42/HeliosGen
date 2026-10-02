@@ -19,9 +19,9 @@ import "@xyflow/react/dist/style.css";
 
 import { getNodeLabel, useWorkflowStore, NodeData } from "@/lib/store";
 import { requestWorkflowSync } from "@/lib/workflowSyncBus";
-import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL, IMAGE_MODELS } from "@/lib/modelConfig";
+import { NODES_MIME, shouldHandleCopy, resolvePasteIntent } from "@/lib/clipboardIntent";
 import CuttableEdge from "@/components/edges/CuttableEdge";
-import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
 import { storeAsset } from "@/lib/uploadAsset";
@@ -167,7 +167,7 @@ export default function WorkflowCanvas() {
     nodes, edges,
     onNodesChange: _onNodesChange, onEdgesChange, onConnect,
     addNode, insertEdge,
-    updateNodeData, isRunning, setIsRunning, debugMode, toggleDebug,
+    updateNodeData,
     setConnectingHandleType,
     saveViewport: _saveViewport,
     pushUndoSnapshot, undo, redo,
@@ -530,7 +530,11 @@ export default function WorkflowCanvas() {
             try {
               const cdnUrl = await storeAsset(await file.arrayBuffer(), file.type || "image/jpeg");
               updateNodeDataRef.current(nodeId, { inputImage: cdnUrl, r2Url: cdnUrl });
-            } catch { /* blob URL stays as fallback */ }
+            } catch {
+              // A blob: URL must never travel downstream as a frame (dead after reload).
+              updateNodeDataRef.current(nodeId, { inputImage: undefined, r2Url: undefined, hasError: true });
+              useWorkflowStore.getState().addToast("Image upload failed. Drop the file again.");
+            }
           })();
 
         } else {
@@ -578,9 +582,6 @@ export default function WorkflowCanvas() {
 
   // ── Copy / Paste ─────────────────────────────────────────────────────────────
   const clipboardRef = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
-  // Written to the OS clipboard when nodes are copied, so Ctrl+V can tell the
-  // difference between "paste my nodes" and "paste real external text".
-  const nodeSentinelRef = useRef<string | null>(null);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const handleCopy = useCallback(() => {
@@ -600,11 +601,6 @@ export default function WorkflowCanvas() {
       (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
     );
     clipboardRef.current = { nodes: allNodes, edges: selectedEdges };
-    // Write a sentinel to the OS clipboard so Ctrl+V knows this was a node copy,
-    // not real external text the user wants to paste as a prompt node.
-    const sentinel = `__rf_nodes_${Date.now()}__`;
-    nodeSentinelRef.current = sentinel;
-    navigator.clipboard.writeText(sentinel).catch(() => { });
   }, [nodes, edges]);
 
   const handlePaste = useCallback(() => {
@@ -694,7 +690,6 @@ export default function WorkflowCanvas() {
         if (e.shiftKey) handleRedo(); else handleUndo();
       }
       if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); handleRedo(); }
-      if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
     };
 
     const releaseSpace = () => {
@@ -713,21 +708,40 @@ export default function WorkflowCanvas() {
       document.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", releaseSpace);
     };
-  }, [handleCopy, handleUndo, handleRedo]);
+  }, [handleUndo, handleRedo]);
+
+  // Native `copy` event: text copies (inputs, selections) stay native; a node
+  // copy tags the clipboard with a custom type only, never text/plain.
+  useEffect(() => {
+    const onCopyEvent = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      const hasTextSelection = !!window.getSelection()?.toString();
+      const hasSelectedNodes = useWorkflowStore.getState().nodes.some((n) => n.selected);
+      if (!shouldHandleCopy({ typing, hasTextSelection, hasSelectedNodes })) return;
+      handleCopy();
+      e.clipboardData?.setData(NODES_MIME, String(Date.now()));
+      e.preventDefault();
+    };
+    document.addEventListener("copy", onCopyEvent);
+    return () => document.removeEventListener("copy", onCopyEvent);
+  }, [handleCopy]);
 
   // Native `paste` event, not navigator.clipboard.readText() — reading clipboardData
   // off the event is treated as a direct user gesture, so it pastes immediately
   // instead of popping the browser's "Paste" permission button.
   useEffect(() => {
     const onPasteEvent = (e: ClipboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
 
-      const raw = e.clipboardData?.getData("text/plain") ?? "";
-      const text = raw.trim();
-      // If the OS clipboard contains our node-copy sentinel, paste nodes.
-      // Otherwise treat non-empty text as external content → prompt node(s).
-      if (text && text !== nodeSentinelRef.current) {
+      const text = (e.clipboardData?.getData("text/plain") ?? "").trim();
+      const intent = resolvePasteIntent({
+        types: Array.from(e.clipboardData?.types ?? []),
+        text,
+        hasNodes: !!clipboardRef.current,
+      });
+      if (intent === "text") {
         e.preventDefault();
         const currentState = useWorkflowStore.getState();
         const currentNodes = currentState.nodes;
@@ -800,7 +814,7 @@ export default function WorkflowCanvas() {
             });
           }
         });
-      } else if (clipboardRef.current) {
+      } else if (intent === "nodes") {
         e.preventDefault();
         handlePaste();
       }
@@ -975,10 +989,6 @@ export default function WorkflowCanvas() {
   const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
   const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
 
-  const push = useCallback((text: string, ok = true) => {
-    setLog((l) => [...l.slice(-60), { text, ok }]);
-  }, []);
-
   // prompt handle: only promptNode; 1 connection max. image handle: up to 14 (nano-banana-2 limit).
   const isValidConnection = useCallback(
     (connection: Connection | Edge) => {
@@ -1027,7 +1037,9 @@ export default function WorkflowCanvas() {
           const count = edges.filter(
             (e) => e.target === connection.target && e.targetHandle === "image"
           ).length;
-          if (count >= 14) return false;
+          const imgCfg = IMAGE_MODELS.find((m) => m.id === ((target.data?.model as string | undefined) ?? "nano-banana-2"));
+          const cap = imgCfg && imgCfg.maxImages > 0 ? imgCfg.maxImages : 14;
+          if (count >= cap) return false;
 
           // Same image source cannot be connected twice to the same node
           const duplicate = edges.some(
@@ -1145,253 +1157,6 @@ export default function WorkflowCanvas() {
     [],
   );
 
-  const addToast   = useWorkflowStore((s) => s.addToast);
-  const kieKeySet  = useWorkflowStore((s) => s.kieKeySet);
-
-  const runAll = useCallback(async () => {
-    const token = await getAccessToken();
-
-    setIsRunning(true);
-    setLog([]);
-    push("Running workflow…");
-    const order = topoSort(nodes, edges);
-
-    for (const nodeId of order) {
-      const node = nodes.find((n) => n.id === nodeId) as Node<NodeData> | undefined;
-      if (!node) continue;
-
-      // ── Image generator ─────────────────────────────────────────────────────
-      if (node.type === "generateNode") {
-        // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
-        // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
-        const videoImageEdges = edges.filter(
-          (e) => e.target === nodeId && e.targetHandle === "image" &&
-            useWorkflowStore.getState().nodes.find((n) => n.id === e.source)?.type === "videoInputNode"
-        );
-        for (const edge of videoImageEdges) {
-          const src = useWorkflowStore.getState().nodes.find((n) => n.id === edge.source);
-          if (!src || (src.data.capturedFrameUrl as string | undefined)) continue;
-          const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
-          if (!videoUrl || videoUrl.startsWith("blob:")) continue;
-          const trimStart = src.data.trimStart as number | undefined;
-          const trimEnd = src.data.trimEnd as number | undefined;
-          const extractBody = trimEnd !== undefined
-            ? { videoUrl, timeSeconds: trimEnd }
-            : { videoUrl, timeSeconds: trimStart ?? 0 };
-          try {
-            const r = await fetch("/api/extract-frame", {
-              method: "POST",
-              headers: authHeaders(token),
-              body: JSON.stringify(extractBody),
-            });
-            const j = await r.json();
-            if (j.cdnUrl) updateNodeData(src.id, { capturedFrameUrl: j.cdnUrl });
-          } catch { /* proceed without */ }
-        }
-
-        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const prompt = upstream.prompt;
-        const imageUrls = upstream.imageUrls;
-        const aspectRatio = node.data.aspectRatio ?? "1:1";
-        const quality = node.data.quality ?? "1k";
-        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality };
-
-        if (!prompt?.trim()) {
-          const promptNodeId = edges.find(
-            (e) => e.target === nodeId && e.targetHandle === "prompt"
-          )?.source;
-          if (promptNodeId) updateNodeData(promptNodeId, { hasError: true });
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] node=${node.id}`, payload);
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] ${aspectRatio} · ${imageUrls.length} image(s)…`);
-        updateNodeData(nodeId, { status: "running", imageUrl: undefined });
-
-        try {
-          // Submit job
-          const res = await fetch("/api/generate", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-
-          const { taskId, referenceImageUrls } = data as {
-            taskId: string;
-            referenceImageUrls?: string[];
-          };
-
-          // If reference images were uploaded to R2, update those nodes immediately
-          if (referenceImageUrls?.length) {
-            const imageEdges = edges.filter(
-              (e) => e.target === nodeId && e.targetHandle === "image"
-            );
-            referenceImageUrls.forEach((cdnUrl, i) => {
-              const srcId = imageEdges[i]?.source;
-              if (srcId) updateNodeData(srcId, { r2Url: cdnUrl });
-            });
-          }
-
-          // Poll /api/job-status until done (image generate is async/callback-based)
-          push(`[${node.id}] waiting for result…`);
-          let imageUrl: string | undefined;
-          for (let attempt = 0; attempt < 120; attempt++) {
-            await new Promise((r) => setTimeout(r, 3000));
-            const poll = await fetch(`/api/job-status?taskId=${taskId}`);
-            const result = await poll.json();
-            if (result.status === "done") { imageUrl = result.imageUrl; break; }
-            if (result.status === "error") throw new Error(result.error ?? "Generation failed");
-            if (attempt > 0 && attempt % 5 === 0) push(`[${node.id}] still waiting…`);
-          }
-
-          if (!imageUrl) throw new Error("Timed out waiting for generation result");
-          updateNodeData(nodeId, { status: "done", imageUrl });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-
-      // ── Assistant (text-to-text LLM) ────────────────────────────────────────
-      if (node.type === "assistantNode") {
-        const upstream = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
-        const prompt = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
-
-        if (!prompt.trim()) {
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] assistantNode=${node.id}`, { prompt, model: node.data.model });
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] generating text…`);
-        updateNodeData(nodeId, { status: "running", outputText: "", errorMsg: undefined });
-
-        try {
-          const res = await fetch("/api/assistant", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify({
-              prompt,
-              model: node.data.model ?? "claude-sonnet-4-6",
-              systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
-            }),
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: "Generation failed" }));
-            throw new Error(err.error ?? "Generation failed");
-          }
-
-          const reader = res.body!.getReader();
-          const decoder = new TextDecoder();
-          let accumulated = "";
-          outer: while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            for (const line of decoder.decode(value, { stream: true }).split("\n")) {
-              if (!line.startsWith("data: ")) continue;
-              const payload = line.slice(6).trim();
-              if (payload === "[DONE]") break outer;
-              try {
-                const parsed = JSON.parse(payload);
-                if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-                  const delta = parsed.delta.text ?? "";
-                  if (delta) { accumulated += delta; updateNodeData(nodeId, { outputText: accumulated }); }
-                }
-              } catch { /* skip */ }
-            }
-          }
-          updateNodeData(nodeId, { status: "done", outputText: accumulated });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-
-      // ── Video generator ─────────────────────────────────────────────────────
-      if (node.type === "videoGeneratorNode") {
-        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const videoModel = (node.data.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
-        const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModel);
-        const prompt = upstream.prompt ?? "";
-        const duration = node.data.duration ?? videoCfg?.defaultDuration ?? 5;
-        const aspectRatio = node.data.aspectRatio ?? videoCfg?.defaultRatio ?? "16:9";
-        const klingMode = node.data.klingMode ?? videoCfg?.defaultMode ?? "pro";
-        const resolution = node.data.grokResolution ?? videoCfg?.defaultResolution;
-        const sound = node.data.sound ?? false;
-        const payload = {
-          videoModel,
-          prompt,
-          startFrameUrl: upstream.startFrameUrl,
-          endFrameUrl: upstream.endFrameUrl,
-          videoRefUrl: upstream.videoRefUrl,
-          resources: upstream.resources,
-          referenceImageUrls: upstream.resources.map((r) => r.url),
-          referenceVideoUrls: upstream.referenceVideoUrls,
-          referenceAudioUrls: upstream.referenceAudioUrls,
-          ...(node.data.heygenAvatarId ? { avatarId: node.data.heygenAvatarId } : {}),
-          ...(node.data.heygenVoiceId ? { voiceId: node.data.heygenVoiceId } : {}),
-          sound, duration, aspectRatio,
-          mode: klingMode,
-          ...(resolution ? { resolution } : {}),
-        };
-
-        if (!prompt.trim()) {
-          const promptNodeId = edges.find(
-            (e) => e.target === nodeId && e.targetHandle === "prompt"
-          )?.source;
-          if (promptNodeId) updateNodeData(promptNodeId, { hasError: true });
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] videoNode=${node.id}`, payload);
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] ${videoCfg?.name ?? videoModel}…`);
-        updateNodeData(nodeId, { status: "running", videoUrl: undefined });
-
-        try {
-          const res = await fetch("/api/generate-video", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-          updateNodeData(nodeId, { status: "done", videoUrl: data.videoUrl });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-    }
-
-    push("Complete");
-    setIsRunning(false);
-  }, [nodes, edges, updateNodeData, setIsRunning, debugMode, push, kieKeySet, addToast]);
-
   // ── Place a node at the viewport center (used by the empty-state picker) ────
   const addNodeAtCenter = useCallback((type: string) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
@@ -1499,10 +1264,6 @@ export default function WorkflowCanvas() {
   const handlePaneClick = useCallback(() => {
     setPotentialGroupIds(null);
   }, []);
-
-  const canRun = !isRunning && nodes.some(
-    (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
-  );
 
   const computedNodes = useMemo(() => {
     // During rubber-band: return nodes as-is so only actually-changed nodes (selected state)
