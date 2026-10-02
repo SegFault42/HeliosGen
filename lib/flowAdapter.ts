@@ -14,9 +14,10 @@ import { dlog } from "@/lib/debugLog";
 // guessing upfront from prompt length.
 const READ_THIS_MIN_CHARS = 200;
 
-export function shouldUseReadThis(model: string, prompt: string, explicit?: boolean): boolean {
+export function shouldUseReadThis(model: string, prompt: string, explicit?: boolean, hasFrames = false): boolean {
   if (explicit !== undefined) return explicit;
-  return model === "Omni Flash" && prompt.trim().length > READ_THIS_MIN_CHARS;
+  // A prompt image would be one more attached image next to the start/end frames.
+  return !hasFrames && model === "Omni Flash" && prompt.trim().length > READ_THIS_MIN_CHARS;
 }
 
 const FLOW_PROJECT_URL_PATTERN = /^https:\/\/flow\.google\.com\/project\/[0-9a-f-]+$/i;
@@ -233,7 +234,7 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
   const aspectRatio = params.aspectRatio === "16:9" ? "16:9" : "9:16";
 
   let prompt = params.prompt;
-  if (shouldUseReadThis(model, params.prompt, params.readThis)) {
+  if (shouldUseReadThis(model, params.prompt, params.readThis, Boolean(startAbs || endAbs))) {
     const promptImagePath = await renderPromptImage(params.prompt, outputDirectory);
     referenceFiles.push(promptImagePath);
     prompt = "read this";

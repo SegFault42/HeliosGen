@@ -41,6 +41,10 @@ test("shouldUseReadThis: Omni Flash + short prompt -> false", () => {
   assert.equal(shouldUseReadThis("Omni Flash", "short prompt"), false);
 });
 
+test("shouldUseReadThis: frames attached -> false (the prompt image would compete with the start/end frames)", () => {
+  assert.equal(shouldUseReadThis("Omni Flash", LONG_PROMPT, undefined, true), false);
+});
+
 test("shouldUseReadThis: non-Omni-Flash model + long prompt -> false", () => {
   assert.equal(shouldUseReadThis("Veo 3.1 - Fast", LONG_PROMPT), false);
 });
