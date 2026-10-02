@@ -213,12 +213,21 @@ function decodeToolResult(response: Record<string, unknown>): unknown {
 /** Call a real HeyGen MCP tool through the existing OAuth session. */
 export async function heygenMcpCall<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   let token = await accessToken();
-  try {
-    return await callWithToken<T>(name, args, token);
-  } catch (error) {
-    if ((error as { status?: number }).status !== 401) throw error;
-    token = await refreshAccessToken(await readTokenFile());
-    return callWithToken<T>(name, args, token);
+  // Reads may be retried on a gateway blip (HeyGen sits behind Cloudflare); never a
+  // create, which could start (and bill) a second render.
+  const readOnly = /^(get|list)_/.test(name);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await callWithToken<T>(name, args, token);
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 401) {
+        token = await refreshAccessToken(await readTokenFile());
+        return callWithToken<T>(name, args, token);
+      }
+      if (!readOnly || attempt >= 2 || !(status === 502 || status === 503 || status === 504)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2_000 * (attempt + 1)));
+    }
   }
 }
 

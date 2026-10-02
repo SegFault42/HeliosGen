@@ -108,3 +108,22 @@ test("persist failure keeps refreshed token in memory", async () => {
     assert.equal(refreshes, 1);
   } finally { fsp.rename = origRename; global.fetch = original; console.error = origErr; mcp._resetHeyGenTokenMemory(); }
 });
+
+test("a Cloudflare 502 is retried for reads, never for a create (no double render)", async () => {
+  const original = global.fetch;
+  mcp._resetHeyGenTokenMemory();
+  tmpTokenFile({ access_token: "ok-tok" });
+  let blips = 0, creates = 0;
+  global.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    if (body.method === "notifications/initialized") return new Response("", { status: 202 });
+    if (body.method === "tools/call" && body.params.name.startsWith("create_")) { creates++; return new Response("bad gateway", { status: 502 }); }
+    if (body.method === "tools/call" && blips++ === 0) return new Response("bad gateway", { status: 502 });
+    return rpcReply(body.id, { content: [{ type: "text", text: "\"fine\"" }] });
+  };
+  try {
+    assert.equal(await mcp.heygenMcpCall("get_video_agent_session", { sessionId: "s" }), "fine");
+    await assert.rejects(mcp.heygenMcpCall("create_video_agent", { prompt: "x" }), /502/);
+    assert.equal(creates, 1);
+  } finally { global.fetch = original; mcp._resetHeyGenTokenMemory(); }
+});
