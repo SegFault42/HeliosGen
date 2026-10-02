@@ -1,7 +1,7 @@
 "use client";
 import { memo } from "react";
 import { useNodeEdges, useNeighborNodes } from "@/lib/nodeSelectors";
-import React, { useCallback, useEffect, useRef, useState, Fragment } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, Fragment } from "react";
 import NodeLabel, { requestRename } from "@/components/nodes/NodeLabel";
 import { resolveMentions } from "@/lib/mentions";
 import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
@@ -343,7 +343,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     : [];
   const currentGenIdx = Math.min((data.currentGenIdx as number | undefined) ?? Math.max(0, generations.length - 1), Math.max(0, generations.length - 1));
   const generationsRef = useRef(generations);
-  generationsRef.current = generations;
+  useLayoutEffect(() => { generationsRef.current = generations; });
 
   const goToGen = useCallback((idx: number) => {
     const gens = generationsRef.current;

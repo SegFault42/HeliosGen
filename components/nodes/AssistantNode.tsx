@@ -1,7 +1,7 @@
 "use client";
 import { memo } from "react";
 import { useNodeEdges } from "@/lib/nodeSelectors";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import NodeLabel from "@/components/nodes/NodeLabel";
 import GenerateButton from "@/components/nodes/GenerateButton";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
@@ -33,7 +33,7 @@ function AssistantNode({ id, data, selected }: NodeProps<AssistantNodeType>) {
   const prevSelectedRef = useRef(selected);
   const abortRef = useRef<AbortController | null>(null);
   const selectedRef = useRef(selected);
-  selectedRef.current = selected;
+  useLayoutEffect(() => { selectedRef.current = selected; });
 
   // Instant handle hide on deselect
   useEffect(() => {

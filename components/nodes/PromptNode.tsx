@@ -138,7 +138,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
   const modalHighlightRef = useRef<HTMLDivElement | null>(null);
   const modalPendingCursor = useRef<number | null>(null);
 
-  selectedRef.current = selected;
+  useLayoutEffect(() => { selectedRef.current = selected; });
 
   // Instant handle hide on deselect
   useEffect(() => {
@@ -259,7 +259,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
     })
   );
   const mentionPreviewsRef = useRef(mentionPreviews);
-  mentionPreviewsRef.current = mentionPreviews;
+  useLayoutEffect(() => { mentionPreviewsRef.current = mentionPreviews; });
 
   const filteredMentions =
     mentionQuery !== null

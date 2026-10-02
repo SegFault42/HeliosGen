@@ -1,7 +1,7 @@
 "use client";
 import { memo } from "react";
 import { useNodeEdges, useNeighborNodes } from "@/lib/nodeSelectors";
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useLayoutEffect } from "react";
 import NodeLabel from "@/components/nodes/NodeLabel";
 import NextImage from "next/image";
 import { Handle, Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
@@ -95,12 +95,14 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   const trimOpenRef           = useRef(false);
   const committedTrimStartRef = useRef<number | undefined>(undefined);
   const committedTrimEndRef   = useRef<number | undefined>(undefined);
-  trimOpenRef.current             = trimOpen;
-  committedTrimStartRef.current   = data.trimStart as number | undefined;
-  committedTrimEndRef.current     = data.trimEnd   as number | undefined;
-  videoDurationRef.current        = videoDuration;
-  localTrimStartRef.current       = localTrimStart;
-  localTrimEndRef.current         = localTrimEnd;
+  useLayoutEffect(() => {
+    trimOpenRef.current             = trimOpen;
+    committedTrimStartRef.current   = data.trimStart as number | undefined;
+    committedTrimEndRef.current     = data.trimEnd   as number | undefined;
+    videoDurationRef.current        = videoDuration;
+    localTrimStartRef.current       = localTrimStart;
+    localTrimEndRef.current         = localTrimEnd;
+  });
 
   // ── Two-layer crossfade: base video keeps playing while new URL loads on top ─
   const videoUrl = data.videoUrl as string | undefined;
@@ -172,7 +174,7 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
     : (capturedFrameUrl ?? eagerEndFrameUrl ?? eagerStartFrameUrl);
   const isExtractingFrame = !!(data.extractingFrame as boolean | undefined);
   const capturedFrameRef     = useRef(capturedFrameUrl);
-  capturedFrameRef.current   = capturedFrameUrl;
+  useLayoutEffect(() => { capturedFrameRef.current = capturedFrameUrl; });
   const prevCapturedRef      = useRef(capturedFrameUrl);
   const prevEagerRef         = useRef(eagerFrameUrl);
 

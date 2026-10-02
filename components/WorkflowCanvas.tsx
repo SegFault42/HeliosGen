@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -181,7 +181,7 @@ export default function WorkflowCanvas() {
     saveViewportTimerRef.current = setTimeout(() => _saveViewport(vp), 300);
   }, [_saveViewport]);
   const updateNodeDataRef = useRef(updateNodeData);
-  updateNodeDataRef.current = updateNodeData;
+  useLayoutEffect(() => { updateNodeDataRef.current = updateNodeData; });
   const [activeTool, setActiveTool] = useState<"select" | "hand">("select");
 
   const canUndo = undoStack.length > 0;
