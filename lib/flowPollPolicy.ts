@@ -8,6 +8,7 @@ const FATAL_CODES = new Set([
   "login_required",
   "download_failed",
   "download_type_mismatch",
+  "generation_failed",
 ]);
 
 export function flowDeadlineMs(isVideo: boolean): number {

@@ -58,7 +58,7 @@ test("poll deadline is wall clock: 5 min image, 20 min video", () => {
 });
 
 test("fatal Flow errors stop polling, transient ones do not", () => {
-  for (const code of ["generated_asset_not_found", "job_asset_identity_missing", "ui_changed", "login_required", "download_failed", "download_type_mismatch"]) {
+  for (const code of ["generated_asset_not_found", "job_asset_identity_missing", "ui_changed", "login_required", "download_failed", "download_type_mismatch", "generation_failed"]) {
     const error = Object.assign(new Error("x"), { code });
     assert.equal(isFatalFlowError(error), true, code);
   }
