@@ -83,6 +83,10 @@ export async function POST(req: NextRequest) {
   if (frameErr) return NextResponse.json({ error: frameErr }, { status: 400 });
 
   if (cfg.apiInput.useHeyGenMcp) {
+    const max = cfg.apiInput.promptMaxLength;
+    if (max && String(prompt ?? "").length > max) {
+      return NextResponse.json({ error: `HeyGen prompts are limited to ${max} characters (got ${String(prompt).length}).` }, { status: 400 });
+    }
     if (debugOnly) return NextResponse.json({ debugProvider: "heygen-mcp", videoModel, prompt, aspectRatio });
     const heygen = await submitHeyGenVideo({
       prompt: String(prompt ?? ""),
