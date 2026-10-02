@@ -194,6 +194,8 @@ export default function WorkflowCanvas() {
   const [potentialGroupIds, setPotentialGroupIds] = useState<Set<string> | null>(null);
   // Ref so the nodes map always reads the latest selected IDs in the same render
   const selectedIdsRef = useRef<Set<string>>(new Set());
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
+  const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
   // True while the rubber-band drag is in progress — skip BFS and dimming to prevent blinking
   const isRubberBandSelectingRef = useRef(false);
   // Edge IDs that will be removed by our delayed node-delete handler — suppress RF's auto-remove
@@ -986,8 +988,6 @@ export default function WorkflowCanvas() {
   }, []);
 
   // ── Alignment snap guides ─────────────────────────────────────────────────────
-  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
-  const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
 
   // prompt handle: only promptNode; 1 connection max. image handle: up to 14 (nano-banana-2 limit).
   const isValidConnection = useCallback(

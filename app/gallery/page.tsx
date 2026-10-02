@@ -6575,6 +6575,7 @@ function Lightbox({ item, thumbUrl, onClose, onCopyPrompt, onPrev, onNext }: { i
   // eslint-disable-next-line react-hooks/set-state-in-effect -- resets local UI state when the tab/open/item prop changes; keyed remount would change behavior
   useEffect(() => { if (imgIdx > 0) { setPlaceholderSrc(thumbSrc(lightboxUrl, snapWidth(300))); setFullLoaded(false); setResolution(null); } }, [imgIdx]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
+  const handleClose = () => { setVisible(false); setTimeout(onClose, 200); };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") { if (zoomed) { setZoomed(false); return; } handleClose(); return; }
@@ -6592,7 +6593,6 @@ function Lightbox({ item, thumbUrl, onClose, onCopyPrompt, onPrev, onNext }: { i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allUrls.length, imgIdx, zoomed, onPrev, onNext]);
 
-  const handleClose = () => { setVisible(false); setTimeout(onClose, 200); };
 
   const isVideo = item.mediaType === "video";
 
