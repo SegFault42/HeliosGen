@@ -1,7 +1,7 @@
 // Pure helpers for VideoGeneratorNode (kept free of React so node --test can load them).
 
-/** Flow renders to 20 min server-side, HeyGen up to ~22 min: give up client-side only after 25. */
-export const VIDEO_JOB_DEADLINE_MS = 25 * 60 * 1000;
+/** Server deadlines: Flow 20 min, HeyGen 30 min (heygenPollPolicy). Give up client-side only after 32. */
+export const VIDEO_JOB_DEADLINE_MS = 32 * 60 * 1000;
 
 /** Only Kie-backed models need the Kie key; Flow and HeyGen do not. */
 export function needsKieKey(provider: string | undefined): boolean {

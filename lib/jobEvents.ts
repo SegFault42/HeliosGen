@@ -12,7 +12,7 @@ const jobEvents = (g[EVENTS_KEY] ??= (() => {
   return e;
 })());
 
-// Longest provider budget: Flow video 20 min, HeyGen ~22 min; stream outlives both.
-const JOB_STREAM_BUDGET_MS = 25 * 60 * 1000;
+// Longest provider budget: Flow video 20 min, HeyGen 30 min (heygenPollPolicy); stream outlives both.
+const JOB_STREAM_BUDGET_MS = 32 * 60 * 1000;
 
 export { jobEvents, JOB_STREAM_BUDGET_MS };
