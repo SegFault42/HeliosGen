@@ -67,3 +67,15 @@ test("executable resolution: prefers .exe, shell only for shims", () => {
 test("shell mode refuses metacharacters", () => {
   assert.throws(() => spawnCodex(["--out", "a&calc"], { cmd: "C:/x/codex-imagegen.cmd", shell: true }), /unsafe/);
 });
+
+test("classification uses the final Error: part, not Warning: retry lines", async () => {
+  const stderr = "Warning: retry after unauthorized\nError: content policy violation";
+  assert.equal(isAuthError(stderr), false);
+  let calls = 0;
+  await assert.rejects(runWithAccounts(["a", "b"], async () => (calls++, { exitCode: 1, stderr })), /content policy/);
+  assert.equal(calls, 1);
+  const seen = [];
+  const ok = await runWithAccounts(["a", "b"], async (f) => (seen.push(f), f === "a" ? { exitCode: 1, stderr: "Warning: x\nError: Your session has ended" } : { exitCode: 0, stderr: "" }));
+  assert.equal(ok, "b");
+  assert.deepEqual(seen, ["a", "b"]);
+});

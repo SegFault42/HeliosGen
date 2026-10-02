@@ -51,5 +51,7 @@ export function isUsageLimitError(stderr: string): boolean {
 
 /** Expired/invalid ChatGPT session: another account may still work. */
 export function isAuthError(stderr: string): boolean {
-  return /session has ended|log in again|\bHTTP 401\b|unauthorized/i.test(stderr);
+  // Classify only the final "Error:" part; earlier "Warning: retry after unauthorized" lines are noise.
+  const i = stderr.lastIndexOf("Error:");
+  return /session has ended|log in again|\bHTTP 401\b|unauthorized/i.test(i === -1 ? stderr : stderr.slice(i));
 }
