@@ -561,9 +561,9 @@ export const VIDEO_MODELS: VideoModel[] = [
     defaultDuration: 10,
     defaultRatio: "9:16",
     handles: ["prompt", "startFrame"],
-    sound: true,
+    sound: false, // Flow path ignores sound
     resolutions: ["720p", "1080p"],
-    defaultResolution: "1080p",
+    defaultResolution: "720p",
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
@@ -584,9 +584,9 @@ export const VIDEO_MODELS: VideoModel[] = [
     defaultDuration: 0,
     defaultRatio: "9:16",
     handles: ["prompt", "startFrame", "endFrame"],
-    sound: true,
+    sound: false, // Flow path ignores sound
     resolutions: ["720p", "1080p"],
-    defaultResolution: "1080p",
+    defaultResolution: "720p",
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
@@ -607,9 +607,9 @@ export const VIDEO_MODELS: VideoModel[] = [
     defaultDuration: 0,
     defaultRatio: "9:16",
     handles: ["prompt", "startFrame", "endFrame"],
-    sound: true,
+    sound: false, // Flow path ignores sound
     resolutions: ["720p", "1080p"],
-    defaultResolution: "1080p",
+    defaultResolution: "720p",
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
@@ -630,9 +630,10 @@ export const VIDEO_MODELS: VideoModel[] = [
     defaultDuration: 0,
     defaultRatio: "9:16",
     handles: ["prompt", "startFrame", "endFrame"],
-    sound: true,
+    requiredHandles: ["startFrame", "endFrame"],
+    sound: false, // Flow path ignores sound
     resolutions: ["720p", "1080p"],
-    defaultResolution: "1080p",
+    defaultResolution: "720p",
     apiInput: {
       aspectRatioKey: "aspect_ratio",
       resolutionKey: "resolution",
@@ -1169,7 +1170,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiId: "heygen-video-agent",
     name: "HeyGen Video Agent",
     provider: "HeyGen",
-    ratios: ["9:16", "16:9", "1:1", "4:5", "5:4"],
+    ratios: ["9:16", "16:9"],
     durations: [],
     defaultDuration: 0,
     defaultRatio: "9:16",
@@ -1182,7 +1183,7 @@ export const VIDEO_MODELS: VideoModel[] = [
     apiInput: {
       durationMin: 0,
       durationMax: 0,
-      promptMaxLength: 20000,
+      promptMaxLength: 10000,
       useHeyGenMcp: true,
     },
   },
