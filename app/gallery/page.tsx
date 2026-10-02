@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
+import { canGenerate as canGenerateGate, pollMaxIterations } from "@/lib/galleryGate";
 import { PROVIDERS, getModelProvider, setModelProvider, modelHasProviderChoice } from "@/lib/providers";
 import { useWorkflowStore } from "@/lib/store";
 import { Maximize2, Minimize2, ShieldAlert, X } from "lucide-react";
@@ -1771,6 +1772,15 @@ function GalleryInner() {
     }
   };
 
+  const galleryCanGenerate = () => {
+    let selected = "kie", azureConfigured = false;
+    try {
+      selected = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
+      azureConfigured = !!(localStorage.getItem("aiui-azure-base-url") && JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId]);
+    } catch {}
+    return canGenerateGate({ modelId, kieKeySet, selected, azureConfigured });
+  };
+
   const pollTask = async (taskId: string): Promise<void> => {
     // Resolves after `ms` OR immediately when the tab becomes visible — whichever is first.
     // This ensures polling catches up instantly after the user returns to the tab,
@@ -1783,7 +1793,8 @@ function GalleryInner() {
       document.addEventListener("visibilitychange", onVisible);
     });
 
-    for (let i = 0; i < 150; i++) {
+    const maxPolls = pollMaxIterations(modelId);
+    for (let i = 0; i < maxPolls; i++) {
       await waitOrVisible(3_000);
       const poll = await fetch(`/api/job-status?taskId=${taskId}`);
       const result = await poll.json() as { status: string; error?: string };
@@ -1794,7 +1805,7 @@ function GalleryInner() {
   };
 
   const generate = async () => {
-    if (kieKeySet === false) return;
+    if (!galleryCanGenerate()) return;
     if (!prompt.trim() && !isVideo) return;
     requestNotificationPermission();
     if (refImages.some(r => r.uploading)) { setGenError("Images still uploading…"); setTimeout(() => setGenError(""), 3_000); return; }
@@ -2215,7 +2226,7 @@ function GalleryInner() {
   const displayVidRefAudios = getDisplayOrder(vidRefAudios, draggingId, reorderOverId);
 
   const vidRequiresPrompt = isVideo && !!(vidModel?.apiInput.promptMaxLength);
-  const canGenerate = kieKeySet === false ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
+  const canGenerate = !galleryCanGenerate() ? false : submitting ? false : promptOverLimit ? false : (vidRequiresPrompt || !isVideo) ? prompt.trim().length > 0 : true;
 
   const handleAddReference = useCallback((url: string) => {
     if (refImages.some(r => r.cdnUrl === url || r.objectUrl === url)) {
