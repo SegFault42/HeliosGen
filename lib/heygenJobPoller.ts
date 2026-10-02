@@ -2,6 +2,8 @@ import { jobEvents } from "./jobEvents";
 import { jobStore } from "./jobStore";
 import * as guestDb from "./guest/db";
 import { getHeyGenAgentSession, getHeyGenVideo, listHeyGenAgentVideos } from "./heygenMcp";
+import { heygenVideoAssetUrl } from "./heygenVideoResult";
+import { mirrorToStorage } from "./storage";
 
 // Per process, not per route bundle: job-status and the submit route must share it.
 const ACTIVE_KEY = Symbol.for("heliosgen.heygen-poller.active");
@@ -30,24 +32,6 @@ function statusOf(value: unknown): string {
   return (stringAt(value, ["status", "state", "sessionStatus", "session_status"]) ?? "").toLowerCase();
 }
 
-function videoUrlOf(value: unknown): string | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  if (Array.isArray(value)) {
-    for (const item of value) { const found = videoUrlOf(item); if (found) return found; }
-    return undefined;
-  }
-  const object = value as Record<string, unknown>;
-  for (const key of ["videoUrl", "video_url", "downloadUrl", "download_url", "mp4Url", "mp4_url"]) {
-    if (typeof object[key] === "string" && object[key].startsWith("http")) return object[key] as string;
-  }
-  for (const [key, item] of Object.entries(object)) {
-    if (key.toLowerCase().includes("video") && typeof item === "string" && item.startsWith("http")) return item;
-    const found = videoUrlOf(item);
-    if (found) return found;
-  }
-  return undefined;
-}
-
 function videoIdOf(value: unknown): string | undefined {
   return stringAt(value, ["videoId", "video_id"]);
 }
@@ -73,18 +57,19 @@ async function poll(taskId: string): Promise<void> {
     try {
       const session = await getHeyGenAgentSession(sessionId);
       const state = statusOf(session);
-      let url = videoUrlOf(session);
+      let url = heygenVideoAssetUrl(session);
       let videoId = videoIdOf(session);
       if (!url && (state.includes("complete") || state.includes("success") || state === "done" || videoId)) {
         const videos = await listHeyGenAgentVideos(sessionId);
-        url = videoUrlOf(videos);
+        url = heygenVideoAssetUrl(videos);
         videoId = videoId ?? videoIdOf(videos);
       }
       if (!url && videoId && (state.includes("complete") || state.includes("success") || state === "done")) {
-        url = videoUrlOf(await getHeyGenVideo(videoId));
+        url = heygenVideoAssetUrl(await getHeyGenVideo(videoId));
       }
       if (url) {
-        settle(taskId, { status: "done", videoUrl: url });
+        const localUrl = await mirrorToStorage(url, "videos", "video/mp4");
+        settle(taskId, { status: "done", videoUrl: localUrl });
         return;
       }
       if (state.includes("error") || state.includes("fail") || state.includes("cancel") || state === "stopped") {

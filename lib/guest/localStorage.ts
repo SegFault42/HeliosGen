@@ -122,9 +122,12 @@ function fetchToBuffer(url: string, maxRedirects = 5): Promise<{ buf: Buffer; co
   });
 }
 
-export async function mirrorToStorage(url: string, folder: string): Promise<string> {
+export async function mirrorToStorage(url: string, folder: string, expectedContentType?: "video/mp4"): Promise<string> {
   const { buf, contentType } = await fetchToBuffer(url);
-  return uploadBuffer(buf, contentType, folder);
+  if (expectedContentType === "video/mp4" && (buf.length < 8 || buf.toString("ascii", 4, 8) !== "ftyp")) {
+    throw new Error("Mirrored media is not an MP4 video");
+  }
+  return uploadBuffer(buf, expectedContentType ?? contentType, folder);
 }
 
 export async function uploadDataUrl(dataUrl: string, folder: string): Promise<string> {
