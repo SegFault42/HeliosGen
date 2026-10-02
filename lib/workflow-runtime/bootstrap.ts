@@ -9,7 +9,7 @@ export function runtime() {
   const g = globalThis as typeof globalThis & { [key]?: Runtime };
   if (!g[key]) {
     const store = createRuntimeStore(db());
-    const baseUrl = process.env.ANVIL_URL ?? "http://127.0.0.1:3000";
+    const baseUrl = process.env.ANVIL_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3000}`;
     g[key] = { store, runner: createRunner(store, createProductionTransport(baseUrl), process.env.WORKFLOW_BOOT_ID ?? randomUUID()) };
   }
   return g[key]!;

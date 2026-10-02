@@ -20,7 +20,7 @@ export function createRuntimeStore(database: DatabaseSync) {
       for (const [k, v] of Object.entries({maxImages:approval.maxImages,maxVideos:approval.maxVideos,maxVideoSeconds:approval.maxVideoSeconds})) if (!Number.isInteger(v) || v < 0) throw new Error(`${k}_invalid`);
       if (!approval.acknowledgement?.trim()) throw new Error("acknowledgement_required");
       const imageCount=p.plan.steps.filter(s=>s.kind==="image").length, videoSteps=p.plan.steps.filter(s=>s.kind==="video");
-      if (imageCount > approval.maxImages || videoSteps.length > approval.maxVideos || videoSteps.some(s=>Number((s.payloadPreview.duration as number) ?? 0)>approval.maxVideoSeconds)) throw new Error("approval_limits_exceeded");
+      if (imageCount > approval.maxImages || videoSteps.length > approval.maxVideos || videoSteps.some(s=>s.provider!=="heygen"&&Number((s.payloadPreview.duration as number) ?? 0)>approval.maxVideoSeconds)) throw new Error("approval_limits_exceeded");
       const requestHash = hash({ planId, approval }); const old = database.prepare("SELECT run_json,request_hash FROM workflow_runs WHERE request_id=?").get(requestId) as {run_json:string;request_hash:string}|undefined;
       if (old) { if (old.request_hash !== requestHash) throw new Error("request_conflict"); return JSON.parse(old.run_json); }
       const runId = randomUUID(); const ts = now.toISOString();
