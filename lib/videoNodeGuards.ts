@@ -17,3 +17,9 @@ export function showsCreditsRefunded(provider: string | undefined): boolean {
 export function findLocalFrameUrl(urls: (string | undefined)[]): string | undefined {
   return urls.find((u) => typeof u === "string" && (u.startsWith("blob:") || u.startsWith("data:")));
 }
+
+/** A submit marker older than this (or missing) with no taskId means the POST was lost (reload/remount). */
+export const SUBMIT_STALE_MS = 3 * 60 * 1000;
+export function isStaleSubmit(pendingSubmitAt: number | undefined, now: number): boolean {
+  return pendingSubmitAt === undefined || now - pendingSubmitAt > SUBMIT_STALE_MS;
+}

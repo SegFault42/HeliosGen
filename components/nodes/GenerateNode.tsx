@@ -12,7 +12,7 @@ import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyfl
 import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { resolveInputs } from "@/lib/executor";
+import { resolveInputs, nodeImageUrl } from "@/lib/executor";
 import { buildImagePayload } from "@/lib/workflow-runtime/generationPayloads";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { browserNotify, requestNotificationPermission } from "@/lib/browserNotify";
@@ -504,7 +504,7 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
       const emptyImageEdges = edges.filter((e) => e.target === id && e.targetHandle === "image").filter((e) => {
         const src = useWorkflowStore.getState().nodes.find((n) => n.id === e.source);
         if (!src) return true;
-        const url = (src.data.capturedFrameUrl ?? src.data.r2Url ?? src.data.inputImage ?? src.data.imageUrl) as string | undefined;
+        const url = (src.data.capturedFrameUrl ?? nodeImageUrl(src)) as string | undefined;
         return !url;
       });
       if (emptyImageEdges.length > 0) {

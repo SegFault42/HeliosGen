@@ -11,9 +11,9 @@ import { Handle, Position, NodeProps, Node, useUpdateNodeInternals } from "@xyfl
 import CornerResizer from "./CornerResizer";
 import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
-import { resolveInputs } from "@/lib/executor";
+import { resolveInputs, resolveImageUrl } from "@/lib/executor";
 import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
-import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl } from "@/lib/videoNodeGuards";
+import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl, isStaleSubmit } from "@/lib/videoNodeGuards";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
@@ -402,6 +402,17 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     const raf = requestAnimationFrame(() => updateNodeInternals(id));
     return () => cancelAnimationFrame(raf);
   }, [id, videoModelId, veoMode, updateNodeInternals]);
+
+  // Remount/reload mid-submit loses the POST: no taskId will ever arrive, so unstick the node.
+  useEffect(() => {
+    const d = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data;
+    if ((d?.status === "pending" || d?.status === "running") && !d.taskId
+        && isStaleSubmit(d.pendingSubmitAt as number | undefined, Date.now())) {
+      updateNodeData(id, { status: "idle", pendingSubmitAt: undefined });
+      addToast("Previous video submission was interrupted. Generate again.", "error");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
 
   // ── Wait for job completion: SSE first, /api/job-status polling if the stream drops ──
   useEffect(() => {
@@ -838,14 +849,14 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     // All models: any connected handle whose source has no content → block + blink.
     // Linked = required, regardless of whether the handle is optional when unlinked.
     {
-      type HandleSpec = { handle: string; getUrl: (d: Record<string, unknown>) => string | undefined };
+      type HandleSpec = { handle: string; getUrl: (src: (typeof nodes)[number], sourceHandle: string | null | undefined) => string | undefined };
       const handleSpecs: HandleSpec[] = [
-        { handle: "startFrame", getUrl: (d) => (d.eagerStartFrameUrl ?? d.eagerEndFrameUrl ?? d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "endFrame", getUrl: (d) => (d.eagerEndFrameUrl ?? d.eagerStartFrameUrl ?? d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "resource", getUrl: (d) => (d.capturedFrameUrl ?? d.r2Url ?? d.inputImage ?? d.imageUrl) as string | undefined },
-        { handle: "videoRef", getUrl: (d) => (d.videoUrl) as string | undefined },
-        { handle: "referenceVideo", getUrl: (d) => (d.videoUrl ?? d.r2Url) as string | undefined },
-        { handle: "audioRef", getUrl: (d) => (d.audioUrl ?? d.r2Url) as string | undefined },
+        { handle: "startFrame", getUrl: resolveImageUrl }, // same resolution the submit (resolveInputs) uses
+        { handle: "endFrame", getUrl: resolveImageUrl },
+        { handle: "resource", getUrl: resolveImageUrl },
+        { handle: "videoRef", getUrl: (s) => s.data.videoUrl as string | undefined },
+        { handle: "referenceVideo", getUrl: (s) => (s.data.videoUrl ?? s.data.r2Url) as string | undefined },
+        { handle: "audioRef", getUrl: (s) => (s.data.audioUrl ?? s.data.r2Url) as string | undefined },
       ];
 
       const flashSet = new Set<string>();
@@ -856,7 +867,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
           .filter((e) => e.target === id && e.targetHandle === handle)
           .filter((e) => {
             const src = nodes.find((n) => n.id === e.source);
-            return !src || !getUrl(src.data as Record<string, unknown>);
+            return !src || !getUrl(src, e.sourceHandle);
           });
         if (emptyEdges.length > 0) {
           flashSet.add(handle);
@@ -997,7 +1008,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     const loadingGens2 = [...prevGens2, null] as GenEntry[];
     const thisMeta: GenMeta = { videoModel: videoModelId, aspectRatio, duration, klingMode: mode, grokResolution: resolution, sound };
     const loadingMeta2 = [...prevMeta2, thisMeta];
-    updateNodeData(id, { status: "pending", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens2, generationsMeta: loadingMeta2, currentGenIdx: loadingGens2.length - 1 });
+    updateNodeData(id, { status: "pending", videoUrl: undefined, imageNaturalRatio: undefined, errorMsg: undefined, taskId: undefined, generations: loadingGens2, generationsMeta: loadingMeta2, currentGenIdx: loadingGens2.length - 1, pendingSubmitAt: Date.now() });
 
     pendingTimerRef.current = setTimeout(async () => {
       pendingTimerRef.current = null;
@@ -1014,14 +1025,14 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
         try { json = JSON.parse(text); } catch { throw new Error(res.ok ? "Invalid server response" : `Server error ${res.status}`); }
         if (!res.ok) throw new Error(json.error ?? `Server error ${res.status}`);
         // Store taskId — the polling useEffect above will wait for completion
-        updateNodeData(id, { taskId: json.taskId });
+        updateNodeData(id, { taskId: json.taskId, pendingSubmitAt: undefined });
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : String(e);
         const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
         const gens = [...((storeNode?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
         const slot = (storeNode?.data?.currentGenIdx as number | undefined) ?? Math.max(0, gens.length - 1);
         gens[slot] = { error: errMsg };
-        updateNodeData(id, { status: "error", errorMsg: errMsg, generations: gens, currentGenIdx: slot });
+        updateNodeData(id, { status: "error", errorMsg: errMsg, generations: gens, currentGenIdx: slot, pendingSubmitAt: undefined });
       } finally {
         setLoading(false);
       }

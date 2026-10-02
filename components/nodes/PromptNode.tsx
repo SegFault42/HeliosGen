@@ -1,5 +1,6 @@
 "use client";
 import { memo } from "react";
+import { nodeImageUrl } from "@/lib/executor";
 import { usePromptScopeNodes, usePromptScopeEdges } from "@/lib/nodeSelectors";
 import {
   useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo,
@@ -254,7 +255,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
         n.data.label as string,
         n.type === "videoInputNode"
           ? { imageUrl: captured, videoUrl: captured ? undefined : n.data.videoUrl as string | undefined }
-          : { imageUrl: (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined, videoUrl: n.data.videoUrl as string | undefined },
+          : { imageUrl: nodeImageUrl(n), videoUrl: n.data.videoUrl as string | undefined },
       ];
     })
   );
@@ -924,7 +925,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
               const captured = n.data.capturedFrameUrl as string | undefined;
               const imageUrl = n.type === "videoInputNode"
                 ? captured
-                : (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
+                : nodeImageUrl(n);
               const videoUrl = n.type === "videoInputNode"
                 ? (captured ? undefined : n.data.videoUrl as string | undefined)
                 : n.data.videoUrl as string | undefined;
@@ -1071,7 +1072,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                   const captured = n.data.capturedFrameUrl as string | undefined;
                   const imageUrl = n.type === "videoInputNode"
                     ? captured
-                    : (n.data.r2Url ?? n.data.inputImage ?? n.data.imageUrl) as string | undefined;
+                    : nodeImageUrl(n);
                   const videoUrl = n.type === "videoInputNode"
                     ? (captured ? undefined : n.data.videoUrl as string | undefined)
                     : n.data.videoUrl as string | undefined;
