@@ -275,7 +275,9 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
       )
       : mentionableNodes;
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the highlighted index when the filtered list length changes
   useEffect(() => { setSelectedIdx(0); }, [filteredMentions.length]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the highlighted index when the filtered list length changes
   useEffect(() => { setExpandSelectedIdx(0); }, [expandFilteredMentions.length]);
 
   // ── Elevate the RF node z-index while the menu is open ───────────────────

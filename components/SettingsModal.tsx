@@ -1087,6 +1087,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   /* Load persisted data on mount */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads persisted settings from localStorage on mount (client-only)
     setModelProviders(loadModelProviders());
     setAzureDeployments(loadAzureEndpoints());
     setAzureBaseUrl(loadAzureBaseUrl());

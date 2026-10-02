@@ -587,6 +587,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
 
   useEffect(() => {
     if (!imagePickEdgeCount) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets picker/view when the picker edges disappear (store data)
       setPickerOpen(false);
       setViewMode("video");
     }
@@ -726,8 +727,8 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
         }
       }
       setPickerOpen(false);
-    } catch (e: any) {
-      setCaptureErr(e.message || "Failed to capture frame");
+    } catch (e) {
+      setCaptureErr((e instanceof Error && e.message) || "Failed to capture frame");
     } finally {
       setCapturing(false);
       updateNodeData(id, { extractingFrame: false });

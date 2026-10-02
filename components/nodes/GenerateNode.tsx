@@ -156,6 +156,7 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
 
   // Reset the custom-size subpanel whenever the ratio dropdown itself closes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets the subpanel when the ratio dropdown closes
     if (!ratioOpen) { setAzureCustomSizeOpen(false); setCustomSizeError(null); }
   }, [ratioOpen]);
 

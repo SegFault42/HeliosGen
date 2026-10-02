@@ -7,6 +7,7 @@ export function useAnimatedPopup(open: boolean, exitDuration = 110) {
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- drives enter/exit animation phase from the open prop
       setVisible(true);
       setPhase("enter");
     } else {

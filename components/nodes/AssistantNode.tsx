@@ -92,6 +92,7 @@ function AssistantNode({ id, data, selected }: NodeProps<AssistantNodeType>) {
   // Auto-switch to output as soon as generation starts (or finishes)
   useEffect(() => {
     if (status === "running" || (status === "done" && outputText)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- switches view when generation status changes (external store data)
       setViewMode("output");
     }
   }, [status, outputText]);

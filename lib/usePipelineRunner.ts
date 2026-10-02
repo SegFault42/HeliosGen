@@ -68,6 +68,7 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
       for (const id of currentWave) {
         updateNodeData(id, { pendingGenerate: true });
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- advances the wave state machine from node status in the store
       setPipeline(p => p ? { ...p, waveStarted: true } : null);
       return;
     }

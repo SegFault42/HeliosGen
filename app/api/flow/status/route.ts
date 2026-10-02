@@ -6,7 +6,8 @@ export const runtime = "nodejs";
 // Allowlist: never spread raw account records. They carry an OAuth/session
 // token, plus local-only fields (CDP debug endpoint, browser executable
 // path) that any LAN client hitting this route should not learn.
-function publicAccount(account: any) {
+type RawAccount = { id: string; label?: string; email?: string; connectionStatus?: string; lastOpenedAt?: string | number; lastValidatedAt?: string | number };
+function publicAccount(account: RawAccount) {
   return {
     id: account.id,
     label: account.label,
@@ -26,8 +27,8 @@ export async function GET() {
         const creditPromise = getFlowCredits(data.defaultAccountId);
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout checking credits")), 2500));
         creditsInfo = await Promise.race([creditPromise, timeoutPromise]);
-      } catch (err: any) {
-        creditsInfo = { error: err?.message || String(err) };
+      } catch (err) {
+        creditsInfo = { error: err instanceof Error ? err.message : String(err) };
       }
     }
     return NextResponse.json({

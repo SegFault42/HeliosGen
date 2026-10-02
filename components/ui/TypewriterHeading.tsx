@@ -12,6 +12,7 @@ export default function TypewriterHeading({
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restarts the typewriter when text changes
     setDisplayed("");
     setDone(false);
     let i = 0;

@@ -41,6 +41,7 @@ export function useSpaceSync() {
     // If hydration already finished before this effect ran (common in Next.js
     // where SSR renders hasHydrated()=false but client is already hydrated)
     if (useWorkflowStore.persist?.hasHydrated()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs hydration flag from the zustand persist API
       setHydrated(true);
       return;
     }

@@ -625,10 +625,12 @@ function ChatInner() {
   const [pendingMessage, setPendingMessage] = useState("");
 
   // Sync landingModel from store once hydrated
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot sync of the persisted store value after zustand hydration
   useEffect(() => { if (hydrated) setLandingModel(preferredModel as ModelId); }, [hydrated]);
 
   useEffect(() => {
     const unsub = useChatSessionStore.persist?.onFinishHydration(() => setHydrated(true));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot sync of the persisted store value after zustand hydration
     if (useChatSessionStore.persist?.hasHydrated()) setHydrated(true);
     return unsub;
   }, []);

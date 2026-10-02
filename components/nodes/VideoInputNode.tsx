@@ -112,6 +112,7 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   useEffect(() => {
     if (!videoUrl) {
       // Asset removed — reset crossfade state so the empty state renders
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs local crossfade/picker state to store data changes
       setBaseVideoUrl(undefined);
       baseVideoUrlRef.current = undefined;
       setTopVideoUrl(undefined);
@@ -298,6 +299,7 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
 
   useEffect(() => {
     if (!imagePickEdgeCount) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs local crossfade/picker state to store data changes
       setPickerOpen(false);
       setViewMode("video");
       if (capturedFrameRef.current) updateNodeData(id, { capturedFrameUrl: undefined });

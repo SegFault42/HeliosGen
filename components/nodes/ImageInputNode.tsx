@@ -180,6 +180,7 @@ function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   // Using local state avoids any timing gap between store update and derived value.
   const [isUploading, setIsUploading] = useState(!data.r2Url && !!data.inputImage);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs local upload/crossfade state to store data changes
     if (data.r2Url) setIsUploading(false);
   }, [data.r2Url]);
 
@@ -193,6 +194,7 @@ function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   useEffect(() => {
     if (!canonicalSrc) {
       // Asset removed — reset crossfade state so the empty state renders
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs local upload/crossfade state to store data changes
       setBaseSrc(undefined);
       baseSrcRef.current = undefined;
       setTopSrc(undefined);

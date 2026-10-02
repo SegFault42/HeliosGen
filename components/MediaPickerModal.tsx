@@ -271,6 +271,7 @@ export function MediaPickerModal({
   }, [mediaKind]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets modal form state each time the modal opens
     if (!open) { setUrlInput(""); setUrlError(""); setPreviewItem(null); return; }
     setActiveTab(defaultTab);
     activeTabRef.current = defaultTab;

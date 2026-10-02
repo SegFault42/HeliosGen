@@ -449,6 +449,7 @@ function GalleryLoggedOut({ tab }: { tab: Tab }) {
   const names = tab === "videos" ? VIDEO_CYCLE_NAMES : CYCLE_NAMES;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets local UI state when the tab/open/item prop changes; keyed remount would change behavior
     setIdx(0);
     setVisible(true);
   }, [tab]);
@@ -2344,7 +2345,7 @@ function GalleryInner() {
       setVidRefAudios([]);
       setVidElements([]);
 
-      let remaining = [...newRefs];
+      const remaining = [...newRefs];
       if (handles.includes("startFrame") && remaining.length > 0) {
         setVidStartFrame(remaining.shift()!);
       }
@@ -3585,7 +3586,7 @@ function GalleryInner() {
                         const listForSlot = slot.target === "resource" ? vidResources : slot.target === "referenceVideo" ? vidRefVideos : vidRefAudios;
                         const isSlotDragging = draggingId === r.id;
                         return (
-                        <div key={r.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (!isMultiTarget || listForSlot.length <= 1 || r.uploading || r.error) return; _reorderDragItem = { id: r.id, listTarget: slot.target as "resource"|"referenceVideo"|"audioRef" }; _reorderOverId = null; setDraggingId(r.id); }} onPointerEnter={() => { if (!_reorderDragItem || _reorderDragItem.id === r.id || _reorderDragItem.listTarget !== slot.target) return; _reorderOverId = r.id; setReorderOverId(r.id); }} onPointerUp={e => { const info = _reorderDragItem; if (!info || info.listTarget !== slot.target) return; e.stopPropagation(); if (_reorderOverId) e.preventDefault(); const target = _reorderOverId ?? r.id; handleReorderDrop(target, slot.target as "resource"|"referenceVideo"|"audioRef"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(hovId); }} onMouseLeave={() => setHoveredRefId(null)} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(dragKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as any, slot.mediaKind as "image" | "video"); }} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "var(--bg-2)", touchAction: (isMultiTarget && listForSlot.length > 1) ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: r.error ? "1px solid var(--error)" : dragOverSlotKey === dragKey ? "2.5px solid var(--accent)" : taggedImages.some(t => t.refId === r.id) ? "2.5px solid var(--accent)" : "1px solid var(--border-2)", boxShadow: dragOverSlotKey === dragKey ? "0 0 0 3px var(--accent)" : undefined, opacity: isSlotDragging ? 0.3 : undefined, cursor: (isMultiTarget && listForSlot.length > 1 && !r.uploading && !r.error) ? (draggingId === r.id ? "grabbing" : "grab") : undefined }}>
+                        <div key={r.id} onMouseDown={e => e.preventDefault()} onPointerDown={e => { if (!isMultiTarget || listForSlot.length <= 1 || r.uploading || r.error) return; _reorderDragItem = { id: r.id, listTarget: slot.target as "resource"|"referenceVideo"|"audioRef" }; _reorderOverId = null; setDraggingId(r.id); }} onPointerEnter={() => { if (!_reorderDragItem || _reorderDragItem.id === r.id || _reorderDragItem.listTarget !== slot.target) return; _reorderOverId = r.id; setReorderOverId(r.id); }} onPointerUp={e => { const info = _reorderDragItem; if (!info || info.listTarget !== slot.target) return; e.stopPropagation(); if (_reorderOverId) e.preventDefault(); const target = _reorderOverId ?? r.id; handleReorderDrop(target, slot.target as "resource"|"referenceVideo"|"audioRef"); }} onMouseEnter={() => { if (!draggingId) setHoveredRefId(hovId); }} onMouseLeave={() => setHoveredRefId(null)} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(dragKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as NonNullable<typeof pickerTarget>, slot.mediaKind as "image" | "video"); }} style={{ position: "relative", width: "64px", height: "64px", borderRadius: "8px", overflow: "hidden", flexShrink: 0, background: "var(--bg-2)", touchAction: (isMultiTarget && listForSlot.length > 1) ? "none" : undefined, transition: "border 120ms, box-shadow 120ms, opacity 120ms", border: r.error ? "1px solid var(--error)" : dragOverSlotKey === dragKey ? "2.5px solid var(--accent)" : taggedImages.some(t => t.refId === r.id) ? "2.5px solid var(--accent)" : "1px solid var(--border-2)", boxShadow: dragOverSlotKey === dragKey ? "0 0 0 3px var(--accent)" : undefined, opacity: isSlotDragging ? 0.3 : undefined, cursor: (isMultiTarget && listForSlot.length > 1 && !r.uploading && !r.error) ? (draggingId === r.id ? "grabbing" : "grab") : undefined }}>
                           {slot.mediaKind === "image" ? <img src={thumbSrc(r.objectUrl, snapWidth(64))} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : slot.mediaKind === "video" ? <video src={r.objectUrl} autoPlay muted loop playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--border-1)" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>}
                           {hoveredRefId === hovId && !r.uploading && !r.error && slot.mediaKind !== "audio" && (
                             <div onClick={() => { if (_reorderJustDropped || draggingId) { _reorderJustDropped = false; return; } setRefPreview({ url: r.objectUrl, mediaKind: slot.mediaKind }); }} style={{ position: "absolute", inset: 0, background: "var(--bg-0)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-in", zIndex: 1 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></div>
@@ -3597,7 +3598,7 @@ function GalleryInner() {
                         }
                         const vidAddKey = `vidadd-${slot.target}-${idx}`;
                         return (
-                        <button key={`${slot.target}-add-${idx}`} onClick={() => slot.mediaKind === "audio" ? (vidPickTarget.current = slot.target, vidAudioInputRef.current?.click()) : openPicker(slot.target as any, slot.mediaKind)} disabled={submitting} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(vidAddKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as any, slot.mediaKind as "image" | "video"); }} style={{ width: "64px", height: "64px", borderRadius: "8px", flexShrink: 0, border: dragOverSlotKey === vidAddKey ? "2.5px solid var(--accent)" : "1.5px dashed var(--border-2)", boxShadow: dragOverSlotKey === vidAddKey ? "0 0 0 3px var(--accent)" : undefined, background: dragOverSlotKey === vidAddKey ? "var(--accent)" : "var(--border-1)", cursor: submitting ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2px", color: dragOverSlotKey === vidAddKey ? "var(--accent)" : "var(--text-3)", transition: "all 140ms" }}>
+                        <button key={`${slot.target}-add-${idx}`} onClick={() => slot.mediaKind === "audio" ? (vidPickTarget.current = slot.target, vidAudioInputRef.current?.click()) : openPicker(slot.target as NonNullable<typeof pickerTarget>, slot.mediaKind)} disabled={submitting} onDragOver={e => { if (slot.mediaKind === "audio" || !e.dataTransfer.types.includes("application/x-gallery-item")) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "copy"; setDragOverSlotKey(vidAddKey); }} onDragLeave={() => setDragOverSlotKey(null)} onDrop={e => { if (slot.mediaKind !== "audio") handleGalleryItemDrop(e, slot.target as NonNullable<typeof pickerTarget>, slot.mediaKind as "image" | "video"); }} style={{ width: "64px", height: "64px", borderRadius: "8px", flexShrink: 0, border: dragOverSlotKey === vidAddKey ? "2.5px solid var(--accent)" : "1.5px dashed var(--border-2)", boxShadow: dragOverSlotKey === vidAddKey ? "0 0 0 3px var(--accent)" : undefined, background: dragOverSlotKey === vidAddKey ? "var(--accent)" : "var(--border-1)", cursor: submitting ? "not-allowed" : "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "2px", color: dragOverSlotKey === vidAddKey ? "var(--accent)" : "var(--text-3)", transition: "all 140ms" }}>
                         <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.04em" }}>{slot.label === "Ref Video" ? "VIDEO" : slot.label === "Audio" ? "AUDIO" : slot.label.toUpperCase()}</span>
                         <span style={{ fontSize: "12px", color: dragOverSlotKey === vidAddKey ? "var(--accent)" : "var(--text-3)" }}>{slot.countLeft} left</span>
                         </button>
@@ -4598,7 +4599,7 @@ function GalleryInner() {
                   style={{ width: "30px", height: "30px", borderRadius: "6px", objectFit: "cover", flexShrink: 0, background: "var(--bg-2)" }}
                 />
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {(ref as any).role} ({(ref as any).label})
+                  {ref.role} ({ref.label})
                 </span>
 
                 {idx === mentionSelIdx && (
@@ -4879,6 +4880,7 @@ function ElementPickerModal({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets local UI state when the tab/open/item prop changes; keyed remount would change behavior
     setView("browse");
     setElements(loadKlingElements());
     setCreateName("");
@@ -6567,8 +6569,10 @@ function Lightbox({ item, thumbUrl, onClose, onCopyPrompt, onPrev, onNext }: { i
   const allUrls = item.imageUrls ?? [item.url];
   const lightboxUrl = allUrls[imgIdx] ?? item.url;
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets local UI state when the tab/open/item prop changes; keyed remount would change behavior
   useEffect(() => { setImgIdx(0); setFullLoaded(false); setResolution(null); setPlaceholderSrc(thumbUrl ?? ""); }, [item.id, thumbUrl]);
   // When navigating within a multi-image item, compute a fresh placeholder from cache
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- resets local UI state when the tab/open/item prop changes; keyed remount would change behavior
   useEffect(() => { if (imgIdx > 0) { setPlaceholderSrc(thumbSrc(lightboxUrl, snapWidth(300))); setFullLoaded(false); setResolution(null); } }, [imgIdx]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const id = requestAnimationFrame(() => setVisible(true)); return () => cancelAnimationFrame(id); }, []);
   useEffect(() => {

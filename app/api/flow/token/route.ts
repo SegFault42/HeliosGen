@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       label,
       message: `Conta ${label} conectada com sucesso no ANVIL!`
     });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, error: error?.message || String(error) }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

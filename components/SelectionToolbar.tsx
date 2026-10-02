@@ -67,6 +67,7 @@ export default function SelectionToolbar() {
       const id = requestAnimationFrame(() => setShown(true));
       return () => cancelAnimationFrame(id);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- drives the enter/exit transition flag from the visible prop
       setShown(false);
     }
   }, [visible]);
