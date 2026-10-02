@@ -11,11 +11,11 @@ export function heygenPhase(state: string): HeyGenPhase {
   return "pending";
 }
 
-const FATAL_STATUS = new Set([400, 401, 403, 404, 422]);
+const FATAL_STATUS = new Set([400, 401, 403, 422]);
 const FATAL_MESSAGE =
-  /token refresh (failed \(4\d\d\)|returned)|no refresh token|token file|unauthori[sz]ed|forbidden|not found|validation|invalid|permission/i;
+  /token refresh (failed \(4\d\d\)|returned)|no refresh token|token file|unauthori[sz]ed|forbidden|permission/i;
 
-/** Fatal = retrying cannot help (auth, forbidden, missing video, bad request). Network, 5xx, 429, timeouts are transient. */
+/** Fatal = auth/permission or a 400/422 validation status. Everything else (404, "not found"/"invalid" text, network, 5xx, 429, timeouts) is transient; the deadline decides. */
 export function isFatalHeyGenError(error: unknown): boolean {
   const status = (error as { status?: unknown } | null | undefined)?.status;
   if (typeof status === "number") return FATAL_STATUS.has(status);

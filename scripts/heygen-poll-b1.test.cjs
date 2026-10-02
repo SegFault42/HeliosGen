@@ -28,16 +28,16 @@ test("phase mapping: waiting_for_input and reviewing are pending", () => {
   for (const s of ["failed", "error", "cancelled", "stopped"]) assert.equal(p.heygenPhase(s), "failed", s);
 });
 
-test("fatal: 401/403/404/422 status, refresh 4xx, validation", () => {
-  for (const status of [401, 403, 404, 422]) assert.equal(p.isFatalHeyGenError(Object.assign(new Error("x"), { status })), true, String(status));
+test("fatal: 401/403/400/422 status, refresh 4xx, auth messages", () => {
+  for (const status of [400, 401, 403, 422]) assert.equal(p.isFatalHeyGenError(Object.assign(new Error("x"), { status })), true, String(status));
   assert.equal(p.isFatalHeyGenError(new Error("HeyGen MCP token refresh failed (400)")), true);
-  assert.equal(p.isFatalHeyGenError(new Error("Video not found")), true);
-  assert.equal(p.isFatalHeyGenError(new Error("validation error: bad id")), true);
 });
 
 test("transient: 5xx, 429, network, timeout", () => {
-  for (const status of [429, 500, 502, 503]) assert.equal(p.isFatalHeyGenError(Object.assign(new Error("x"), { status })), false, String(status));
+  for (const status of [404, 429, 500, 502, 503]) assert.equal(p.isFatalHeyGenError(Object.assign(new Error("x"), { status })), false, String(status));
   assert.equal(p.isFatalHeyGenError(new Error("fetch failed")), false);
+  for (const m of ["Video not found", "invalid response", "validation hiccup"]) assert.equal(p.isFatalHeyGenError(new Error(m)), false, m);
+  assert.equal(p.isFatalHeyGenError(new Error("Forbidden")), true);
   assert.equal(p.isFatalHeyGenError(new Error("The operation was aborted due to timeout")), false);
   assert.equal(p.isFatalHeyGenError(new Error("HeyGen MCP token refresh failed (503)")), false);
 });

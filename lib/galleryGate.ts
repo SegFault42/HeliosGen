@@ -19,7 +19,7 @@ export function canGenerate(o: { modelId: string; kieKeySet: boolean | null | un
 
 const POLL_INTERVAL_MS = 3_000;
 const DEFAULT_DEADLINE_MS = 7.5 * 60_000;
-const SLOW_DEADLINE_MS = 32 * 60_000; // Flow 20 min, HeyGen 30 min server-side
+const SLOW_DEADLINE_MS = 36 * 60_000; // Flow 20 min, HeyGen 30 min server-side + last iteration + mirror
 
 /** Max poll iterations (3 s each) before the gallery gives up on a job. */
 export function pollMaxIterations(modelId: string): number {

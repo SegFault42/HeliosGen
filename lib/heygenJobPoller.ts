@@ -68,7 +68,7 @@ async function poll(taskId: string): Promise<void> {
         videoId = videoId ?? videoIdOf(videos);
       }
       if (!url && videoId && phase === "completed") {
-        url = heygenVideoAssetUrl(await getHeyGenVideo(videoId));
+        url = heygenVideoAssetUrl(await getHeyGenVideo(videoId).catch(() => null));
       }
       if (url) {
         const localUrl = await mirrorToStorage(url, "videos", "video/mp4");
