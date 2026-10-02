@@ -307,7 +307,12 @@ export async function POST(req: NextRequest) {
   try {
     r2ImageUrls = await resolveImages(imageUrls);
   } catch {
-    // image mirroring failures are non-fatal — proceed without reference images
+    // counted below
+  }
+  // Flow resolves the raw URLs itself; every other provider would silently drop the
+  // reference and degrade an edit into text-to-image.
+  if (!cfg.apiInput?.useFlow && r2ImageUrls.length < Math.min(imageUrls.length, 14)) {
+    return NextResponse.json({ error: "Failed to prepare one or more reference images; not falling back to text-to-image. Retry." }, { status: 502 });
   }
 
   const currentUserId = GUEST_USER_ID;
@@ -560,9 +565,6 @@ export async function POST(req: NextRequest) {
   // codex-imagegen has no per-user token — it's a single shared `codex login`
   // session on this host — so there's no key lookup here, unlike the other branches.
   if (codexProvider) {
-    if (r2ImageUrls.length < imageUrls.length) {
-      return NextResponse.json({ error: "Failed to prepare one or more reference images; not falling back to text-to-image. Retry." }, { status: 502 });
-    }
     const codexTaskId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
