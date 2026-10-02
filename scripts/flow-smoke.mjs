@@ -56,9 +56,12 @@ function psnrAgainstStartFrame(mediaUrl) {
   return m ? (m[1] === "inf" ? Infinity : Number(m[1])) : 0;
 }
 
-function expectVideo(mediaUrl) {
+function expectVideo(mediaUrl, ratio) {
   const p = probe(mediaUrl);
   if (p.codec !== "h264" || !(p.duration > 0)) throw new Error(`not a real video: codec=${p.codec} duration=${p.duration} ${p.file}`);
+  const [w, h] = p.size.split("x").map(Number);
+  if (ratio === "9:16" && !(h > w)) throw new Error(`asked 9:16, got ${p.size}: ${p.file}`);
+  if (ratio === "16:9" && !(w > h)) throw new Error(`asked 16:9, got ${p.size}: ${p.file}`);
   return p;
 }
 
@@ -92,20 +95,20 @@ async function runRound(round) {
   await record("text->video omni", async () => {
     const taskId = await post("/api/generate-video", { videoModel: "flow-omni-flash", prompt: "waves rolling onto a quiet beach at sunset, slow camera push in", aspectRatio: "9:16" });
     const job = await waitJob(taskId, 25 * 60_000);
-    return expectVideo(job.videoUrl);
+    return expectVideo(job.videoUrl, "9:16");
   });
 
   await record("start frame->video omni", async () => {
     const taskId = await post("/api/generate-video", { videoModel: "flow-omni-flash", prompt: "the animal slowly turns its head, snow gently falling", aspectRatio: "16:9", startFrameUrl: START_FRAME });
     const job = await waitJob(taskId, 25 * 60_000);
-    return expectVideo(job.videoUrl);
+    return expectVideo(job.videoUrl, "16:9");
   });
 
   await record("frame A->B veo", async () => {
     const endFrame = image?.url ?? START_FRAME;
     const taskId = await post("/api/generate-video", { videoModel: "flow-veo-interpolation", prompt: "smooth cinematic transition between the two snowy scenes", aspectRatio: "16:9", startFrameUrl: START_FRAME, endFrameUrl: endFrame });
     const job = await waitJob(taskId, 25 * 60_000);
-    return expectVideo(job.videoUrl);
+    return expectVideo(job.videoUrl, "16:9");
   });
 
   return results;
