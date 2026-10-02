@@ -5879,7 +5879,7 @@ function GalleryCard({
   onOpen?: (thumbUrl: string) => void;
   onAddReference?: (url: string) => void;
   onCopyPrompt?: (prompt: string, refUrls?: string[], meta?: { model?: string; aspectRatio?: string; quality?: string; azureResolution?: string }) => void;
-  onDownload?: (url: string, isVideo: boolean) => Promise<void>;
+  onDownload?: (url: string, isVideo: boolean) => void | Promise<void>;
   onDelete?: (id: string, source: "generation" | "upload") => Promise<void>;
   videoMuted?: boolean;
   onToggleMute?: () => void;
