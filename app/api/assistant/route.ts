@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import { dlog } from "@/lib/debugLog";
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
 import { getAzureToken } from "@/lib/getAzureKey";
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
     const deployment  = (body.azureDeployment || "auto-model").trim();
     const modelName   = (body.azureModelName  || "model-router").trim();
     const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${AZURE_API_VERSION}`;
-    console.log("[azure-auto] POST", url.replace(/api-version=.*/, "api-version=…"));
+    dlog("[azure-auto] POST", url.replace(/api-version=.*/, "api-version=…"));
     const upstream = await fetch(url, {
       method: "POST",
       cache: "no-store",

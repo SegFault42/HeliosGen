@@ -1,3 +1,4 @@
+import { dlog } from "../debugLog";
 import { randomUUID, createHash } from "crypto";
 import { db } from "./sqlite";
 
@@ -207,7 +208,7 @@ export function lookupAssetHash(hash: string): string | null {
   const r = db().prepare("SELECT cdn_url FROM asset_cache WHERE hash = ?").get(hash) as
     | { cdn_url: string }
     | undefined;
-  if (r) console.log("[guest/asset-cache] HIT:", hash.slice(0, 8));
+  if (r) dlog("[guest/asset-cache] HIT:", hash.slice(0, 8));
   return r?.cdn_url ?? null;
 }
 

@@ -34,10 +34,6 @@ type Kind = "image" | "video";
 const ACTIVE_KEY = Symbol.for("heliosgen.kie-poller.active");
 const active = ((globalThis as typeof globalThis & { [ACTIVE_KEY]?: Set<string> })[ACTIVE_KEY] ??= new Set<string>());
 
-export function isPolling(taskId: string): boolean {
-  return active.has(taskId);
-}
-
 /** Start polling a kie.ai job in the background. Safe to call more than once. */
 export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
   if (!taskId || active.has(taskId)) return;
