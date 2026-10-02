@@ -94,7 +94,31 @@ async function getFlowModules() {
   };
 }
 
-type FlowEngine = { store: any; browsers: any; flow: any };
+// Minimal shape of the external google-flow-mcp engine (only what we call).
+export interface FlowJob {
+  id: string;
+  status?: string;
+  error?: string;
+  diagnosticScreenshot?: string;
+  generatedAssets?: unknown[];
+  downloadedFiles?: string[];
+}
+interface FlowAccount { id: string; connectionStatus?: string }
+interface FlowAccountsFile { accounts: FlowAccount[]; defaultAccountId?: string }
+interface FlowEngine {
+  store: {
+    initialize(): Promise<void>;
+    listAccounts(): Promise<FlowAccountsFile>;
+    getJob(jobId: string): Promise<FlowJob>;
+  };
+  browsers: unknown;
+  flow: {
+    generate(opts: Record<string, unknown>): Promise<FlowJob>;
+    refreshJob(jobId: string, timeoutSeconds: number): Promise<FlowJob>;
+    downloadJob(jobId: string): Promise<unknown>;
+    getCredits(accountId?: string): Promise<unknown>;
+  };
+}
 const ENGINE_KEY = Symbol.for("heliosgen.flow-engine");
 
 // One engine per server process. Next bundles each route separately, so a
@@ -169,7 +193,13 @@ export function framePrompt(prompt: string, hasStart: boolean, hasEnd: boolean):
   if (hasStart && hasEnd) {
     return `Use the first attached image as the first frame and the second attached image as the last frame. ${prompt}`;
   }
+  if (hasEnd) return `Use the attached image as the last frame. ${prompt}`;
   return hasStart ? `Use the first attached image as the first frame. ${prompt}` : prompt;
+}
+
+/** Flow has no kie mention tags; `<<<image N>>>` becomes plain `image N`. */
+export function stripKieImageTags(prompt: string): string {
+  return prompt.replace(/<<<image (\d+)>>>/g, "image $1");
 }
 
 export async function submitFlowVideo(params: SubmitFlowVideoParams) {
@@ -188,8 +218,8 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
   await store.initialize();
 
   const accountsFile = await store.listAccounts();
-  const connectedAccs = accountsFile.accounts.filter((a: any) => a.connectionStatus === "connected");
-  const accountId = (params.accountId && connectedAccs.some((a: any) => a.id === params.accountId))
+  const connectedAccs = accountsFile.accounts.filter((a) => a.connectionStatus === "connected");
+  const accountId = (params.accountId && connectedAccs.some((a) => a.id === params.accountId))
     ? params.accountId
     : (accountsFile.defaultAccountId || (connectedAccs.length > 0 ? connectedAccs[0].id : "flowuser"));
   if (!accountId) {
@@ -247,8 +277,8 @@ export async function submitFlowImage(params: SubmitFlowImageParams) {
   await store.initialize();
 
   const accountsFile = await store.listAccounts();
-  const connectedAccs = accountsFile.accounts.filter((a: any) => a.connectionStatus === "connected");
-  const accountId = (params.accountId && connectedAccs.some((a: any) => a.id === params.accountId))
+  const connectedAccs = accountsFile.accounts.filter((a) => a.connectionStatus === "connected");
+  const accountId = (params.accountId && connectedAccs.some((a) => a.id === params.accountId))
     ? params.accountId
     : (accountsFile.defaultAccountId || (connectedAccs.length > 0 ? connectedAccs[0].id : "flowuser"));
   if (!accountId) {
@@ -266,7 +296,7 @@ export async function submitFlowImage(params: SubmitFlowImageParams) {
   const job = await flow.generate({
     accountId,
     mediaType: "image",
-    prompt: params.prompt,
+    prompt: stripKieImageTags(params.prompt),
     model,
     aspectRatio,
     outputs: params.outputs ?? 1,

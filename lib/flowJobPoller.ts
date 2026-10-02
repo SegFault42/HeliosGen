@@ -18,7 +18,7 @@ type FlowJobResult =
   | { status: "error"; error: string };
 
 function settle(taskId: string, result: FlowJobResult, isVideo: boolean): void {
-  jobStore.set(taskId, result as any);
+  jobStore.set(taskId, result);
   if (result.status === "done") {
     if (isVideo && result.videoUrl) {
       guestDb.updateGeneration(taskId, { status: "done", video_url: result.videoUrl });
