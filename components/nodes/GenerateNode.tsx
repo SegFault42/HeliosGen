@@ -24,6 +24,7 @@ import { IMAGE_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/li
 import { PROVIDERS, ProviderId, getModelProvider, setModelProvider, modelHasProviderChoice } from "@/lib/providers";
 import { useGeneratingBorderAnimation } from "@/lib/useGeneratingBorderAnimation";
 import MissingInputWarning from "./MissingInputWarning";
+import { imageNeedsKie, parseGenerateError, DEFAULT_IMAGE_RATIO } from "@/lib/generateNodeRules";
 
 // Derived from config — no hardcoding needed
 const MODELS = IMAGE_MODELS.map((m) => ({ id: m.id, name: m.name, meta: m.provider }));
@@ -57,14 +58,6 @@ function ratioRect(value: string) {
 }
 
 // ── Status dot ────────────────────────────────────────────────────────────────
-
-const STATUS_DOT: Record<string, string> = {
-  idle: "bg-[var(--bg-2)]",
-  pending: "bg-gray-500",
-  running: "bg-amber-400 animate-pulse",
-  done: "bg-[var(--accent)]",
-  error: "bg-red-500",
-};
 
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -299,7 +292,7 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
     };
   }, [model]);
   const isAzureProvider = currentProvider === "azure";
-  const isCodexProvider = currentProvider === "codex";
+  const isFlowModel = !imageNeedsKie(model, "kie");
 
   const promptInfo = (() => {
     const promptEdge = edges.find((e) => e.target === id && e.targetHandle === "prompt");
@@ -319,7 +312,7 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
   const allowAzureCustomSize = isAzureProvider && !!caps.azureResolutionOptions;
 
   // If current ratio isn't valid for this model, fall back to first valid ratio (or 1:1)
-  const rawRatio = (data.aspectRatio as string) ?? "9:16";
+  const rawRatio = (data.aspectRatio as string) ?? DEFAULT_IMAGE_RATIO;
   const aspectRatio = caps.ratios.includes(rawRatio) || (allowAzureCustomSize && rawRatio === "custom")
     ? rawRatio
     : (caps.ratios[0] ?? "1:1");
@@ -929,9 +922,11 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
                   <path d="M12 7v5" stroke="var(--border-2)" strokeWidth="2" strokeLinecap="round" />
                   <circle cx="12" cy="16" r="1" fill="var(--border-2)" />
                 </svg>
-                <span className="text-[12px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid var(--bg-2)", color: "var(--success)", background: "var(--bg-2)" }}>
-                  Credits refunded
-                </span>
+                {!isFlowModel && (
+                  <span className="text-[12px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid var(--bg-2)", color: "var(--success)", background: "var(--bg-2)" }}>
+                    Credits refunded
+                  </span>
+                )}
               </div>
               <p className="text-[var(--text-1)] text-[12px] font-semibold leading-snug">
                 Oops! Something went wrong.
@@ -945,7 +940,12 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
                     <span>NSFW content detected</span>
                   </div>
                 ) : (
-                  <p className="text-[var(--error)] text-[12px] leading-[1.5] break-words">{msg}</p>
+                  <p className="text-[var(--error)] text-[12px] leading-[1.5] break-words">
+                    {parseGenerateError(msg).text}
+                    {parseGenerateError(msg).screenshot && (
+                      <span className="block text-[var(--text-3)] text-[11px] mt-1 select-text break-all">Screenshot: {parseGenerateError(msg).screenshot}</span>
+                    )}
+                  </p>
                 );
               })()}
             </div>
@@ -1335,7 +1335,7 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
           )}
 
           {/* Generate button — always right */}
-          {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} disabled={promptOverLimit || (!isCodexProvider && kieKeySet === false) || busy || hasFailedImageInput} warningMessages={hasFailedImageInput ? ["The connected image input has no valid content"] : undefined} />}
+          {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} disabled={promptOverLimit || (imageNeedsKie(model, currentProvider) && kieKeySet === false) || busy || hasFailedImageInput} warningMessages={hasFailedImageInput ? ["The connected image input has no valid content"] : undefined} />}
         </div>
       </div>
 
