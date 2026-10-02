@@ -48,3 +48,8 @@ export function orderedCodexAuthFiles(): string[] {
 export function isUsageLimitError(stderr: string): boolean {
   return /usage limit/i.test(stderr);
 }
+
+/** Expired/invalid ChatGPT session: another account may still work. */
+export function isAuthError(stderr: string): boolean {
+  return /session has ended|log in again|\bHTTP 401\b|unauthorized/i.test(stderr);
+}

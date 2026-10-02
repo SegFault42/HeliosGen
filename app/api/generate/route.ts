@@ -18,7 +18,8 @@ import { getAzureKeyForUser } from "@/lib/getAzureKey";
 import { validateAzureEndpoint } from "@/lib/azureEndpoint";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
-import { orderedCodexAuthFiles, markCodexLimited, isUsageLimitError } from "@/lib/codexAccounts";
+import { orderedCodexAuthFiles, markCodexLimited } from "@/lib/codexAccounts";
+import { cleanCodexError, codexQualityArgs, runWithAccounts, spawnCodex, CODEX_MAX_EDIT_IMAGES } from "@/lib/codexRun";
 import { submitFlowImage } from "@/lib/flowAdapter";
 import { resumeFlowJob } from "@/lib/flowJobPoller";
 
@@ -200,30 +201,6 @@ const CODEX_SIZE_MAP: Record<string, string> = {
 };
 
 /**
- * codex-imagegen's stderr wraps the underlying failure as `codex-imagegen exited
- * with code N: <tmp path> Error: <detail>`, where <detail> is either a JSON blob
- * (e.g. `HTTP 429: {"error":{"message":"..."}}`) or plain prose terminated by a
- * semicolon (e.g. `Responses stream ended without an image result; last status
- * was failed.`). Pull out just the useful part instead of showing the whole dump.
- */
-function cleanCodexError(raw: string): string {
-  const match = raw.match(/Error:\s*([\s\S]*)$/);
-  const tail = (match ? match[1] : raw).trim();
-
-  const braceIdx = tail.indexOf("{");
-  if (braceIdx !== -1) {
-    try {
-      const parsed = JSON.parse(tail.slice(braceIdx));
-      const message = parsed?.error?.message;
-      if (typeof message === "string" && message) return message;
-    } catch { /* not valid JSON — fall through */ }
-  }
-
-  const semiIdx = tail.indexOf(";");
-  return (semiIdx !== -1 ? tail.slice(0, semiIdx).trim() : tail) || raw;
-}
-
-/**
  * Runs the `codex-imagegen` CLI, which drives OpenAI Codex's image tool using the
  * server's local `codex login` session (~/.codex/auth.json) — a single shared
  * identity for the whole deployment, not a per-user API key. Writes reference
@@ -234,6 +211,7 @@ async function runCodexImagegen(opts: {
   prompt: string;
   images: Array<{ buf: Buffer; ext: string }>;
   size: string;
+  quality?: string;
 }): Promise<Buffer> {
   const tmpFiles: string[] = [];
   const outPath = join(tmpdir(), `codex-out-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
@@ -247,42 +225,27 @@ async function runCodexImagegen(opts: {
       imagePaths.push(p);
     }
 
+    // Prompt goes through a file so user text never reaches a shell or argv limits.
+    const promptPath = join(tmpdir(), `codex-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+    await writeFile(promptPath, opts.prompt, "utf8");
+    tmpFiles.push(promptPath);
+
+    const common = ["--prompt-file", promptPath, "--size", opts.size, ...codexQualityArgs(opts.quality), "--out", outPath, "--force"];
     const args = imagePaths.length > 0
-      ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"]
-      : ["generate", "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"];
+      ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), ...common]
+      : ["generate", ...common];
 
     const runOnce = (authFile: string) => new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
       let err = "";
-      const proc = spawn("codex-imagegen", [...args, "--auth-file", authFile]);
+      const proc = spawnCodex([...args, "--auth-file", authFile]);
       proc.stderr.on("data", (d: Buffer) => err += d.toString());
       proc.on("close", (code) => resolve({ exitCode: code ?? -1, stderr: err }));
       proc.on("error", (e) => reject(new Error(`codex-imagegen spawn failed: ${e.message} — is it installed and on PATH?`)));
     });
 
-    // Try each ChatGPT account in turn (see lib/codexAccounts.ts). A usage-limit
-    // failure puts that account on cooldown and moves on; any other failure is
-    // the caller's problem and throws immediately.
-    const authFiles = orderedCodexAuthFiles();
-    if (authFiles.length === 0) throw new Error("No Codex auth.json found. Run `codex login` and choose ChatGPT.");
-
-    for (const authFile of authFiles) {
-      const { exitCode, stderr } = await runOnce(authFile);
-      if (exitCode === 0) return await readFile(outPath);
-
-      if (isUsageLimitError(stderr)) {
-        console.warn(`[codex-imagegen] usage limit on ${authFile}; trying next account`);
-        markCodexLimited(authFile);
-        continue;
-      }
-
-      // The useful part — codex-imagegen's final `Error: ...` line — is at the
-      // *tail* of stderr, after any retry `Warning:` lines. Log the untruncated
-      // stream for debugging and only cap what gets wrapped into the thrown Error.
-      console.error("[codex-imagegen] full stderr:", stderr || "(empty)");
-      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`);
-    }
-
-    throw new Error(`Error: All ${authFiles.length} Codex account(s) hit the ChatGPT usage limit; try again later or add another with CODEX_HOME=~/.codex/profiles/<name> codex login --device-auth.`);
+    // Rotate across ChatGPT accounts on usage-limit or expired session (lib/codexRun.ts).
+    await runWithAccounts(orderedCodexAuthFiles(), runOnce, markCodexLimited);
+    return await readFile(outPath);
   } finally {
     for (const f of [...tmpFiles, outPath]) unlink(f).catch(() => {});
   }
@@ -335,6 +298,10 @@ export async function POST(req: NextRequest) {
 
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
+
+  if (codexProvider && imageUrls.length > CODEX_MAX_EDIT_IMAGES) {
+    return NextResponse.json({ error: `Codex accepts at most ${CODEX_MAX_EDIT_IMAGES} reference images (got ${imageUrls.length}). Remove some and retry.` }, { status: 400 });
+  }
 
   let r2ImageUrls: string[] = [];
   try {
@@ -593,10 +560,18 @@ export async function POST(req: NextRequest) {
   // codex-imagegen has no per-user token — it's a single shared `codex login`
   // session on this host — so there's no key lookup here, unlike the other branches.
   if (codexProvider) {
+    if (r2ImageUrls.length < imageUrls.length) {
+      return NextResponse.json({ error: "Failed to prepare one or more reference images; not falling back to text-to-image. Retry." }, { status: 502 });
+    }
     const codexTaskId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const codexUserId = currentUserId;
+    guestDb.insertGeneration({
+      task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
+      status: "pending", prompt: prompt.slice(0, 2000),
+      model, aspect_ratio: aspectRatio, quality,
+    });
     const size = CODEX_SIZE_MAP[aspectRatio] ?? "auto";
 
     // "<<<image N>>>" tags are an in-text convention other providers resolve to a
@@ -613,7 +588,7 @@ export async function POST(req: NextRequest) {
     (async () => {
       try {
         const images = await Promise.all(
-          r2ImageUrls.slice(0, 5).map(async (url) => {
+          r2ImageUrls.map(async (url) => {
             const buf = await fetchBuffer(url);
             const raw = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
             const ext = raw === "jpg" ? "jpeg" : raw;
@@ -621,19 +596,17 @@ export async function POST(req: NextRequest) {
           }),
         );
 
-        const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size });
+        const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size, quality });
         const imageUrl = await uploadBuffer(outBuf, "image/png", "generated");
         jobStore.set(codexTaskId, { status: "done", imageUrl });
 
-        guestDb.insertGeneration({
-          task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
-          status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
-          model, aspect_ratio: aspectRatio, quality,
-        });
+        guestDb.updateGeneration(codexTaskId, { status: "done", image_url: imageUrl });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[codex] background error:", msg, e);
-        jobStore.set(codexTaskId, { status: "error", error: cleanCodexError(msg) });
+        const clean = cleanCodexError(msg);
+        jobStore.set(codexTaskId, { status: "error", error: clean });
+        guestDb.updateGeneration(codexTaskId, { status: "error", error_msg: clean });
       }
     })();
 
