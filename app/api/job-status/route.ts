@@ -4,6 +4,7 @@ import { resumeKieJob } from "@/lib/kieJobPoller";
 import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
 import { resumeFlowJob } from "@/lib/flowJobPoller";
 import * as guestDb from "@/lib/guest/db";
+import { isInProcessJob, isOrphanedJob, ORPHAN_ERROR } from "@/lib/jobOrphans";
 
 function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" {
   const gen = guestDb.recoverJob(taskId);
@@ -23,7 +24,7 @@ function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" 
   jobStore.set(taskId, { status: "pending", type: gen.generation_type === "video" ? "video" : "image" });
   if (taskId.startsWith("heygen-agent:")) resumeHeyGenJob(taskId);
   else if (taskId.startsWith("flow-video:") || taskId.startsWith("flow-image:")) resumeFlowJob(taskId);
-  else if (!taskId.startsWith("azure-") && !taskId.startsWith("grok-img-")) resumeKieJob(taskId, gen.generation_type === "video" ? "video" : "image");
+  else if (!isInProcessJob(taskId)) resumeKieJob(taskId, gen.generation_type === "video" ? "video" : "image");
   return "pending";
 }
 
@@ -40,9 +41,16 @@ export async function GET(req: NextRequest) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
     if (result.status === "pending") {
+      // In-process jobs (azure/grok-img/codex) have no poller: past the provider timeout they are orphans.
+      if (isOrphanedJob(taskId, (result as { ts?: number }).ts)) {
+        const settled = { status: "error" as const, error: ORPHAN_ERROR };
+        jobStore.set(taskId, settled);
+        try { guestDb.updateGeneration(taskId, { status: "error", error_msg: ORPHAN_ERROR }); } catch {}
+        return NextResponse.json(settled);
+      }
       if (taskId.startsWith("heygen-agent:")) resumeHeyGenJob(taskId);
       else if (taskId.startsWith("flow-video:") || taskId.startsWith("flow-image:")) resumeFlowJob(taskId);
-      else if (!taskId.startsWith("azure-") && !taskId.startsWith("grok-img-")) resumeKieJob(taskId, result.type === "video" ? "video" : "image");
+      else if (!isInProcessJob(taskId)) resumeKieJob(taskId, result.type === "video" ? "video" : "image");
     }
     return NextResponse.json(result);
   }
