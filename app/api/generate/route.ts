@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
   const {
     model       = "nano-banana-2",
     prompt,
-    imageUrls   = [],
+    imageUrls: rawImageUrls = [],
     aspectRatio = "1:1",
     quality     = "1k",
     azureQuality,
@@ -287,6 +287,9 @@ export async function POST(req: NextRequest) {
     codexProvider?:      boolean;    // route through the server's local codex-imagegen CLI
     debugOnly?:          boolean;
   };
+
+  // Drop empty/non-string entries so `[""]` is neither resolved nor counted as a mirror failure.
+  const imageUrls = (Array.isArray(rawImageUrls) ? rawImageUrls : []).filter((u): u is string => typeof u === "string" && u.trim() !== "");
 
   if (debugOnly) {
     const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution, azureCustomWidth, azureCustomHeight };

@@ -26,3 +26,17 @@ test('blob/data frame urls are detected', () => {
   assert.equal(g.findLocalFrameUrl(['https://a/b.png', 'blob:http://x/1']), 'blob:http://x/1');
   assert.equal(g.findLocalFrameUrl(['https://a/b.png', undefined]), undefined);
 });
+test('deadline is 36 min (server 30 + last iteration + mirror)', () => {
+  assert.equal(g.VIDEO_JOB_DEADLINE_MS, 36 * 60 * 1000);
+});
+test('dropNullGenerations removes placeholders from both arrays and recomputes idx', () => {
+  const r = g.dropNullGenerations(['a', null, { error: 'x' }, null], [{ m: 1 }, null, { m: 3 }, null]);
+  assert.deepEqual(r.generations, ['a', { error: 'x' }]);
+  assert.deepEqual(r.generationsMeta, [{ m: 1 }, { m: 3 }]);
+  assert.equal(r.currentGenIdx, 1);
+  assert.equal(r.lastEntry.error, 'x');
+  const e = g.dropNullGenerations([null], [null]);
+  assert.deepEqual(e.generations, []);
+  assert.equal(e.currentGenIdx, 0);
+  assert.equal(e.lastEntry, undefined);
+});

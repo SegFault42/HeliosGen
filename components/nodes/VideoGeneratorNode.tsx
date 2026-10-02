@@ -13,7 +13,7 @@ import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs, resolveImageUrl } from "@/lib/executor";
 import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
-import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl, isStaleSubmit } from "@/lib/videoNodeGuards";
+import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl, isStaleSubmit, SUBMIT_STALE_MS, dropNullGenerations } from "@/lib/videoNodeGuards";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
@@ -405,12 +405,33 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
 
   // Remount/reload mid-submit loses the POST: no taskId will ever arrive, so unstick the node.
   useEffect(() => {
-    const d = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data;
-    if ((d?.status === "pending" || d?.status === "running") && !d.taskId
-        && isStaleSubmit(d.pendingSubmitAt as number | undefined, Date.now())) {
-      updateNodeData(id, { status: "idle", pendingSubmitAt: undefined });
-      addToast("Previous video submission was interrupted. Generate again.", "error");
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      const d = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data;
+      if (!((d?.status === "pending" || d?.status === "running") && !d.taskId)) return;
+      const at = d.pendingSubmitAt as number | undefined;
+      const now = Date.now();
+      if (!isStaleSubmit(at, now)) {
+        // Marker still fresh: the POST may be alive; re-check once it could have gone stale.
+        timer = setTimeout(check, (at as number) + SUBMIT_STALE_MS - now + 1);
+        return;
+      }
+      const r = dropNullGenerations(
+        (d.generations as (string | null | { error: string })[] | undefined) ?? [],
+        (d.generationsMeta as (unknown | null)[] | undefined) ?? [],
+      );
+      updateNodeData(id, {
+        status: r.generations.length > 0 ? "done" : "idle",
+        pendingSubmitAt: undefined,
+        generations: r.generations,
+        generationsMeta: r.generationsMeta,
+        currentGenIdx: r.currentGenIdx,
+        videoUrl: typeof r.lastEntry === "string" ? r.lastEntry : undefined,
+      });
+      addToast("Previous video submission was interrupted. Check the Gallery before generating again; the server may have accepted and charged the job.", "error");
+    };
+    check();
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
 
