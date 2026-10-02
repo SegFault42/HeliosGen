@@ -106,4 +106,4 @@ for (let round = 1; round <= rounds; round += 1) {
 }
 const failed = all.filter((r) => !r.ok);
 console.log(`\n${all.length - failed.length}/${all.length} passed`);
-process.exit(failed.length ? 1 : 0);
+process.exitCode = failed.length ? 1 : 0; // exit() with open fetch sockets trips a libuv assert on Windows
