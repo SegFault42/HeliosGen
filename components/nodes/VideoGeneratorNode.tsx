@@ -13,6 +13,7 @@ import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs } from "@/lib/executor";
 import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
+import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl } from "@/lib/videoNodeGuards";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
 import { VIDEO_MODELS as VIDEO_MODEL_CFG, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
@@ -402,18 +403,25 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     return () => cancelAnimationFrame(raf);
   }, [id, videoModelId, veoMode, updateNodeInternals]);
 
-  // ── Wait for job completion via SSE (callback-driven, no polling) ─────────
+  // ── Wait for job completion: SSE first, /api/job-status polling if the stream drops ──
   useEffect(() => {
     const taskId = data.taskId as string | undefined;
     if (!taskId || status !== "running") return;
 
+    let finished = false;
+    let interval: ReturnType<typeof setInterval> | undefined;
     const es = new EventSource(`/api/job-stream?taskId=${taskId}`);
 
-    es.onmessage = (event) => {
+    const stop = () => {
+      finished = true;
       es.close();
-      let json: { status: string; videoUrl?: string; error?: string };
-      try { json = JSON.parse(event.data); } catch { return; }
+      if (interval) clearInterval(interval);
+      clearTimeout(deadline);
+    };
 
+    const finish = (json: { status: string; videoUrl?: string; error?: string }) => {
+      if (finished) return;
+      stop();
       const storeNode = useWorkflowStore.getState().nodes.find((n) => n.id === id);
       const gens = [...((storeNode?.data?.generations as GenEntry[] | undefined) ?? [])] as GenEntry[];
       const slot = (storeNode?.data?.currentGenIdx as number | undefined) ?? gens.length - 1;
@@ -428,9 +436,37 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       }
     };
 
-    es.onerror = () => es.close();
+    // Client give-up deadline (>= Flow 20 min / HeyGen ~22 min server deadlines)
+    const deadline = setTimeout(() => finish({ status: "error", error: "Generation timed out" }), VIDEO_JOB_DEADLINE_MS);
 
-    return () => es.close();
+    const doPoll = async () => {
+      try {
+        const res = await fetch(`/api/job-status?taskId=${taskId}`);
+        const json = await res.json();
+        if (finished) return;
+        if (json.status === "done" || json.status === "error") finish(json);
+        else if (json.status === "not_found") finish({ status: "error", error: "Job expired or unknown" });
+        // "pending" → keep polling
+      } catch {
+        // network hiccup — keep polling
+      }
+    };
+
+    es.onmessage = (event) => {
+      let json: { status: string; videoUrl?: string; error?: string };
+      try { json = JSON.parse(event.data); } catch { return; }
+      finish(json);
+    };
+
+    es.onerror = () => {
+      // EventSource gave up or the server closed the stream: fall back to polling.
+      es.close();
+      if (finished || interval) return;
+      doPoll();
+      interval = setInterval(doPoll, 3000);
+    };
+
+    return stop;
   }, [data.taskId, status, id, updateNodeData]);
 
   const activeHandles = new Set<string>(cfg.handles);
@@ -905,6 +941,17 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       } catch { /* proceed without */ }
     }
 
+    // Never submit a local frame (upload still running or failed), and a connected frame handle must resolve to a URL.
+    const localUrl = findLocalFrameUrl([finalStartFrameUrl, finalEndFrameUrl, ...orderedResources.map((r) => r.url)]);
+    const frameMissing =
+      (edges.some((e) => e.target === id && e.targetHandle === "startFrame") && !finalStartFrameUrl && !finalEndFrameUrl) ||
+      (edges.some((e) => e.target === id && e.targetHandle === "endFrame") && !finalEndFrameUrl && !finalStartFrameUrl);
+    if (localUrl || frameMissing) {
+      updateNodeData(id, { hasError: true });
+      addToast(localUrl ? "An input image is still uploading or its upload failed. Wait for it to finish or re-add it." : "A connected frame has no uploaded image yet.", "error");
+      return;
+    }
+
     // Build full payload first so debug log matches what gets sent
     const payload: Record<string, unknown> = isVeo ? {
       videoModel: videoModelId,
@@ -1288,9 +1335,11 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
                   <path d="M12 7v5" stroke="var(--border-2)" strokeWidth="2" strokeLinecap="round" />
                   <circle cx="12" cy="16" r="1" fill="var(--border-2)" />
                 </svg>
-                <span className="text-[12px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid var(--bg-2)", color: "var(--success)", background: "var(--bg-2)" }}>
-                  Credits refunded
-                </span>
+                {showsCreditsRefunded(cfg.provider) && (
+                  <span className="text-[12px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ border: "1px solid var(--bg-2)", color: "var(--success)", background: "var(--bg-2)" }}>
+                    Credits refunded
+                  </span>
+                )}
               </div>
               <p className="text-[var(--text-1)] text-[12px] font-semibold leading-snug">Oops! Something went wrong.</p>
               {(() => {
@@ -1913,7 +1962,7 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
               )}
 
               {/* Generate button — always right */}
-              {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || kieKeySet === false || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
+              {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} extracting={isExtractingFrames} disabled={promptOverLimit || (needsKieKey(cfg.provider) && kieKeySet === false) || busy || isExtractingFrames || hasFailedMediaInput} warningMessages={hasFailedMediaInput ? ["A connected image/video input has no valid content"] : undefined} />}
             </div>
           );
         })()}
