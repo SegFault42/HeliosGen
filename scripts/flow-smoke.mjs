@@ -1,7 +1,7 @@
 // Live end-to-end check of the Flow providers through the running Anvil API.
 // Usage: node scripts/flow-smoke.mjs [--rounds N] [--only <flow name substring>]   (needs `pnpm dev` on :3000)
 // Do not touch the Flow tab while this runs.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,15 @@ function expectImage(mediaUrl) {
   return p;
 }
 
+// Catches "downloaded the wrong tile": a generated image must not be our own uploaded start frame.
+function psnrAgainstStartFrame(mediaUrl) {
+  const file = (u) => path.join(ROOT, "public", u.replace(/^\//, ""));
+  const res = spawnSync("ffmpeg", ["-hide_banner", "-i", file(mediaUrl), "-i", file(START_FRAME), "-lavfi",
+    "[0]scale=64:36,format=gray[a];[1]scale=64:36,format=gray[b];[a][b]psnr", "-f", "null", "-"], { encoding: "utf8" });
+  const m = /average:(inf|[\d.]+)/.exec(res.stderr ?? "");
+  return m ? (m[1] === "inf" ? Infinity : Number(m[1])) : 0;
+}
+
 function expectVideo(mediaUrl) {
   const p = probe(mediaUrl);
   if (p.codec !== "h264" || !(p.duration > 0)) throw new Error(`not a real video: codec=${p.codec} duration=${p.duration} ${p.file}`);
@@ -74,7 +83,10 @@ async function runRound(round) {
   const image = await record("image nano-banana-2", async () => {
     const taskId = await post("/api/generate", { model: "flow-nano-banana-2", prompt: "a red fox sitting in fresh snow, soft morning light, photorealistic", aspectRatio: "16:9" });
     const job = await waitJob(taskId, 6 * 60_000);
-    return { url: job.imageUrl, ...expectImage(job.imageUrl) };
+    const p = expectImage(job.imageUrl);
+    const psnr = psnrAgainstStartFrame(job.imageUrl);
+    if (psnr > 28) throw new Error(`image is the uploaded start frame (PSNR ${psnr}), wrong tile downloaded: ${p.file}`);
+    return { url: job.imageUrl, psnrVsStartFrame: Math.round(psnr), ...p };
   });
 
   await record("text->video omni", async () => {
