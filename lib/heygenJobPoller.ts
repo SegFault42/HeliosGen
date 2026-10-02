@@ -4,12 +4,12 @@ import * as guestDb from "./guest/db";
 import { getHeyGenAgentSession, getHeyGenVideo, listHeyGenAgentVideos } from "./heygenMcp";
 import { heygenVideoAssetUrl } from "./heygenVideoResult";
 import { mirrorToStorage } from "./storage";
+import { HEYGEN_DEADLINE_MS, heygenFailureReason, heygenPhase, isFatalHeyGenError } from "./heygenPollPolicy";
 
 // Per process, not per route bundle: job-status and the submit route must share it.
 const ACTIVE_KEY = Symbol.for("heliosgen.heygen-poller.active");
 const active = ((globalThis as typeof globalThis & { [ACTIVE_KEY]?: Set<string> })[ACTIVE_KEY] ??= new Set<string>());
 const POLL_MS = 5_000;
-const MAX_POLLS = 144; // 12 minutes, aligned with job-stream's hard cap
 
 type JobResult =
   | { status: "pending"; type?: "video" }
@@ -53,18 +53,21 @@ function settle(taskId: string, result: JobResult): void {
 async function poll(taskId: string): Promise<void> {
   const sessionId = sessionIdFromTask(taskId);
   if (!sessionId) return;
-  for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
+  const createdAt = Date.parse(guestDb.recoverJob(taskId)?.created_at ?? "") || Date.now();
+  const deadline = createdAt + HEYGEN_DEADLINE_MS;
+  while (Date.now() < deadline) {
     try {
       const session = await getHeyGenAgentSession(sessionId);
       const state = statusOf(session);
+      const phase = heygenPhase(state);
       let url = heygenVideoAssetUrl(session);
       let videoId = videoIdOf(session);
-      if (!url && (state.includes("complete") || state.includes("success") || state === "done" || videoId)) {
+      if (!url && (phase === "completed" || videoId)) {
         const videos = await listHeyGenAgentVideos(sessionId);
         url = heygenVideoAssetUrl(videos);
         videoId = videoId ?? videoIdOf(videos);
       }
-      if (!url && videoId && (state.includes("complete") || state.includes("success") || state === "done")) {
+      if (!url && videoId && phase === "completed") {
         url = heygenVideoAssetUrl(await getHeyGenVideo(videoId));
       }
       if (url) {
@@ -72,20 +75,27 @@ async function poll(taskId: string): Promise<void> {
         settle(taskId, { status: "done", videoUrl: localUrl });
         return;
       }
-      if (state.includes("error") || state.includes("fail") || state.includes("cancel") || state === "stopped") {
-        settle(taskId, { status: "error", error: `HeyGen video agent ended with status: ${state}` });
+      if (phase === "failed") {
+        const video = videoId ? await getHeyGenVideo(videoId).catch(() => null) : null;
+        const reason = heygenFailureReason(session, video);
+        const message = reason ? `HeyGen failed: ${reason}` : `HeyGen video agent ended with status: ${state}`;
+        console.error(`[HeyGenPoller] ${taskId} failed: ${message}`);
+        settle(taskId, { status: "error", error: message });
         return;
       }
     } catch (error) {
-      // A transient MCP/network failure should not turn a still-running HeyGen job into a false failure.
-      if (attempt === MAX_POLLS - 1) {
-        settle(taskId, { status: "error", error: error instanceof Error ? error.message : "HeyGen polling failed" });
+      const message = error instanceof Error ? error.message : String(error);
+      if (isFatalHeyGenError(error)) {
+        console.error(`[HeyGenPoller] ${taskId} fatal: ${message}`);
+        settle(taskId, { status: "error", error: `HeyGen error: ${message}` });
         return;
       }
+      console.warn(`[HeyGenPoller] ${taskId} transient error: ${message}`);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
-  settle(taskId, { status: "error", error: "HeyGen video generation timed out" });
+  console.error(`[HeyGenPoller] ${taskId} timed out after ${HEYGEN_DEADLINE_MS / 60_000} min`);
+  settle(taskId, { status: "error", error: `HeyGen video generation timed out after ${HEYGEN_DEADLINE_MS / 60_000} min` });
 }
 
 /** Start or resume a HeyGen job. The set prevents duplicate pollers after repeated status requests. */
