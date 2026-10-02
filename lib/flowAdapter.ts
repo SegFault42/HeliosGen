@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import sharp from "sharp";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { mediaPathFor, toMediaUrl } from "@/lib/guest/media";
+import { ensureStorage } from "@/lib/guest/localStorage";
 import { dlog } from "@/lib/debugLog";
 
 // ponytail: length threshold is a heuristic guess at when Omni Flash chokes on
@@ -154,7 +155,35 @@ export function resolveLocalPath(url?: string): string | null {
   return abs && fs.existsSync(abs) ? abs : null;
 }
 
+/** Local file for a frame or reference the canvas sent. data: URLs are decoded and
+ *  remote URLs mirrored first, as for every other provider. An unreadable one is an
+ *  error: generating without the frame the user connected is worse than failing. */
+async function referenceFile(url: string, label: string): Promise<string> {
+  const abs = await ensureStorage(url.trim(), "flow").then(resolveLocalPath, () => null);
+  if (!abs) throw new Error(`${label} could not be read (${url.slice(0, 60)}). Upload it again and retry.`);
+  return abs;
+}
+
+/** Flow's agent gets frames as unordered prompt attachments; say which is which. */
+export function framePrompt(prompt: string, hasStart: boolean, hasEnd: boolean): string {
+  if (hasStart && hasEnd) {
+    return `Use the first attached image as the first frame and the second attached image as the last frame. ${prompt}`;
+  }
+  return hasStart ? `Use the first attached image as the first frame. ${prompt}` : prompt;
+}
+
 export async function submitFlowVideo(params: SubmitFlowVideoParams) {
+  // References first: a bad frame fails fast, before the browser engine is touched.
+  const referenceFiles: string[] = [];
+  const startAbs = params.startFrame ? await referenceFile(params.startFrame, "Start frame") : null;
+  const endAbs = params.endFrame ? await referenceFile(params.endFrame, "End frame") : null;
+  if (startAbs) referenceFiles.push(startAbs);
+  if (endAbs) referenceFiles.push(endAbs);
+  for (const ref of params.referenceImages ?? []) {
+    const abs = await referenceFile(ref, "Reference image");
+    if (!referenceFiles.includes(abs)) referenceFiles.push(abs);
+  }
+
   const { flow, store } = await getFlowEngine();
   await store.initialize();
 
@@ -170,23 +199,6 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
   }
 
   const outputDirectory = getFlowOutputDir();
-  const referenceFiles: string[] = [];
-
-  const startAbs = resolveLocalPath(params.startFrame);
-  if (startAbs) referenceFiles.push(startAbs);
-
-  const endAbs = resolveLocalPath(params.endFrame);
-  if (endAbs) referenceFiles.push(endAbs);
-
-  if (Array.isArray(params.referenceImages)) {
-    for (const ref of params.referenceImages) {
-      const abs = resolveLocalPath(ref);
-      if (abs && !referenceFiles.includes(abs)) {
-        referenceFiles.push(abs);
-      }
-    }
-  }
-
   const model = params.modelName || "Omni Flash";
   const aspectRatio = params.aspectRatio === "16:9" ? "16:9" : "9:16";
 
@@ -197,6 +209,7 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
     prompt = "read this";
     dlog(`[Flow] read-this bypass active, rendered prompt image: ${promptImagePath}`);
   }
+  prompt = framePrompt(prompt, Boolean(startAbs), Boolean(endAbs));
 
   dlog(`[Flow] Submitting video: model=${model}, aspect=${aspectRatio}, refs=${referenceFiles.length}`);
 
@@ -224,6 +237,12 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
 }
 
 export async function submitFlowImage(params: SubmitFlowImageParams) {
+  const referenceFiles: string[] = [];
+  for (const ref of params.referenceImages ?? []) {
+    const abs = await referenceFile(ref, "Reference image");
+    if (!referenceFiles.includes(abs)) referenceFiles.push(abs);
+  }
+
   const { flow, store } = await getFlowEngine();
   await store.initialize();
 
@@ -239,17 +258,6 @@ export async function submitFlowImage(params: SubmitFlowImageParams) {
   }
 
   const outputDirectory = getFlowOutputDir();
-  const referenceFiles: string[] = [];
-
-  if (Array.isArray(params.referenceImages)) {
-    for (const ref of params.referenceImages) {
-      const abs = resolveLocalPath(ref);
-      if (abs && !referenceFiles.includes(abs)) {
-        referenceFiles.push(abs);
-      }
-    }
-  }
-
   const model = params.modelName || "Nano Banana 2";
   const aspectRatio = params.aspectRatio || "9:16";
 

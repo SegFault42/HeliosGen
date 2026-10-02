@@ -84,3 +84,21 @@ test("getFlowEngine is one per process even when the module is bundled twice", a
   assert.equal(a, b);
   await Promise.allSettled([a, b]);
 });
+
+test("frame prompt tells Flow which attached image is first and last", () => {
+  const { framePrompt } = require("../lib/flowAdapter.ts");
+  assert.equal(framePrompt("waves", false, false), "waves");
+  assert.equal(framePrompt("waves", true, false), "Use the first attached image as the first frame. waves");
+  assert.equal(
+    framePrompt("waves", true, true),
+    "Use the first attached image as the first frame and the second attached image as the last frame. waves",
+  );
+});
+
+test("an unreadable start frame fails the submit instead of being dropped", async () => {
+  const { submitFlowVideo } = require("../lib/flowAdapter.ts");
+  await assert.rejects(
+    submitFlowVideo({ prompt: "waves", startFrame: "blob:http://localhost:3000/5d1c" }),
+    /Start frame could not be read/,
+  );
+});
