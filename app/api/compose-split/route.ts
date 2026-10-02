@@ -5,33 +5,25 @@
  * Local-only ffmpeg compositor: hard-cuts a trimmed AI-avatar reaction clip
  * into a real product demo clip with a burned-in typography overlay.
  * `reactionUrl` / `demoUrl` must be a `/generated/...` URL (resolved under
- * MEDIA_DIR) or an absolute local filesystem path that exists on disk.
- * Never fetches a remote URL.
+ * MEDIA_DIR, upload local files via /api/upload-video first). Never accepts
+ * an arbitrary filesystem path and never fetches a remote URL.
  *
  * Returns: { url: "/generated/compose/<id>.mp4", durationSec, cutAtSec }
  */
 import { NextRequest, NextResponse } from "next/server";
-import { existsSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { composeSplitReaction } from "@/lib/composeSplit";
-import { mediaPathFor } from "@/lib/guest/media";
+import { composeSplitReaction, resolveComposeInput } from "@/lib/composeSplit";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 
 export const maxDuration = 120;
 
-/** Resolve `/generated/...` or an existing absolute local path to a real file. */
-function resolveLocalPath(input: unknown): string | null {
-  if (typeof input !== "string" || !input) return null;
-  if (input.startsWith("/generated/")) {
-    const abs = mediaPathFor(input);
-    return abs && existsSync(abs) ? abs : null;
-  }
-  if (isAbsolute(input) && existsSync(input)) return input;
-  return null;
-}
-
 export async function POST(req: NextRequest) {
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -39,13 +31,13 @@ export async function POST(req: NextRequest) {
 
   const { reactionUrl, demoUrl, overlayText, reactionSeconds } = body as Record<string, unknown>;
 
-  const reactionPath = resolveLocalPath(reactionUrl);
+  const reactionPath = resolveComposeInput(reactionUrl);
   if (!reactionPath) {
-    return NextResponse.json({ error: "reactionUrl must be a /generated/... URL or an existing absolute local path" }, { status: 400 });
+    return NextResponse.json({ error: "reactionUrl must be an existing /generated/... URL" }, { status: 400 });
   }
-  const demoPath = resolveLocalPath(demoUrl);
+  const demoPath = resolveComposeInput(demoUrl);
   if (!demoPath) {
-    return NextResponse.json({ error: "demoUrl must be a /generated/... URL or an existing absolute local path" }, { status: 400 });
+    return NextResponse.json({ error: "demoUrl must be an existing /generated/... URL" }, { status: 400 });
   }
 
   if (overlayText !== undefined && typeof overlayText !== "string") {

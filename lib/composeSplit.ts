@@ -18,16 +18,38 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, unlink } from "node:fs/promises";
+import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import sharp from "sharp";
+import { mediaPathFor, toMediaUrl } from "./guest/media";
 
 const execFileAsync = promisify(execFile);
 
 const MIN_REACTION_SECONDS = 3;
 const MAX_REACTION_SECONDS = 5;
 const DEFAULT_REACTION_SECONDS = 4;
+const FFMPEG_TIMEOUT_MS = 5 * 60_000;
+const FFMPEG_MAX_BUFFER = 64 * 1024 * 1024;
+
+/**
+ * Resolve a `/generated/...` URL to an existing local file, or null.
+ * Rejects absolute filesystem paths, traversal attempts, directories and
+ * missing files — the only trusted input shape is our own media URL scheme.
+ */
+export function resolveComposeInput(url: unknown): string | null {
+  if (typeof url !== "string" || !url) return null;
+  const media = toMediaUrl(url);
+  const abs = media && mediaPathFor(media);
+  if (!abs || !existsSync(abs)) return null;
+  try {
+    if (!statSync(abs).isFile()) return null;
+  } catch {
+    return null;
+  }
+  return abs;
+}
 
 export interface ComposeSplitOptions {
   reactionPath: string;
@@ -127,13 +149,17 @@ export async function composeSplitReaction(opts: ComposeSplitOptions): Promise<C
   const width = opts.width ?? 1080;
   const height = opts.height ?? 1920;
   const fps = opts.fps ?? 30;
-  const reactionSeconds = clampReactionSeconds(opts.reactionSeconds);
+  const requestedReactionSeconds = clampReactionSeconds(opts.reactionSeconds);
 
-  const [demoDuration, reactionHasAudio, demoHasAudio] = await Promise.all([
+  const [demoDuration, reactionDuration, reactionHasAudio, demoHasAudio] = await Promise.all([
     ffprobeDuration(opts.demoPath),
+    ffprobeDuration(opts.reactionPath),
     hasAudioStream(opts.reactionPath),
     hasAudioStream(opts.demoPath),
   ]);
+  // never cut past the actual reaction footage — Flow clips can land shorter
+  // than the requested window.
+  const reactionSeconds = Math.min(requestedReactionSeconds, reactionDuration);
 
   const tmpDir = await mkdtemp(join(tmpdir(), "compose-split-"));
   try {
@@ -195,6 +221,7 @@ export async function composeSplitReaction(opts: ComposeSplitOptions): Promise<C
 
     const args = [
       "-y",
+      "-nostats", "-loglevel", "error",
       ...inputs,
       "-filter_complex", filters.join(";"),
       "-map", `[${finalVideoLabel}]`,
@@ -206,7 +233,12 @@ export async function composeSplitReaction(opts: ComposeSplitOptions): Promise<C
       opts.outPath,
     ];
 
-    await execFileAsync("ffmpeg", args);
+    try {
+      await execFileAsync("ffmpeg", args, { timeout: FFMPEG_TIMEOUT_MS, maxBuffer: FFMPEG_MAX_BUFFER });
+    } catch (e) {
+      if (existsSync(opts.outPath)) await unlink(opts.outPath).catch(() => {});
+      throw e;
+    }
 
     const durationSec = reactionSeconds + demoDuration;
     return { outPath: opts.outPath, durationSec, cutAtSec: reactionSeconds };
