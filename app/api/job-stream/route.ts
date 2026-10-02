@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
-import { jobEvents } from "@/lib/jobEvents";
+import { jobEvents, JOB_STREAM_BUDGET_MS } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
 import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
 import { resumeFlowJob } from "@/lib/flowJobPoller";
@@ -12,7 +12,8 @@ const SSE_HEADERS = {
   "Connection": "keep-alive",
 };
 
-const TIMEOUT_MS = 12 * 60 * 1000; // 12 min hard cap
+const TIMEOUT_MS = JOB_STREAM_BUDGET_MS;
+const RECHECK_MS = 5_000; // safety net if an emit is missed
 
 function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
@@ -68,6 +69,7 @@ export async function GET(req: NextRequest) {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        clearInterval(recheck);
         clearTimeout(timeout);
         controller.close();
       };
@@ -82,6 +84,15 @@ export async function GET(req: NextRequest) {
       const heartbeat = setInterval(() => {
         if (!closed) controller.enqueue(enc.encode(": ping\n\n"));
       }, 25_000);
+
+      // Re-read jobStore so a missed event cannot hang the stream
+      const recheck = setInterval(() => {
+        const cur = jobStore.get(taskId);
+        if (cur && cur.status !== "pending") {
+          jobEvents.off(`job:${taskId}`, send);
+          send(cur);
+        }
+      }, RECHECK_MS);
 
       // Hard cap — emit error if callback never arrives
       const timeout = setTimeout(() => {
