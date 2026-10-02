@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
+import { MEDIA_DIR } from "@/lib/guest/paths";
 import { createHeyGenPhotoAvatar } from "@/lib/heygenMcp";
 
 export const runtime = "nodejs";
 
-const ALLOWED_ROOTS = [
-  resolve("D:/CLAUDE PROJECTS/social media/creator/avatar-refs"),
-  resolve("F:/CLAUDE/AGENT_AI/rodadas"),
-];
+const ALLOWED_ROOTS = [resolve(MEDIA_DIR)];
 
 function isAllowedSource(sourcePath: string): boolean {
-  const normalized = resolve(sourcePath).toLowerCase();
-  return ALLOWED_ROOTS.some((root) => normalized === root.toLowerCase() || normalized.startsWith(`${root.toLowerCase()}\\`));
+  const target = resolve(sourcePath);
+  return ALLOWED_ROOTS.some((root) => {
+    const rel = relative(root, target);
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  });
 }
 
 export async function POST(request: Request) {
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { name?: string; sourcePath?: string };
     const sourcePath = body.sourcePath?.trim();
     if (!sourcePath || !isAllowedSource(sourcePath)) {
-      return NextResponse.json({ error: "sourcePath must be inside an approved ANVIL avatar reference folder" }, { status: 400 });
+      return NextResponse.json({ error: "sourcePath must be inside an ANVIL media folder" }, { status: 400 });
     }
     const name = body.name?.trim() || "Rafael Soul Photo Avatar";
     const result = await createHeyGenPhotoAvatar(name, sourcePath);

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { ensureStorage } from "@/lib/storage";
 import { mediaPathFor } from "@/lib/guest/media";
@@ -11,6 +11,11 @@ const DEFAULT_TOKEN_FILE = join(DEFAULT_HERMES_HOME, "mcp-tokens", "heygen.json"
 const DEFAULT_CLIENT_FILE = join(DEFAULT_HERMES_HOME, "mcp-tokens", "heygen.client.json");
 const DEFAULT_CLIENT_ID = "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json";
 const REFRESH_SKEW_MS = 90_000;
+
+function fetchTimeoutMs(): number {
+  const n = Number(process.env.HEYGEN_FETCH_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 30_000;
+}
 
 interface OAuthTokenFile {
   access_token: string;
@@ -47,13 +52,23 @@ function clientFilePath(): string {
   return process.env.HEYGEN_MCP_CLIENT_FILE ?? DEFAULT_CLIENT_FILE;
 }
 
-function sanitizeError(message: string): string {
+export function sanitizeError(message: string): string {
   return message
     .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
-    .replace(/(?:access_token|refresh_token|token|api[_-]?key|secret)=[^\s&]+/gi, "$1=[redacted]");
+    .replace(/(access_token|refresh_token|token|api[_-]?key|secret)=[^\s&]+/gi, "$1=[redacted]");
 }
 
+// Refreshed tokens that could not be written to disk; HeyGen may have rotated the refresh token.
+let memoryToken: OAuthTokenFile | null = null;
+
+export function _resetHeyGenTokenMemory(): void { memoryToken = null; }
+
 async function readTokenFile(): Promise<OAuthTokenFile> {
+  const fromFile = await readTokenFileOnly();
+  return memoryToken && (memoryToken.expires_at ?? 0) > (fromFile.expires_at ?? 0) ? memoryToken : fromFile;
+}
+
+async function readTokenFileOnly(): Promise<OAuthTokenFile> {
   let raw: string;
   try {
     raw = await readFile(tokenFilePath(), "utf8");
@@ -105,6 +120,7 @@ async function refreshAccessToken(current: OAuthTokenFile): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
       body,
+      signal: AbortSignal.timeout(fetchTimeoutMs()),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`HeyGen MCP token refresh failed (${response.status})`);
@@ -122,7 +138,8 @@ async function refreshAccessToken(current: OAuthTokenFile): Promise<string> {
       ...next,
       expires_at: Date.now() + Math.max(60, expiresIn - 60) * 1000,
     } as OAuthTokenFile;
-    await persistToken(merged);
+    memoryToken = merged;
+    await persistToken(merged).catch((e) => console.error("[heygen] token persist failed", e instanceof Error ? e.message : "error"));
     return accessToken;
   })().finally(() => { refreshInFlight = null; });
   return refreshInFlight;
@@ -159,9 +176,11 @@ async function rpc(body: Record<string, unknown>, token: string, sessionId?: str
     headers["Mcp-Session-Id"] = sessionId;
     headers["MCP-Protocol-Version"] = "2025-06-18";
   }
-  const response = await fetch(MCP_URL, { method: "POST", headers, body: JSON.stringify(body) });
+  const response = await fetch(MCP_URL, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(fetchTimeoutMs()) });
   const text = await response.text();
-  if (!response.ok) throw new Error(`HeyGen MCP HTTP ${response.status}`);
+  if (!response.ok) {
+    throw Object.assign(new Error(sanitizeError(`HeyGen MCP HTTP ${response.status} ${text.slice(0, 300)}`.trim())), { status: response.status });
+  }
   return { json: parseMcpBody(text), sessionId: response.headers.get("mcp-session-id") ?? sessionId ?? null };
 }
 
@@ -193,7 +212,17 @@ function decodeToolResult(response: Record<string, unknown>): unknown {
 
 /** Call a real HeyGen MCP tool through the existing OAuth session. */
 export async function heygenMcpCall<T = unknown>(name: string, args: Record<string, unknown> = {}): Promise<T> {
-  const token = await accessToken();
+  let token = await accessToken();
+  try {
+    return await callWithToken<T>(name, args, token);
+  } catch (error) {
+    if ((error as { status?: number }).status !== 401) throw error;
+    token = await refreshAccessToken(await readTokenFile());
+    return callWithToken<T>(name, args, token);
+  }
+}
+
+async function callWithToken<T>(name: string, args: Record<string, unknown>, token: string): Promise<T> {
   const initialized = await rpc({
     jsonrpc: "2.0",
     id: 1,
@@ -249,11 +278,16 @@ function decodeDataUrl(value: string): { bytes: Buffer; contentType: string } | 
   return { bytes, contentType };
 }
 
-function defaultContentType(filename: string): string {
+export function defaultContentType(filename: string): string {
   switch (extname(filename).toLowerCase()) {
     case ".png": return "image/png";
     case ".jpg": case ".jpeg": return "image/jpeg";
     case ".webp": return "image/webp";
+    case ".gif": return "image/gif";
+    case ".heic": return "image/heic";
+    case ".avif": return "image/avif";
+    case ".webm": return "video/webm";
+    case ".m4a": return "audio/mp4";
     case ".mp4": return "video/mp4";
     case ".mov": return "video/quicktime";
     case ".mp3": return "audio/mpeg";
@@ -291,7 +325,7 @@ async function uploadBytes(filename: string, contentType: string, bytes: Buffer)
   if (!assetId || !uploadUrl) throw new Error("HeyGen asset upload did not return an upload URL");
   const headers: Record<string, string> = { ...(uploadHeaders ?? {}) };
   if (!Object.keys(headers).some((key) => key.toLowerCase() === "content-type")) headers["Content-Type"] = contentType;
-  const uploaded = await fetch(uploadUrl, { method: "PUT", headers, body: new Uint8Array(bytes) });
+  const uploaded = await fetch(uploadUrl, { method: "PUT", headers, body: new Uint8Array(bytes), signal: AbortSignal.timeout(fetchTimeoutMs()) });
   if (!uploaded.ok) throw new Error(`HeyGen asset upload failed (${uploaded.status})`);
   await heygenMcpCall("complete_asset_upload", { assetId, checksumSha256: checksum });
   return assetId;
@@ -378,4 +412,3 @@ export async function getHeyGenCurrentUser(): Promise<unknown> {
 
 export function heygenTokenPath(): string { return tokenFilePath(); }
 export function heygenClientPath(): string { return clientFilePath(); }
-export function heygenPathDir(): string { return dirname(tokenFilePath()); }
