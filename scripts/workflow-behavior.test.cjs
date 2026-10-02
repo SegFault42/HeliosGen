@@ -34,6 +34,17 @@ test("transport reports the MIME type of a completed PNG image", async () => {
   } finally { global.fetch = original; }
 });
 
+test("transport: a status read that times out or drops is transient, not a failure", async () => {
+  const original = global.fetch;
+  try {
+    global.fetch = async (_url, init) => {
+      assert.ok(init?.signal, "status read must carry a timeout signal");
+      throw new DOMException("timed out", "TimeoutError");
+    };
+    assert.equal((await createProductionTransport().poll("slow-task")).state, "pending");
+  } finally { global.fetch = original; }
+});
+
 test("Omni Flash plan uses the observed fixed 10-second duration", () => {
   const flow = {
     id: "flow-duration", name: "Flow duration",
