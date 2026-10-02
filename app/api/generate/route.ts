@@ -334,9 +334,9 @@ export async function POST(req: NextRequest) {
       });
       resumeFlowJob(flowRes.taskId);
       return NextResponse.json({ taskId: flowRes.taskId, provider: "flow" });
-    } catch (err: any) {
+    } catch (err) {
       console.error("[generate] Google Flow image error:", err);
-      return NextResponse.json({ error: err?.message || "Google Flow image generation failed" }, { status: 500 });
+      return NextResponse.json({ error: (err instanceof Error && err.message) || "Google Flow image generation failed" }, { status: 500 });
     }
   }
 

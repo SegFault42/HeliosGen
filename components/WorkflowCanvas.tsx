@@ -1272,6 +1272,7 @@ export default function WorkflowCanvas() {
     // CSS class .is-rubber-band-selecting suppresses handle/card animations.
     if (isRubberBandSelecting && dyingNodeIds.size === 0) return nodes;
 
+    /* eslint-disable react-hooks/refs -- selection is read from a ref on purpose: these memos must not recompute on every selection tick (rubber-band blinking) */
     const selIds = selectedIdsRef.current;
     const anySelected = selIds.size > 0;
     const lockedMemberIds = new Set<string>();
@@ -1317,6 +1318,7 @@ export default function WorkflowCanvas() {
       };
     });
   }, [edges, ancestorEdgeIds, potentialGroupIds, dyingEdgeIds]);
+  /* eslint-enable react-hooks/refs */
 
   return (
     <div className="relative flex-1 flex flex-col min-w-0 h-full" style={{ background: "var(--bg-0)" }}>
@@ -1427,6 +1429,7 @@ export default function WorkflowCanvas() {
             className="absolute inset-0 pointer-events-none z-20"
             style={{ width: "100%", height: "100%" }}
           >
+            {/* eslint-disable-next-line react-hooks/refs -- guides re-render on every drag frame (setSnapGuides), so the viewport ref is current */}
             {snapGuides.map((guide, i) => {
               const { x: panX, y: panY, zoom } = viewportRef.current;
               if (guide.type === "h") {

@@ -5926,6 +5926,7 @@ function GalleryCard({
   const isVideo = item.mediaType === "video";
   const allUrls = item.imageUrls ?? [item.url];
   const displayUrl = allUrls[cardImgIdx] ?? item.url;
+  /* eslint-disable react-hooks/refs -- render-time caches by design: failed thumbs (re-render via thumbFailRevision) and a width ratchet that must never reshuffle */
   const isThumbFailed = thumbFailedUrls.current.has(displayUrl);
   void thumbFailRevision;
   // Lock the snapped width on first render for each URL; only ratchet up, never reshuffle on resize.
@@ -5933,6 +5934,7 @@ function GalleryCard({
   const locked = lockedWidths.current.get(displayUrl) ?? 0;
   if (requested > locked) lockedWidths.current.set(displayUrl, requested);
   const stableSnap = lockedWidths.current.get(displayUrl)!;
+  /* eslint-enable react-hooks/refs */
 
   // Lazy-load observer: request a concurrency slot when the card nears the viewport.
   useEffect(() => {
