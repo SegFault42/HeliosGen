@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jobStore } from "@/lib/jobStore";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { isGrsaiTaskId, resumeGrsaiJob } from "@/lib/grsai";
 import * as guestDb from "@/lib/guest/db";
 
 function recoverJob(taskId: string): "done" | "error" | "pending" | "not_found" {
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
     // If a restart killed the background poller for a job that's still pending,
     // restart it so the result can still land.
     if (result.status === "pending" && !taskId.startsWith("azure-")) {
-      resumeKieJob(taskId, result.type === "video" ? "video" : "image");
+      const kind = result.type === "video" ? "video" : "image";
+      if (isGrsaiTaskId(taskId)) resumeGrsaiJob(taskId, kind);
+      else resumeKieJob(taskId, kind);
     }
     return NextResponse.json(result);
   }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
 import { jobEvents } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { isGrsaiTaskId, resumeGrsaiJob } from "@/lib/grsai";
 import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
@@ -49,9 +50,11 @@ export async function GET(req: NextRequest) {
     return immediate({ status: "error", error: "Job not found" });
   }
 
-  // Restart the kie.ai poller if a server restart lost it.
+  // Restart the kie.ai / Grsai poller if a server restart lost it.
   if (!taskId.startsWith("azure-")) {
-    resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
+    const kind = existing.type === "video" ? "video" : "image";
+    if (isGrsaiTaskId(taskId)) resumeGrsaiJob(taskId, kind);
+    else resumeKieJob(taskId, kind);
   }
 
   // Job is pending — open an SSE stream and wait for the poller/callback to fire

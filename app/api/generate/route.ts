@@ -8,6 +8,7 @@ import { join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
+import { buildGrsaiImageBody, createGrsaiTask, grsaiSupportsModel, pollGrsaiJob } from "@/lib/grsai";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/storage";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
@@ -285,6 +286,7 @@ export async function POST(req: NextRequest) {
     azureCustomWidth,
     azureCustomHeight,
     codexProvider,
+    grsaiProvider,
     debugOnly,
   } = (await req.json()) as {
     model?:              string;
@@ -299,6 +301,7 @@ export async function POST(req: NextRequest) {
     azureCustomWidth?:   number;     // manual size — used when aspectRatio === "custom"
     azureCustomHeight?:  number;
     codexProvider?:      boolean;    // route through the server's local codex-imagegen CLI
+    grsaiProvider?:      boolean;    // route through grsai.ai instead of kie.ai
     debugOnly?:          boolean;
   };
 
@@ -494,6 +497,40 @@ export async function POST(req: NextRequest) {
     })();
 
     return NextResponse.json({ taskId: codexTaskId });
+  }
+
+  // ── Grsai branch ───────────────────────────────────────────────────────────────
+  if (grsaiProvider) {
+    if (!grsaiSupportsModel(model)) {
+      return NextResponse.json({ error: `${cfg.name} is not available on Grsai.` }, { status: 400 });
+    }
+    const grsaiKey = guestDb.getGrsaiApiKey();
+    if (!grsaiKey) return NextResponse.json({ error: "No Grsai API key configured. Add one in Settings." }, { status: 401 });
+
+    try {
+      const body = await buildGrsaiImageBody({
+        modelId:     model,
+        prompt:      prompt.slice(0, cfg.apiInput.promptMaxLength),
+        imageUrls:   r2ImageUrls,
+        aspectRatio,
+        quality,
+        maxImages:   cfg.maxImages,
+      });
+      const taskId = await createGrsaiTask(body, grsaiKey);
+
+      jobStore.set(taskId, { status: "pending", userId: currentUserId ?? undefined });
+      guestDb.insertGeneration({
+        task_id: taskId, user_id: currentUserId, generation_type: "image",
+        status: "pending", prompt, model, aspect_ratio: aspectRatio, quality,
+        reference_image_urls: r2ImageUrls,
+      });
+      pollGrsaiJob(taskId, grsaiKey, "image");
+
+      return NextResponse.json({ taskId, referenceImageUrls: r2ImageUrls });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
   }
 
   // ── Kie.ai branch ─────────────────────────────────────────────────────────────

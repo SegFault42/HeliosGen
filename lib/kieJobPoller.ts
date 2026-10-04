@@ -36,17 +36,17 @@ export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
   void loop(taskId, apiKey, kind)
     .catch((e) => {
       console.error(`[kie-poller] ${taskId} crashed:`, e);
-      settle(taskId, kind, { status: "error", error: "Generation failed (poller error)" });
+      settleJob(taskId, kind, { status: "error", error: "Generation failed (poller error)" });
     })
     .finally(() => active.delete(taskId));
 }
 
-// Local-only providers mint prefixed task IDs (`azure-…`, `codex-…`) and have no
-// kie.ai job behind them. Polling kie.ai's recordInfo for one of these just
+// Non-kie providers mint prefixed task IDs (`azure-…`, `codex-…`, `grsai-…`) and
+// have no kie.ai job behind them. Polling kie.ai's recordInfo for one of these just
 // comes back `{ msg: "recordInfo is null" }`, which the loop then settles as a
 // spurious error — clobbering the real job that's still running locally.
 function isKieTaskId(taskId: string): boolean {
-  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-");
+  return !taskId.startsWith("azure-") && !taskId.startsWith("codex-") && !taskId.startsWith("grsai-");
 }
 
 /**
@@ -77,7 +77,7 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
       );
       const json = await res.json();
       if (json?.code !== undefined && json.code !== 200 && json.code !== 0) {
-        settle(taskId, kind, { status: "error", error: json.msg ?? `kie.ai error ${json.code}` });
+        settleJob(taskId, kind, { status: "error", error: json.msg ?? `kie.ai error ${json.code}` });
         return;
       }
       data = (json?.data ?? json) as Record<string, unknown>;
@@ -91,23 +91,23 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
     if (state === "success" || state === "succeeded") {
       const urls = extractUrls(data);
       if (urls.length === 0) {
-        settle(taskId, kind, { status: "error", error: "Generation succeeded but returned no output" });
+        settleJob(taskId, kind, { status: "error", error: "Generation succeeded but returned no output" });
         return;
       }
-      await settleSuccess(taskId, kind, urls);
+      await settleJobSuccess(taskId, kind, urls);
       return;
     }
 
     if (state === "fail" || state === "failed" || state === "error") {
       const msg =
         (data.failMsg as string) ?? (data.error as string) ?? (data.failReason as string) ?? "Generation failed";
-      settle(taskId, kind, { status: "error", error: msg });
+      settleJob(taskId, kind, { status: "error", error: msg });
       return;
     }
     // waiting / queuing / generating / running → keep polling
   }
 
-  settle(taskId, kind, { status: "error", error: "Generation timed out" });
+  settleJob(taskId, kind, { status: "error", error: "Generation timed out" });
 }
 
 function extractUrls(data: Record<string, unknown>): string[] {
@@ -133,7 +133,7 @@ function extractUrls(data: Record<string, unknown>): string[] {
   return out;
 }
 
-async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[]): Promise<void> {
+export async function settleJobSuccess(taskId: string, kind: Kind, kieUrls: string[]): Promise<void> {
   const folder = kind === "video" ? "videos" : "images";
   let storedUrls: string[];
   try {
@@ -143,7 +143,7 @@ async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[]): Pro
     storedUrls = kieUrls;
   }
 
-  settle(
+  settleJob(
     taskId,
     kind,
     kind === "video"
@@ -153,7 +153,7 @@ async function settleSuccess(taskId: string, kind: Kind, kieUrls: string[]): Pro
 }
 
 /** Write jobStore, emit the SSE event, and mirror into the guest DB. */
-function settle(taskId: string, kind: Kind, result: JobResult): void {
+export function settleJob(taskId: string, kind: Kind, result: JobResult): void {
   jobStore.set(taskId, result);
   jobEvents.emit(`job:${taskId}`, result);
 

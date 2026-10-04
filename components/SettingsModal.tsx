@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MODEL_GROUPS } from "@/lib/models";
 import { useWorkflowStore } from "@/lib/store";
-import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider } from "@/lib/providers";
+import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider, providersForModel, modelHasProviderChoice, defaultModelProvider } from "@/lib/providers";
 
 /* ─── Provider options (re-exported for backwards compat) ───────────────────── */
 
@@ -165,6 +165,13 @@ interface SettingsModalProps {
 /* ─── Provider brand icons (kie/azure/codex backend pills) ───────────────────── */
 
 function ProviderBrandIcon({ id, size = 12 }: { id: ProviderId; size?: number }) {
+  if (id === "grsai") {
+    return (
+      <span className="text-[#2DD4BF] shrink-0" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.83)}px`, fontWeight: 700 }}>
+        G
+      </span>
+    );
+  }
   if (id === "kie") {
     return (
       <span className="text-[#2DD4BF] shrink-0" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.83)}px`, fontWeight: 700 }}>
@@ -213,7 +220,7 @@ function ProviderToggle({
         flexShrink: 0,
       }}
     >
-      {PROVIDERS.map((p) => {
+      {providersForModel(modelId).map((p) => {
         const active = value === p.id;
         return (
           <button
@@ -304,7 +311,7 @@ function ModelRow({
       </div>
 
       {/* Provider toggle — only shown for models with more than one backend to choose from */}
-      {azureSupported && <ProviderToggle modelId={id} value={value} onChange={onChange} />}
+      {(azureSupported || modelHasProviderChoice(id)) && <ProviderToggle modelId={id} value={value} onChange={onChange} />}
     </div>
   );
 }
@@ -347,12 +354,12 @@ function ModelGroup({
               name={m.name}
               providerLabel={m.provider}
               category={m.category}
-              value={providers[m.id] ?? "kie"}
+              value={providers[m.id] ?? defaultModelProvider(m.id)}
               onChange={(v) => onProviderChange(m.id, v)}
               azureSupported={!!m.hasAzureDeployment}
             />
             {/* Deployment name — shown only for Azure-capable models when Azure is selected */}
-            {m.hasAzureDeployment && (providers[m.id] ?? "kie") === "azure" && (
+            {m.hasAzureDeployment && (providers[m.id] ?? defaultModelProvider(m.id)) === "azure" && (
               <div
                 style={{
                   display: "flex",
@@ -415,6 +422,157 @@ const INPUT_STYLE: React.CSSProperties = {
   fontFamily: "inherit",
   width: "100%",
 };
+
+/* ─── Grsai key card ───────────────────────────────────────────────────────────
+   Self-contained: reads/saves its own status via /api/settings/grsai-key. */
+
+function GrsaiKeyCard() {
+  const [status, setStatus] = useState<"unknown" | "set" | "unset">("unknown");
+  const [input, setInput]   = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings/grsai-key")
+      .then((r) => r.json())
+      .then((d) => setStatus(d.hasToken ? "set" : "unset"))
+      .catch(() => setStatus("unset"));
+  }, []);
+
+  const handleSave = async () => {
+    if (!input.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/settings/grsai-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grsaiApiKey: input.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+      setStatus("set");
+      setInput("");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    await fetch("/api/settings/grsai-key", { method: "DELETE" });
+    setStatus("unset");
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        padding: "16px",
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: "12px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <span
+          style={{
+            width: "28px", height: "28px", borderRadius: "7px",
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <ProviderBrandIcon id="grsai" size={16} />
+        </span>
+        <div>
+          <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Grsai</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", marginTop: "1px" }}>
+            Nano Banana &amp; GPT Image — pick Grsai per model in the Models tab
+          </div>
+        </div>
+        {status === "set" && (
+          <span
+            style={{
+              marginLeft: "auto", fontSize: "10px", fontWeight: 600,
+              color: "rgba(74,222,128,0.8)", background: "rgba(74,222,128,0.08)",
+              border: "1px solid rgba(74,222,128,0.2)", borderRadius: "5px",
+              padding: "2px 7px", letterSpacing: "0.04em",
+            }}
+          >
+            SAVED
+          </span>
+        )}
+      </div>
+
+      {status === "unknown" ? (
+        <div style={{
+          height: "31px", borderRadius: "7px",
+          background: "rgba(255,255,255,0.05)",
+          animation: "skeleton-pulse 1.4s ease-in-out infinite",
+        }} />
+      ) : status === "set" ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <input
+            type="password"
+            value="placeholdertoken"
+            readOnly
+            style={{ ...INPUT_STYLE, flex: 1, cursor: "default", color: "rgba(255,255,255,0.3)" }}
+          />
+          <button
+            onClick={handleDelete}
+            style={{
+              padding: "7px 12px", borderRadius: "7px", border: "1px solid rgba(239,68,68,0.3)",
+              background: "rgba(239,68,68,0.06)", color: "rgba(239,68,68,0.7)",
+              cursor: "pointer", fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              type="password"
+              placeholder="Paste your Grsai API key (sk-…)"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+              style={{ ...INPUT_STYLE, flex: 1 }}
+              onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.2)"; }}
+              onBlur={(e)  => { (e.target as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.08)"; }}
+            />
+            <button
+              onClick={handleSave}
+              disabled={!input.trim() || saving}
+              style={{
+                padding: "7px 14px", borderRadius: "7px", border: "none",
+                background: input.trim() ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)",
+                color: input.trim() ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)",
+                cursor: input.trim() ? "pointer" : "default",
+                fontSize: "12px", fontWeight: 500, whiteSpace: "nowrap",
+                transition: "background 140ms ease, color 140ms ease",
+              }}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {error && (
+            <p style={{ fontSize: "11px", color: "rgba(239,68,68,0.7)", margin: 0 }}>{error}</p>
+          )}
+          <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)", margin: 0, lineHeight: 1.5 }}>
+            Get your key at{" "}
+            <a href="https://grsai.ai/dashboard/api-keys" target="_blank" rel="noreferrer" style={{ color: "rgba(255,255,255,0.4)" }}>
+              grsai.ai/dashboard/api-keys
+            </a>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ApiKeysPanel({
   azureBaseUrl,
@@ -660,6 +818,9 @@ function ApiKeysPanel({
           </div>
         )}
       </div>
+
+      {/* ──── Grsai API key ───────────────────────────────────────────── */}
+      <GrsaiKeyCard />
 
       {/* ──── Azure Foundry API key + endpoint ────────────────────────── */}
       <div
