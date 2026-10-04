@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { IMAGE_MODELS, VIDEO_MODELS } from "@/lib/modelConfig";
 import { MODEL_GROUPS } from "@/lib/models";
 import { useWorkflowStore } from "@/lib/store";
-import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider, providersForModel, modelHasProviderChoice } from "@/lib/providers";
+import { PROVIDERS, ProviderId, loadModelProviders, saveModelProviders, getModelProvider, providersForModel, modelHasProviderChoice, defaultModelProvider } from "@/lib/providers";
 
 /* ─── Provider options (re-exported for backwards compat) ───────────────────── */
 
@@ -354,12 +354,12 @@ function ModelGroup({
               name={m.name}
               providerLabel={m.provider}
               category={m.category}
-              value={providers[m.id] ?? "kie"}
+              value={providers[m.id] ?? defaultModelProvider(m.id)}
               onChange={(v) => onProviderChange(m.id, v)}
               azureSupported={!!m.hasAzureDeployment}
             />
             {/* Deployment name — shown only for Azure-capable models when Azure is selected */}
-            {m.hasAzureDeployment && (providers[m.id] ?? "kie") === "azure" && (
+            {m.hasAzureDeployment && (providers[m.id] ?? defaultModelProvider(m.id)) === "azure" && (
               <div
                 style={{
                   display: "flex",

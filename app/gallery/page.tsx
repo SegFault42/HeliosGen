@@ -321,7 +321,7 @@ function saveSettings(tab: Tab, folderId: string | null, s: SavedSettings) {
 function isAzureActiveForModel(modelId: string, azureResolutionOptions?: string[]): boolean {
   if (typeof window === "undefined" || !azureResolutionOptions?.length) return false;
   try {
-    const provider = JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie";
+    const provider = getModelProvider(modelId);
     const base     = localStorage.getItem("aiui-azure-base-url") ?? "";
     const deploy   = JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? "";
     return provider === "azure" && !!base && !!deploy;
@@ -1146,7 +1146,7 @@ function GalleryInner() {
     if ("defaultResolution" in m) setResolution((m as { defaultResolution: string }).defaultResolution);
     if (!isVideo) {
       const im = m as { apiInput?: { qualityOptions?: string[] }; azureQualityOptions?: string[] };
-      const provider = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[m.id] ?? "kie"; } catch { return "kie"; } })();
+      const provider = getModelProvider(m.id);
       const base     = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
       const deploy   = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[m.id] ?? ""; } catch { return ""; } })();
       const azure    = provider === "azure" && !!base && !!deploy && !!im.azureQualityOptions;
@@ -1632,7 +1632,7 @@ function GalleryInner() {
       // Read provider settings from localStorage (same keys as GenerateNode)
       const azureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
       const azureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
-      const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
+      const providerForModel = getModelProvider(modelId);
       const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
       const isCodex = providerForModel === "codex";
       const isGrsai = providerForModel === "grsai";
@@ -1848,7 +1848,7 @@ function GalleryInner() {
       const dbgRefUrls = refImages.filter(r => r.cdnUrl && !r.error && !dbgExtraSet.has(r.cdnUrl!)).map(r => r.cdnUrl!);
       const dbgAzureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
       const dbgAzureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
-      const dbgProvider        = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
+      const dbgProvider        = getModelProvider(modelId);
       const dbgIsAzure = !!(dbgAzureBaseUrl && dbgAzureDeployment && dbgProvider === "azure");
       const dbgTaggedImageUrls = dbgAssets.filter(a => a.kind === "image").map(a => a.url);
       const dbgTaggedVideoUrls = dbgAssets.filter(a => a.kind === "video").map(a => a.url);
@@ -2904,7 +2904,7 @@ function GalleryInner() {
                                     const imageUrls = [...extraUrls, ...storedRefs.filter(u => !dedupedExtra.has(u))];
                                     const azureBaseUrl    = (() => { try { return localStorage.getItem("aiui-azure-base-url") ?? ""; } catch { return ""; } })();
                                     const azureDeployment = (() => { try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[modelId] ?? ""; } catch { return ""; } })();
-                                    const providerForModel = (() => { try { return JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[modelId] ?? "kie"; } catch { return "kie"; } })();
+                                    const providerForModel = getModelProvider(modelId);
                                     const isAzure = !!(azureBaseUrl && azureDeployment && providerForModel === "azure");
                                     const isCodex = providerForModel === "codex";
                                     const isGrsai = providerForModel === "grsai";

@@ -635,21 +635,12 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
       try { return JSON.parse(localStorage.getItem("aiui-azure-endpoints") ?? "{}")[model] ?? ""; }
       catch { return ""; }
     })();
-    const isAzure = !!(azureBaseUrl && azureDeployment && (() => {
-      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "azure"; }
-      catch { return false; }
-    })());
+    const isAzure = !!(azureBaseUrl && azureDeployment && getModelProvider(model) === "azure");
     const azureQuality = (data.azureQuality as string | undefined) ?? "auto";
     const azureResolution = (data.azureResolution as string | undefined) ?? "1k";
 
-    const isCodex = !!(() => {
-      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "codex"; }
-      catch { return false; }
-    })();
-    const isGrsai = !!(() => {
-      try { return (JSON.parse(localStorage.getItem("aiui-model-providers") ?? "{}")[model] ?? "kie") === "grsai"; }
-      catch { return false; }
-    })();
+    const isCodex = getModelProvider(model) === "codex";
+    const isGrsai = getModelProvider(model) === "grsai";
 
     const payload = {
       model,
@@ -1437,7 +1428,7 @@ export default function GenerateNode({ id, data, selected }: NodeProps<GenerateN
           )}
 
           {/* Generate button — always right */}
-          {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} disabled={promptOverLimit || (!isCodexProvider && kieKeySet === false) || busy || hasFailedImageInput} warningMessages={hasFailedImageInput ? ["The connected image input has no valid content"] : undefined} />}
+          {!readOnly && <GenerateButton onClick={handleGenerateBatch} busy={animBusy} disabled={promptOverLimit || (!isCodexProvider && currentProvider !== "grsai" && kieKeySet === false) || busy || hasFailedImageInput} warningMessages={hasFailedImageInput ? ["The connected image input has no valid content"] : undefined} />}
         </div>
       </div>
 
