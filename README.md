@@ -24,13 +24,13 @@ releases page — no account, no server, no cloud setup:
 | --- | --- |
 | **macOS** (Apple Silicon) | `HeliosGen_<version>_aarch64.dmg` |
 | **Windows** | 🙋 **looking for a contributor to build & submit** — see below |
-| **Linux** | 🙋 **looking for a contributor to build & submit** — see below |
+| **Linux** | `HeliosGen_<version>_amd64.AppImage`, `HeliosGen_<version>_amd64.deb`, `HeliosGen-<version>-1.x86_64.rpm` |
 
 > Only the builds actually attached to the latest release are available. macOS
-> is published today. **Tauri can't cross-compile, so Windows and Linux builds
-> need someone on those platforms** — if you can run `npm run desktop:build` on
-> Windows or Linux (see the **Build from source** section below), please open a
-> PR or attach the artifacts to an issue and we'll add them to the release.
+> is published today. **Tauri can't cross-compile, so Windows builds need
+> someone on Windows** — if you can run `npm run desktop:build` on Windows (see
+> the **Build from source** section below), please open a PR or attach the
+> artifacts to an issue and we'll add them to the release.
 
 The app is **not code-signed** yet:
 
@@ -224,9 +224,8 @@ Tauri does **not** cross-compile — build on the OS you want to target. Run
 `npm run desktop:build` on a Mac for the macOS build, on Windows for Windows,
 on Linux for Linux.
 
-> **Want to help ship Windows / Linux builds?** Build on that OS and send the
-> artifacts (PR or issue attachment) — they'll be added to the next release,
-> with credit.
+> **Want to help ship a Windows build?** Build on Windows and send the artifacts
+> (PR or issue attachment) — they'll be added to the next release, with credit.
 
 ## Prerequisites (one-time, all platforms)
 
@@ -265,6 +264,11 @@ Artifacts land in `src-tauri/target/release/bundle/`:
 
 The macOS build is **unsigned** — on first launch Gatekeeper blocks it.
 Right-click → Open, or `xattr -cr "src-tauri/target/release/bundle/macos/HeliosGen.app"`.
+
+Linux binaries need glibc 2.34 or newer. Building on Ubuntu 22.04 keeps that
+floor low for distribution. If AppImage bundling fails with `strip` errors
+(`unable to recognise the format` / `.relr.dyn`, seen on Fedora 43), build with
+`NO_STRIP=true npm run desktop:build`.
 
 ## Develop (hot reload)
 
