@@ -422,6 +422,9 @@ function ApiKeysPanel({
   kieKeyStatus,
   onKieKeySave,
   onKieKeyDelete,
+  muapiKeyStatus,
+  onMuapiKeySave,
+  onMuapiKeyDelete,
   azureKeyStatus,
   onAzureKeySave,
   onAzureKeyDelete,
@@ -433,6 +436,9 @@ function ApiKeysPanel({
   kieKeyStatus: "unknown" | "set" | "unset";
   onKieKeySave: (token: string) => Promise<void>;
   onKieKeyDelete: () => Promise<void>;
+  muapiKeyStatus: "unknown" | "set" | "unset";
+  onMuapiKeySave: (key: string) => Promise<void>;
+  onMuapiKeyDelete: () => Promise<void>;
   azureKeyStatus: "unknown" | "set" | "unset";
   onAzureKeySave: (key: string) => Promise<void>;
   onAzureKeyDelete: () => Promise<void>;
@@ -445,6 +451,8 @@ function ApiKeysPanel({
   const [azureInput, setAzureInput]   = useState("");
   const [azureSaving, setAzureSaving] = useState(false);
   const [azureError, setAzureError]   = useState<string | null>(null);
+  const [muapiInput, setMuapiInput] = useState("");
+  const [muapiError, setMuapiError] = useState<string | null>(null);
 
   type CodexLoginFlow =
     | { status: "idle" }
@@ -659,6 +667,20 @@ function ApiKeysPanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/* ──── Muapi API key ────────────────────────────────────────────── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px", padding: "16px", background: "rgba(45,212,191,0.04)", border: "1px solid rgba(45,212,191,0.14)", borderRadius: "12px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>
+          Muapi {muapiKeyStatus === "set" && <span style={{ color: "rgba(74,222,128,0.8)", fontSize: "10px" }}>SAVED</span>}
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input aria-label="Muapi API key" type="password" value={muapiInput} onChange={(e) => setMuapiInput(e.target.value)} placeholder={muapiKeyStatus === "set" ? "API key saved" : "Paste your Muapi API key"} style={{ ...INPUT_STYLE, flex: 1 }} />
+          <button onClick={async () => { setMuapiError(null); try { await onMuapiKeySave(muapiInput); setMuapiInput(""); } catch (error) { setMuapiError(error instanceof Error ? error.message : String(error)); } }} disabled={!muapiInput.trim()} style={{ padding: "7px 14px", borderRadius: "7px", border: "none", background: muapiInput.trim() ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.8)", cursor: muapiInput.trim() ? "pointer" : "default", fontSize: "12px" }}>Save</button>
+          {muapiKeyStatus === "set" && <button onClick={onMuapiKeyDelete} style={{ padding: "7px 10px", borderRadius: "7px", border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: "12px" }}>Remove</button>}
+        </div>
+        {muapiError && <p role="alert" style={{ fontSize: "11px", color: "rgba(239,68,68,0.8)", margin: 0 }}>{muapiError}</p>}
+        <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", margin: 0 }}>Used for the Muapi FLUX Schnell image model. Your key is stored in this app&apos;s local settings database.</p>
       </div>
 
       {/* ──── Azure Foundry API key + endpoint ────────────────────────── */}
@@ -1342,6 +1364,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [azureTextModelName, setAzureTextModelName]   = useState("model-router");
   const [kieKeyStatus, setKieKeyStatus]               = useState<"unknown" | "set" | "unset">("unknown");
   const [azureKeyStatus, setAzureKeyStatus]   = useState<"unknown" | "set" | "unset">("unknown");
+  const [muapiKeyStatus, setMuapiKeyStatus] = useState<"unknown" | "set" | "unset">("unknown");
   const [codexStatus, setCodexStatus]         = useState<CodexStatus>({ kind: "unknown" });
   const setKieKeySet    = useWorkflowStore((s) => s.setKieKeySet);
   const setAzureKeySet  = useWorkflowStore((s) => s.setAzureKeySet);
@@ -1380,6 +1403,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         .then((r) => r.json())
         .then((d) => setAzureKeyStatus(d.hasToken ? "set" : "unset"))
         .catch(() => setAzureKeyStatus("unset"))
+    );
+    authHeader().then((h) =>
+      fetch("/api/settings/muapi-key", { headers: h })
+        .then((r) => r.json())
+        .then((d) => setMuapiKeyStatus(d.hasToken ? "set" : "unset"))
+        .catch(() => setMuapiKeyStatus("unset"))
     );
     // Check whether the server has a working codex-imagegen + codex login
     refreshCodexStatus();
@@ -1452,6 +1481,20 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     await fetch("/api/settings/azure-key", { method: "DELETE", headers: h });
     setAzureKeyStatus("unset");
     setAzureKeySet(false);
+  };
+
+  const handleMuapiKeySave = async (key: string) => {
+    const res = await fetch("/api/settings/muapi-key", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ muapiApiKey: key }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? "Failed to save");
+    setMuapiKeyStatus("set");
+  };
+
+  const handleMuapiKeyDelete = async () => {
+    await fetch("/api/settings/muapi-key", { method: "DELETE" });
+    setMuapiKeyStatus("unset");
   };
 
   const handleAzureTextDeploymentChange = (v: string) => {
@@ -1654,6 +1697,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 kieKeyStatus={kieKeyStatus}
                 onKieKeySave={handleKieKeySave}
                 onKieKeyDelete={handleKieKeyDelete}
+                muapiKeyStatus={muapiKeyStatus}
+                onMuapiKeySave={handleMuapiKeySave}
+                onMuapiKeyDelete={handleMuapiKeyDelete}
                 azureKeyStatus={azureKeyStatus}
                 onAzureKeySave={handleAzureKeySave}
                 onAzureKeyDelete={handleAzureKeyDelete}

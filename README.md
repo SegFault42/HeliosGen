@@ -43,7 +43,7 @@ The app is **not code-signed** yet:
 ## 🚀 First run
 
 1. Launch HeliosGen.
-2. Open **Settings → API Keys** and paste your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec) API key**.
+2. Open **Settings → API Keys** and paste your **[kie.ai](https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec) API key**. Muapi is also available for FLUX Schnell image generation; add its API key in the same settings panel to use that model.
 3. Start generating.
 
 Everything stays on your machine. Generations, uploads, folders, workflows and
@@ -142,6 +142,7 @@ You only pay for what you generate.
 # ⚡ Supported Models
 
 ## Images
+- FLUX Schnell (Muapi)
 - GPT Image 2 (OpenAI)
 - Nano Banana / Nano Banana 2 / Nano Banana 2 Lite / Nano Banana Pro (Google)
 - Seedream 5.0 Lite / Pro (Seedream)
