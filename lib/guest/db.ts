@@ -252,6 +252,21 @@ export function deleteAzureApiKey(): void {
   deleteSetting("azure_api_key");
 }
 
+export function getMuapiApiKey(): string | null {
+  const dbKey = getSetting("muapi_api_key");
+  if (dbKey) return dbKey;
+  const envKey = process.env.MUAPI_API_KEY ?? "";
+  return envKey || null;
+}
+
+export function setMuapiApiKey(key: string): void {
+  setSetting("muapi_api_key", key);
+}
+
+export function deleteMuapiApiKey(): void {
+  deleteSetting("muapi_api_key");
+}
+
 // ── Folders ────────────────────────────────────────────────────────────────
 
 function rowToFolder(r: Record<string, unknown>): FolderRecord {

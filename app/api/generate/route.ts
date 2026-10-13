@@ -13,6 +13,7 @@ import { ensureR2, uploadBuffer } from "@/lib/storage";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
+import { getMuapiApiKey } from "@/lib/guest/db";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
 
@@ -312,6 +313,9 @@ export async function POST(req: NextRequest) {
 
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
+  if (cfg.provider === "Muapi" && imageUrls.length) {
+    return NextResponse.json({ error: "This Muapi model supports text-to-image only." }, { status: 400 });
+  }
 
   let r2ImageUrls: string[] = [];
   try {
@@ -321,6 +325,53 @@ export async function POST(req: NextRequest) {
   }
 
   const currentUserId = GUEST_USER_ID;
+
+  // ── Muapi OpenAI-compatible image generation ────────────────────────────────
+  if (cfg.provider === "Muapi") {
+    const apiKey = getMuapiApiKey();
+    if (!apiKey) return NextResponse.json({ error: "Muapi API key is not configured. Add it in Settings." }, { status: 500 });
+
+    const size = aspectRatio === "16:9" ? "1792x1024" : aspectRatio === "9:16" ? "1024x1792" : "1024x1024";
+    const taskId = `muapi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    jobStore.set(taskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+    (async () => {
+      try {
+        const res = await httpsPost(
+          "https://api.muapi.ai/v1/images/generations",
+          { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          JSON.stringify({ model: cfg.apiId, prompt: prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000), n: 1, size }),
+        );
+        const raw = await res.text();
+        if (!res.ok) {
+          let message = `Muapi error ${res.status}`;
+          try { message = JSON.parse(raw)?.error?.message ?? message; } catch { /* keep status */ }
+          jobStore.set(taskId, { status: "error", error: message });
+          return;
+        }
+        const result = JSON.parse(raw) as { data?: Array<{ url?: string; b64_json?: string }> };
+        const image = result.data?.[0];
+        const imageBuffer = image?.b64_json
+          ? Buffer.from(image.b64_json, "base64")
+          : image?.url ? await fetchBuffer(image.url) : null;
+        if (!imageBuffer) {
+          jobStore.set(taskId, { status: "error", error: "Muapi returned no image data" });
+          return;
+        }
+        const imageUrl = await uploadBuffer(imageBuffer, "image/png", "generated");
+        jobStore.set(taskId, { status: "done", imageUrl });
+        guestDb.insertGeneration({
+          task_id: taskId, user_id: currentUserId ?? undefined, generation_type: "image",
+          status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
+          model, aspect_ratio: aspectRatio, quality,
+        });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error("[muapi] image generation failed:", message);
+        jobStore.set(taskId, { status: "error", error: message });
+      }
+    })();
+    return NextResponse.json({ taskId });
+  }
 
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {

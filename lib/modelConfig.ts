@@ -127,6 +127,18 @@ export function validateAzureCustomSize(width: number, height: number): string |
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
+  // ── Muapi ───────────────────────────────────────────────────────────────────
+  {
+    id: "muapi-flux-schnell",
+    apiId: "flux-schnell",
+    name: "FLUX Schnell",
+    provider: "Muapi",
+    ratios: ["1:1", "16:9", "9:16"],
+    supportsImages: false,
+    maxImages: 0,
+    supportsQuality: false,
+    apiInput: { aspectRatioKey: "size", promptMaxLength: 32000, outputFormat: "png" },
+  },
   // ── Google ──────────────────────────────────────────────────────────────────
   {
     id: "google-nano-banana",
