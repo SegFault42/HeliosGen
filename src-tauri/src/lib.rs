@@ -46,6 +46,12 @@ fn pick_port() -> u16 {
 fn resolve_user_path() -> String {
     let base = std::env::var("PATH").unwrap_or_default();
 
+    // Windows GUI apps already inherit the user's full PATH, and the
+    // `:`-separated merging below would mangle its `;`-separated `C:\` entries.
+    if cfg!(windows) {
+        return base;
+    }
+
     let shell_path = std::env::var("SHELL").ok().and_then(|sh| {
         std::process::Command::new(sh)
             .args(["-lic", "printf %s \"$PATH\""])
@@ -113,13 +119,21 @@ fn wait_for_server(port: u16, timeout: Duration) -> bool {
     false
 }
 
+/// On Windows, Tauri resolves resources from a canonicalized exe path, i.e. a
+/// `\\?\C:\...` verbatim path. Node can't load its entry script from one
+/// (`EISDIR: lstat 'C:'`), so hand the sidecar the plain form. No-op elsewhere.
+fn plain_path(path: std::path::PathBuf) -> std::path::PathBuf {
+    dunce::simplified(&path).to_path_buf()
+}
+
 fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Error>> {
     // Bundled: <resources>/server/server.js  (staged by scripts/desktop/build-server.mjs)
-    let server_entry = app
-        .path()
-        .resolve("server/server.js", tauri::path::BaseDirectory::Resource)?;
+    let server_entry = plain_path(
+        app.path()
+            .resolve("server/server.js", tauri::path::BaseDirectory::Resource)?,
+    );
 
-    let data_dir = app.path().app_data_dir()?;
+    let data_dir = plain_path(app.path().app_data_dir()?);
     let media_dir = data_dir.join("generated");
     std::fs::create_dir_all(&media_dir)?;
 
@@ -137,9 +151,10 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
     } else {
         "server/node-bin/node"
     };
-    let node_bin = app
-        .path()
-        .resolve(node_rel, tauri::path::BaseDirectory::Resource)?;
+    let node_bin = plain_path(
+        app.path()
+            .resolve(node_rel, tauri::path::BaseDirectory::Resource)?,
+    );
 
     let mut cmd = app
         .shell()
@@ -152,6 +167,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
             server_entry.to_string_lossy().to_string(),
         ])
         .env("HELIOS_NODE_BIN", node_bin.to_string_lossy().to_string())
+        .env("HELIOS_APP_PID", std::process::id().to_string())
         .env("PATH", resolve_user_path())
         .env("PORT", port.to_string())
         .env("HOSTNAME", "127.0.0.1")
