@@ -12,6 +12,7 @@ const ALLOWED_ORIGINS = [
   "https://api.kie.ai",
   "https://replicate.delivery",
   "https://pbxt.replicate.delivery",
+  "https://tempfile.aiquickdraw.com",
 ].map((o) => o.replace(/\/$/, ""));
 
 function isAllowed(url: string): boolean {

@@ -12,7 +12,8 @@
     "desktop:check-version": "node scripts/desktop/check-version.mjs",
     "desktop:build": "node scripts/desktop/check-version.mjs && CI=true tauri build",
     "desktop:icon": "tauri icon",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -41,6 +42,7 @@
     "eslint-config-next": "16.2.3",
     "shadcn": "^4.7.0",
     "tailwindcss": "^4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   }
 }
