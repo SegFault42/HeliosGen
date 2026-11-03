@@ -1,0 +1,87 @@
+name: linux-desktop-build
+
+# Builds the Linux desktop bundles (deb / rpm / AppImage) that Tauri cannot
+# cross-compile from macOS or Windows. Runs on pushes to main, on PRs that
+# touch desktop code, and — when a version tag (vX.Y.Z) is pushed — attaches
+# the bundles to the GitHub Release, mirroring how the macOS .dmg is produced
+# locally by the maintainer. Verified by hand on Ubuntu 24.04 before this
+# workflow was added; see DESKTOP.md "Linux build".
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "src-tauri/**"
+      - "scripts/desktop/**"
+      - ".github/workflows/linux-desktop-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the pinned pnpm version from the packageManager field.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Same set that works by hand on Ubuntu 24.04 (note: the package is
+      # libwebkit2gtk-4.1-dev on 22.04/24.04, not webkit2gtk-4.1).
+      - name: Install Tauri v2 Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev \
+            libayatana-appindicator3-dev build-essential file libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      # check-version.mjs runs first inside the script; on a tag push it also
+      # validates GITHUB_REF_NAME against the version, like version-check.
+      - name: Build Linux desktop bundles
+        run: npm run desktop:build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heliosgen-linux-bundles
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  # On a vX.Y.Z tag: attach the freshly built Linux bundles to the release.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: heliosgen-linux-bundles
+          path: bundles
+
+      - name: Attach Linux bundles to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bundles/*
+          fail_on_unmatched_files: true

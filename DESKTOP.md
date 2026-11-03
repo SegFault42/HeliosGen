@@ -46,7 +46,7 @@ hosted/web deployment.
 | --- | --- |
 | **Rust** | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` (installed: rustc 1.98). |
 | **Node 22+** | Repo's `pnpm@9.15.9` needs Node ≥ 22.13. `nvm use 22 && corepack enable`. |
-| **Tauri system deps** | macOS: Xcode CLT. Linux: webkit2gtk + build-essential. See <https://v2.tauri.app/start/prerequisites/>. |
+| **Tauri system deps** | macOS: Xcode CLT. Linux: `sudo apt install -y libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev build-essential file libssl-dev` (Ubuntu 22.04/24.04 — the package is `libwebkit2gtk-4.1-dev`, not `webkit2gtk-4.1` as some older docs say). See <https://v2.tauri.app/start/prerequisites/>. |
 
 App icons are already generated in `src-tauri/icons/` from `src-tauri/icon-source.png`
 (a 1024² render of `public/HG.svg`). To regenerate after a logo change:
@@ -84,6 +84,28 @@ open "src-tauri/target/release/bundle/macos/HeliosGen.app"
 
 To just run the compiled binary without bundling:
 `./src-tauri/target/release/heliosgen-desktop`
+
+## Linux build (Ubuntu / Debian)
+
+Verified by hand on Ubuntu 24.04 from a clean clone; the same steps run in CI
+via `.github/workflows/linux-desktop-build.yml`, which also attaches the
+bundles to the GitHub Release when a `vX.Y.Z` tag is pushed — so Linux
+artifacts no longer depend on a machine that can build them locally (Tauri
+cannot cross-compile them from macOS).
+
+1. System deps (prerequisites table above), Rust stable, Node 22+
+   (`corepack enable` for the repo's pinned pnpm).
+2. `pnpm install --frozen-lockfile`
+3. `pnpm desktop:build` → `src-tauri/target/release/bundle/{deb,rpm,appimage}/`
+
+Produces `HeliosGen_<ver>_amd64.deb` (~105 MB), `HeliosGen-<ver>-1.x86_64.rpm`
+(~107 MB) and `HeliosGen_<ver>_amd64.AppImage` (~175 MB, fully
+self-contained — no install needed). The deb installs `heliosgen-desktop`
+into `/usr/bin`, the `helios-node` sidecar shim next to it, and the server +
+bundled Node runtime under `/usr/lib/HeliosGen/` (installed package name is
+`helios-gen`; runtime deps are just `libwebkit2gtk-4.1-0` + `libgtk-3-0`,
+standard on 22.04+). Runtime launch under Linux hasn't been exercised yet —
+worth a smoke test before a tagged release.
 
 ## Signed & notarized release build
 
@@ -156,6 +178,10 @@ plus every referenced image/video — portable and shareable as a file
 - [~] Phase 4 — signing/notarization wired up (config + entitlements +
       native-module signing in `build-server.mjs`); needs a Developer ID cert to
       actually run.
+- [x] Linux build — `.deb` / `.rpm` / `.AppImage` verified on Ubuntu 24.04
+      (Node 22, Rust stable, Tauri CLI 2.11); `linux-desktop-build` CI workflow
+      bundles on main/PR pushes and attaches artifacts to `vX.Y.Z` tag
+      releases. App runtime smoke test on Linux still pending.
 - [x] Update check — `app/api/update-check/route.ts` asks the GitHub Releases
       API (`repos/SegFault42/HeliosGen/releases/latest`, cached ~1 h) whether
       `tag_name` is newer than `NEXT_PUBLIC_APP_VERSION` (baked from
