@@ -335,11 +335,16 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           </div>
-          <div className="absolute bottom-2 left-0 right-0 flex justify-center px-2.5 opacity-0 group-hover:opacity-100 transition-opacity node-slide-reveal">
+          {/* `opacity-0` makes this a stacking context, which traps the button's
+              own `z-10` inside it and leaves the whole thing *under* the image
+              (z-index 1) — the button then never receives the click. `z-20` on
+              the wrapper lifts it above the image; pointer-events follow the
+              hover so the hidden strip stays click-through. */}
+          <div className="absolute bottom-2 left-0 right-0 z-20 flex justify-center px-2.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity node-slide-reveal">
             <button
               onMouseDown={(e) => e.stopPropagation()}
               onClick={() => { fileRef.current?.click(); }}
-              className="h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors relative z-10"
+              className="nodrag h-6 px-3 rounded-full bg-black/50 backdrop-blur-sm border border-white/10 text-[10px] text-[#CCCCCC] hover:text-white hover:bg-black/70 transition-colors relative z-10"
             >
               replace
             </button>
@@ -487,7 +492,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
           onDrop={onDrop}
           onDragOver={(e) => e.preventDefault()}
           onClick={() => { fileRef.current?.click(); }}
-          className="border border-dashed border-[#1E2840] hover:border-[#243050] rounded-md cursor-pointer transition-colors py-8 text-center"
+          className="nodrag border border-dashed border-[#1E2840] hover:border-[#243050] rounded-md cursor-pointer transition-colors py-8 text-center"
         >
           <p className="text-[11px] text-[#A0A0A0]">
             Drop image or{" "}
@@ -496,7 +501,7 @@ export default function ImageInputNode({ id, data, selected }: NodeProps<ImageIn
         </div>
         <input
           type="text"
-          className="node-input mt-2"
+          className="nodrag node-input mt-2"
           placeholder="or paste image URL…"
           onBlur={(e) => {
             const v = e.target.value.trim();
