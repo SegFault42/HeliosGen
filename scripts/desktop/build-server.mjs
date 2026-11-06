@@ -114,13 +114,19 @@ if (!existsSync(join(STANDALONE, "server.js"))) {
 }
 
 console.log("[desktop] staging server →", STAGE);
-cpSync(STANDALONE, STAGE, { recursive: true });
+// `dereference` — cpSync recreates symlinks as symlinks by default, and the
+// standalone output contains one (node_modules/sharp). Creating a symlink on
+// Windows needs elevation or Developer Mode, so the copy dies with
+// `EPERM: operation not permitted, symlink`. Copying the real files is what we
+// want anyway: the stage has to be self-contained to ship inside the bundle.
+cpSync(STANDALONE, STAGE, { recursive: true, dereference: true });
 rmSync(join(STAGE, "src-tauri"), { recursive: true, force: true }); // never nest ourselves
-cpSync(join(ROOT, ".next", "static"), join(STAGE, ".next", "static"), { recursive: true });
+cpSync(join(ROOT, ".next", "static"), join(STAGE, ".next", "static"), { recursive: true, dereference: true });
 copyFileSync(join(ROOT, "scripts", "desktop", "sidecar-guard.js"), join(STAGE, "sidecar-guard.js"));
 if (existsSync(join(ROOT, "public"))) {
   cpSync(join(ROOT, "public"), join(STAGE, "public"), {
     recursive: true,
+    dereference: true,
     filter: (src) => !src.includes(`${sep}public${sep}generated`), // runtime data, not an asset
   });
 }

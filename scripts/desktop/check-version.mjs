@@ -33,8 +33,10 @@ const SOURCES = [
   },
   {
     file: "src-tauri/Cargo.lock",
+    // `\r?\n` — a clone made on Windows with the default core.autocrlf=true has
+    // CRLF line endings, where a bare `\n` silently fails to match.
     read: (t) =>
-      t.match(/name = "heliosgen-desktop"\nversion = "([^"]+)"/)?.[1],
+      t.match(/name = "heliosgen-desktop"\r?\nversion = "([^"]+)"/)?.[1],
   },
 ];
 
@@ -55,7 +57,9 @@ const found = SOURCES.map(({ file, read }) => {
 });
 
 const canonical = found[0].version;
-let ok = Boolean(canonical);
+// Every source must have produced a version — a file that printed a `✗` above
+// must not then be signed off with "version OK".
+let ok = Boolean(canonical) && found.every(({ version }) => Boolean(version));
 
 for (const { file, version } of found) {
   if (version && version !== canonical) {
