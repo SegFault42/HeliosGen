@@ -5959,26 +5959,25 @@ function GalleryCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Play/pause observer: only play videos that are actually visible
+  // Videos play only while hovered. Autoplaying every visible card downloaded
+  // and decoded a whole page of clips at once (72 MB for 20 cards); at rest a
+  // card now holds just its first frame. `playing` follows the element's own
+  // playing/pause events.
   useEffect(() => {
     if (!isVideo) return;
-    const el = cardRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          videoRef.current?.play().then(() => setPlaying(true)).catch(() => {});
-        } else {
-          videoRef.current?.pause();
-          setPlaying(false);
-        }
-      },
-      { root: scrollContainer?.current ?? null, rootMargin: "0px", threshold: 0.1 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isVideo]);
+    const v = videoRef.current;
+    if (!v) return;
+    if (!isHovered) {
+      v.pause();
+      if (v.currentTime > 0) v.currentTime = 0; // back to the frame the card rests on
+      return;
+    }
+    v.play().catch(() => {
+      // Sound without a prior click on the page is refused: play it muted instead.
+      v.muted = true;
+      v.play().catch(() => {});
+    });
+  }, [isHovered, isVideo]);
 
   const storedRatio = (() => {
     const ar = item.aspect_ratio;
@@ -6075,11 +6074,12 @@ function GalleryCard({
             ref={videoRef}
             src={shouldLoad ? item.url : undefined}
             muted={videoMuted || !isHovered}
-            autoPlay
             loop
             playsInline
             preload="metadata"
             draggable={false}
+            onPlaying={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
             onLoadedData={() => {
               setImgLoaded(true);
               loadedImageUrls.add(item.url);
@@ -6093,7 +6093,7 @@ function GalleryCard({
           />
           {!playing && (
             <div className="gallery-play-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--text-1)" stroke="none"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--text-1)" stroke="none"><polygon points="5 3 19 12 5 21 5 3" /></svg>
             </div>
           )}
         </>
@@ -7235,15 +7235,14 @@ const GALLERY_CSS = `
     display: flex; flex-direction: column; justify-content: flex-end; padding: 10px;
   }
   .gallery-item:hover .gallery-overlay { opacity: 1; }
+  /* Resting badge that marks a card as a video; it leaves while the clip plays. */
   .gallery-play-icon {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 36px; height: 36px; border-radius: 50%;
+    position: absolute; bottom: 8px; left: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
     background: var(--bg-0);
     display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 180ms ease; pointer-events: none;
+    pointer-events: none;
   }
-  .gallery-item:hover .gallery-play-icon { opacity: 1; }
   .gallery-checkbox {
     position: absolute;
     top: 8px;
