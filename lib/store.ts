@@ -125,9 +125,14 @@ function syncSpace(
   nodes: Node<NodeData>[],
   edges: Edge[],
   nodeCounters: Record<string, number>,
+  /** false = mirror the live canvas into the space without marking it edited
+   *  (`updatedAt` is what useSpaceSync compares to decide whether to save). */
+  touch = true,
 ): Space[] {
   return spaces.map((sp) =>
-    sp.id === activeId ? { ...sp, nodes, edges, nodeCounters, updatedAt: Date.now() } : sp
+    sp.id === activeId
+      ? { ...sp, nodes, edges, nodeCounters, ...(touch ? { updatedAt: Date.now() } : {}) }
+      : sp
   );
 }
 
@@ -385,11 +390,18 @@ export const useWorkflowStore = create<WorkflowStore>()(
               };
             }
 
+            // Selecting a node, or React Flow measuring nodes as a canvas mounts
+            // (a "dimensions" change without `resizing`), is not an edit. Counting
+            // those re-saved the whole space every time it was merely opened.
+            const edited = changes.some(
+              (c) => c.type !== "select" && !(c.type === "dimensions" && c.resizing === undefined),
+            );
+
             return {
               nodes,
               edges,
               lastNodeSize,
-              spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, edges, s.nodeCounters),
+              spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, edges, s.nodeCounters, edited),
             };
           });
           // Persist discrete edits (node removed, or a manual resize finished)
@@ -537,7 +549,14 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         updateNodeData: (id, data) =>
           set((s) => {
-            const nodes = s.nodes.map((n) =>
+            // Effects re-assert values a node already holds (ratio probes, status
+            // resets). Rebuilding the node for those re-rendered it and re-saved
+            // the space for nothing, so identical writes leave `nodes` untouched.
+            const current = s.nodes.find((n) => n.id === id);
+            const unchanged = !current || Object.keys(data).every((k) =>
+              Object.is((current.data as Record<string, unknown>)[k], (data as Record<string, unknown>)[k])
+            );
+            const nodes = unchanged ? s.nodes : s.nodes.map((n) =>
               n.id === id ? { ...n, data: { ...n.data, ...data } } : n
             );
 
@@ -552,6 +571,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
               if (pick) nodeDefaults = { ...nodeDefaults, videoGeneratorNode: { ...nodeDefaults.videoGeneratorNode, ...pick } };
             }
 
+            if (unchanged) return nodeDefaults === s.nodeDefaults ? {} : { nodeDefaults };
             return {
               nodes,
               nodeDefaults,

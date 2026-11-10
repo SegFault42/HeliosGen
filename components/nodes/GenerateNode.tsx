@@ -379,7 +379,14 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
     let triedOriginal = false;
     const img = new window.Image();
     img.onload = () => {
-      if (!cancelled) updateNodeData(id, { imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}` });
+      if (cancelled || !img.naturalWidth || !img.naturalHeight) return;
+      // A stored ratio that already matches (measured earlier, possibly from the
+      // full-size original) stays as is: rewriting it would mark the space edited.
+      const stored = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data.imageNaturalRatio as string | undefined;
+      const [sw, sh] = (stored ?? "").split("/").map(Number);
+      const next = img.naturalWidth / img.naturalHeight;
+      if (sw > 0 && sh > 0 && Math.abs(sw / sh - next) / next < 0.01) return;
+      updateNodeData(id, { imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}` });
     };
     img.onerror = () => {
       if (cancelled || triedOriginal) return;

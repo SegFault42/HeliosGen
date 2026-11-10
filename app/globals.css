@@ -121,7 +121,7 @@
 }
 
 /* ---------- Base ---------- */
-html { background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); font-size: var(--fs-4); line-height: var(--lh-ui); -webkit-font-smoothing: antialiased; }
+html { color-scheme: dark; background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); font-size: var(--fs-4); line-height: var(--lh-ui); -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .tabular { font-variant-numeric: tabular-nums; }
