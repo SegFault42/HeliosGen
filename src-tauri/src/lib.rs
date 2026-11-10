@@ -77,6 +77,25 @@ fn resolve_user_path() -> String {
     parts.join(":")
 }
 
+/// Same problem as `resolve_user_path`, for a single scalar var: a GUI-launched
+/// app doesn't source `.zshrc`, so overrides like `CODEX_IMAGEGEN_MODEL` set
+/// there never reach the sidecar unless we go fetch them from the login shell.
+fn resolve_user_env_var(name: &str) -> Option<String> {
+    if let Ok(v) = std::env::var(name) {
+        if !v.is_empty() {
+            return Some(v);
+        }
+    }
+    let sh = std::env::var("SHELL").ok()?;
+    std::process::Command::new(sh)
+        .args(["-lic", &format!("printf %s \"${name}\"")])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Block until the sidecar is accepting connections (or give up after `timeout`).
 fn wait_for_server(port: u16, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
@@ -122,7 +141,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .path()
         .resolve(node_rel, tauri::path::BaseDirectory::Resource)?;
 
-    let (mut rx, child) = app
+    let mut cmd = app
         .shell()
         .sidecar("helios-node")?
         .current_dir(server_dir)
@@ -138,8 +157,16 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Er
         .env("HOSTNAME", "127.0.0.1")
         .env("NODE_ENV", "production")
         .env("HELIOS_DATA_DIR", data_dir.to_string_lossy().to_string())
-        .env("HELIOS_MEDIA_DIR", media_dir.to_string_lossy().to_string())
-        .spawn()?;
+        .env("HELIOS_MEDIA_DIR", media_dir.to_string_lossy().to_string());
+
+    // codex-imagegen is spawned from inside the Next.js server with the
+    // sidecar's env, so a .zshrc override like CODEX_IMAGEGEN_MODEL has to be
+    // forwarded explicitly — see resolve_user_env_var.
+    if let Some(model) = resolve_user_env_var("CODEX_IMAGEGEN_MODEL") {
+        cmd = cmd.env("CODEX_IMAGEGEN_MODEL", model);
+    }
+
+    let (mut rx, child) = cmd.spawn()?;
 
     *app.state::<Sidecar>().0.lock().unwrap() = Some(child);
 

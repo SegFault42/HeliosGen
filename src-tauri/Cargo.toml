@@ -1,6 +1,6 @@
 [package]
 name = "heliosgen-desktop"
-version = "1.2.0"
+version = "1.2.1"
 description = "HeliosGen desktop app"
 authors = ["HeliosGen"]
 edition = "2021"
