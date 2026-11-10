@@ -81,9 +81,10 @@ test("the payload carries affirmVideoRights only after the user declared it for 
 // ── Omni Flash 1.2 next to 1.1 ───────────────────────────────────────────────
 const { isOmniFlash } = require("../lib/flowAdapter.ts");
 
-// Copy of the engine's model matching (google-flow-mcp, capabilities.ts): exact
-// normalized name first, else the single picker option holding every requested word.
-const flowId = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+// Copy of the engine's model matching (google-flow-mcp, capabilities.ts): the retirement
+// badge is dropped from a name, then exact normalized name first, else the single picker
+// option holding every requested word.
+const flowId = (s) => s.toLowerCase().replace(/leaving +[a-z]{3,9}[.]? +[0-9]{1,2}/g, " ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 function matchFlowModel(labels, requested) {
   const options = labels.map((label) => ({ label, id: flowId(label) }));
   const id = flowId(requested);
@@ -94,18 +95,26 @@ function matchFlowModel(labels, requested) {
   return candidates.length === 1 ? candidates[0].label : null;
 }
 
-test("with 1.1 and 1.2 both in Flow's picker, each model resolves to its own version", () => {
+// Flow's model pickers as read from a live account on 2026-11-10.
+const FLOW_VIDEO = ["Omni 1.2 Flash", "Omni 1.1 Flash Leaving Dec 5", "Veo 3.1 - Lite", "Veo 3.1 - Fast Leaving Dec 5", "Veo 3.1 - Quality Leaving Dec 5"];
+const FLOW_IMAGE = ["Nano Banana Pro", "Nano Banana 2 Lite", "Nano Banana 2.1"];
+
+test("each Omni Flash version resolves to its own entry in Flow's picker", () => {
   const v11 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash");
   const v12 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash-1-2");
-  assert.equal(v12.apiInput.useFlow, true);
-  assert.notEqual(v11.name, v12.name);
-  const picker = ["Omni 1.1 Flash", "Omni 1.2 Flash", "Veo 3.1 - Fast", "Veo 3.1 - Quality"];
-  assert.equal(matchFlowModel(picker, v11.apiInput.flowModel), "Omni 1.1 Flash");
-  assert.equal(matchFlowModel(picker, v12.apiInput.flowModel), "Omni 1.2 Flash");
-  // why 1.1 can no longer ask for a bare "Omni Flash": two versions make it ambiguous
-  assert.equal(matchFlowModel(picker, "Omni Flash"), null);
-  // an account that has not received 1.2 yet fails the request instead of using 1.1
-  assert.equal(matchFlowModel(["Omni 1.1 Flash", "Veo 3.1 - Fast"], v12.apiInput.flowModel), null);
+  assert.equal(matchFlowModel(FLOW_VIDEO, v11.apiInput.flowModel), "Omni 1.1 Flash Leaving Dec 5");
+  assert.equal(matchFlowModel(FLOW_VIDEO, v12.apiInput.flowModel), "Omni 1.2 Flash");
+  // why neither can ask for a bare "Omni Flash": two versions make it ambiguous
+  assert.equal(matchFlowModel(FLOW_VIDEO, "Omni Flash"), null);
+});
+
+test("every Flow model ANVIL offers exists in Flow's picker", () => {
+  const { IMAGE_MODELS } = require("../lib/modelConfig.ts");
+  for (const [models, picker] of [[VIDEO_MODELS, FLOW_VIDEO], [IMAGE_MODELS, FLOW_IMAGE]]) {
+    for (const m of models.filter((x) => x.apiInput.useFlow)) {
+      assert.notEqual(matchFlowModel(picker, m.apiInput.flowModel), null, m.id + " asks for " + m.apiInput.flowModel);
+    }
+  }
 });
 
 test("Omni Flash 1.2 behaves like 1.1: video edit, rights declaration, fixed length", () => {

@@ -156,7 +156,7 @@ export const IMAGE_MODELS: ImageModel[] = [
   {
     id: "flow-nano-banana-2",
     apiId: "flow-nano-banana-2",
-    name: "Nano Banana 2 (Flow)",
+    name: "Nano Banana 2.1 (Flow)",
     provider: "Google Flow",
     ratios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
     supportsImages: true,
@@ -166,7 +166,8 @@ export const IMAGE_MODELS: ImageModel[] = [
       aspectRatioKey: "aspect_ratio",
       promptMaxLength: 20000,
       useFlow: true,
-      flowModel: "Nano Banana 2",
+      // Flow replaced "Nano Banana 2" with 2.1 and 2 Lite; the old name matches both and is refused.
+      flowModel: "Nano Banana 2.1",
     },
   },
   {
