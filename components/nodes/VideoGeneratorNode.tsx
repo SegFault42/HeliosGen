@@ -368,13 +368,15 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
     }
   }, [id, updateNodeData]);
 
-  // Play current, pause all others
+  // Only the current generation plays, and only while the node is hovered;
+  // at rest it holds its frame. (Every video node on a canvas used to loop at once.)
+  const currentGenReady = typeof generations[currentGenIdx] === "string";
   useEffect(() => {
     videoRefs.current.forEach((v, i) => {
-      if (i === currentGenIdx) v.play().catch(() => { });
+      if (i === currentGenIdx && hovering && !pickerOpen) v.play().catch(() => { });
       else v.pause();
     });
-  }, [currentGenIdx]);
+  }, [currentGenIdx, hovering, pickerOpen, currentGenReady]);
 
   const handleVideoMeta = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const v = e.currentTarget;

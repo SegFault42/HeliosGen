@@ -435,8 +435,9 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
     setFileOver(false);
   }, []);
 
-  const onHoverPlay  = useCallback(() => setHovering(true), []);
-  const onHoverPause = useCallback(() => setHovering(false), []);
+  const hoveringRef = useRef(false);
+  const onHoverPlay  = useCallback(() => { hoveringRef.current = true;  setHovering(true); }, []);
+  const onHoverPause = useCallback(() => { hoveringRef.current = false; setHovering(false); }, []);
 
   // ── Trim ─────────────────────────────────────────────────────────────────────
 
@@ -612,6 +613,18 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
     else videoRef.current?.play().catch(() => {});
   }, [pickerOpen, viewMode]);
 
+  // The clip plays only while the node is hovered; at rest it holds its frame.
+  // (Every video node on a canvas used to loop at once.) The trim editor drives
+  // playback itself, so hover leaves it alone. Play requests made elsewhere
+  // while the pointer is away are turned back by the element's onPlay guard.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || trimOpenRef.current) return;
+    if (!hovering) { v.pause(); return; }
+    if (!pickerOpen && viewMode !== "frame" && !showFramePreview) v.play().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovering]);
+
   // Auto-open trimmer when a connected model requires a shorter video
   useEffect(() => {
     const maxDur = data.triggerTrimMaxDuration as number | undefined;
@@ -744,12 +757,14 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
               objectFit: "fill",
               animation: (isUploading || isExtractingFrame) ? "upload-pulse 1.6s ease-in-out infinite" : undefined,
             }}
-            autoPlay
             muted={trimOpen ? false : (muted || !hovering)}
             playsInline
             preload="metadata"
             loop
-            onPlay={() => setIsPlaying(true)}
+            onPlay={(e) => {
+              if (!hoveringRef.current && !trimOpenRef.current) { e.currentTarget.pause(); return; }
+              setIsPlaying(true);
+            }}
             onPause={() => setIsPlaying(false)}
             onLoadedMetadata={(e) => {
               const v = e.currentTarget;
@@ -760,9 +775,11 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
               });
               setVideoDuration(dur);
               videoDurationRef.current = dur;
-              // Seek to trim start so autoPlay begins within the selection
+              // Start within the trim selection; otherwise nudge off zero so the
+              // resting node paints its first frame instead of a blank surface.
               const tStart = committedTrimStartRef.current;
               if (tStart !== undefined && tStart > 0) v.currentTime = tStart;
+              else if (!v.currentTime) v.currentTime = 0.001;
             }}
             onTimeUpdate={(e) => {
               const v = e.currentTarget;
@@ -790,7 +807,6 @@ function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
             <video
               ref={topVideoRef}
               src={topVideoUrl}
-              autoPlay
               muted
               playsInline
               loop

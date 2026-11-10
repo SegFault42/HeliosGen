@@ -12,6 +12,7 @@ import { Handle, Position, NodeProps, Node, useViewport } from "@xyflow/react";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { IMAGE_MODELS, VIDEO_MODELS, DEFAULT_VIDEO_MODEL } from "@/lib/modelConfig";
 import { thumbSrc } from "@/lib/galleryUtils";
+import { hoverVideoHandlers } from "@/lib/hoverVideo";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { detectTextMode } from "@/lib/textFormat";
 import CornerResizer from "./CornerResizer";
@@ -935,6 +936,7 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                 <button
                   key={n.id}
                   onClick={() => insertMention(label)}
+                  {...hoverVideoHandlers}
                   className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors ${active ? "bg-[var(--bg-0)]" : "hover:bg-[var(--bg-1)]"
                     }`}
                 >
@@ -946,10 +948,10 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                       // eslint-disable-next-line jsx-a11y/media-has-caption
                       <video
                         src={videoUrl}
-                        autoPlay
                         loop
                         muted
                         playsInline
+                        preload="metadata"
                         className="w-full h-full"
                         style={{ objectFit: "cover" }}
                       />
@@ -1078,11 +1080,11 @@ function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                     : n.data.videoUrl as string | undefined;
                   const active = idx === expandSelectedIdx;
                   return (
-                    <button key={n.id} onClick={() => insertMentionModal(label)}
+                    <button key={n.id} onClick={() => insertMentionModal(label)} {...hoverVideoHandlers}
                       className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors ${active ? "bg-[var(--bg-0)]" : "hover:bg-[var(--bg-1)]"}`}>
                       <div className="w-5 h-5 rounded bg-[var(--bg-0)] overflow-hidden shrink-0 flex items-center justify-center">
                         {imageUrl ? <img src={thumbSrc(imageUrl, 20)} alt="" className="w-full h-full object-cover" /> :
-                          videoUrl ? <video src={videoUrl} autoPlay loop muted playsInline className="w-full h-full" style={{ objectFit: "cover" }} /> :
+                          videoUrl ? <video src={videoUrl} loop muted playsInline preload="metadata" className="w-full h-full" style={{ objectFit: "cover" }} /> :
                             <EmptyThumb />}
                       </div>
                       <span className={`text-[12px] font-medium truncate ${active ? "text-[var(--accent)]" : "text-[var(--text-2)]"}`}>@{label}</span>
