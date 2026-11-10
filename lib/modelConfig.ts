@@ -738,7 +738,7 @@ export const VIDEO_MODELS: VideoModel[] = [
       durationMin: 0,
       durationMax: 0,
       useFlow: true,
-      flowModel: "Veo 3.1 - Fast",
+      flowModel: "Veo 3.1 - Lite", // Fast leaves Flow on Dec 5
       isInterpolation: true,
     },
   },
