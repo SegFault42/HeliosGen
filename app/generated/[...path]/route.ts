@@ -11,6 +11,7 @@ import { createReadStream, existsSync, statSync } from "fs";
 import { join, normalize, extname } from "path";
 import { Readable } from "stream";
 import { MEDIA_DIR } from "@/lib/guest/paths";
+import { parseByteRange } from "@/lib/byteRange";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
   const { path: segments } = await params;
@@ -43,13 +44,32 @@ export async function GET(
 
   const { size } = statSync(filePath);
   const type = CONTENT_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
-  const stream = Readable.toWeb(createReadStream(filePath)) as unknown as ReadableStream;
+  const headers = {
+    "Content-Type": type,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+  };
 
-  return new NextResponse(stream, {
-    headers: {
-      "Content-Type": type,
-      "Content-Length": String(size),
-      "Cache-Control": "public, max-age=31536000, immutable",
-    },
-  });
+  // Byte ranges: a <video> can only seek when the server answers 206. Under
+  // `next start` this route also serves every file written after boot (Next
+  // lists public/ once at startup), so without ranges a freshly generated
+  // video could not be scrubbed until the server restarted.
+  const range = parseByteRange(req.headers.get("range"), size);
+  if (range === "unsatisfiable") {
+    return new NextResponse(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  }
+  if (range) {
+    const part = Readable.toWeb(createReadStream(filePath, range)) as unknown as ReadableStream;
+    return new NextResponse(part, {
+      status: 206,
+      headers: {
+        ...headers,
+        "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
+        "Content-Length": String(range.end - range.start + 1),
+      },
+    });
+  }
+
+  const stream = Readable.toWeb(createReadStream(filePath)) as unknown as ReadableStream;
+  return new NextResponse(stream, { headers: { ...headers, "Content-Length": String(size) } });
 }
