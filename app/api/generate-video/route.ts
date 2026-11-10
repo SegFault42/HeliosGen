@@ -124,6 +124,8 @@ export async function POST(req: NextRequest) {
       startFrame: rawStartFrame,
       endFrame: rawEndFrame,
       referenceImages: rawRefImages,
+      referenceVideos: rawRefVideoUrls.length ? rawRefVideoUrls : undefined,
+      affirmVideoRights: body.affirmVideoRights === true,
       upscale: flowUpscale(rawResolution, cfg),
       readThis: typeof body.readThis === "boolean" ? body.readThis : undefined,
     });
@@ -140,6 +142,7 @@ export async function POST(req: NextRequest) {
         ...(typeof rawStartFrame === "string" ? [rawStartFrame] : []),
         ...(typeof rawEndFrame === "string" ? [rawEndFrame] : []),
         ...(Array.isArray(rawRefImages) ? (rawRefImages as string[]) : []),
+        ...rawRefVideoUrls,
       ],
     });
     resumeFlowJob(flowRes.taskId);

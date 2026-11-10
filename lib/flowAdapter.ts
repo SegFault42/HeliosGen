@@ -155,12 +155,24 @@ export interface SubmitFlowVideoParams {
   startFrame?: string;
   endFrame?: string;
   referenceImages?: string[];
+  /** Clip for Omni Flash to edit (character/object swap). Max one: Flow edits a single source. */
+  referenceVideos?: string[];
+  /** The account owner declares rights over the uploaded video (Flow asks before using it). */
+  affirmVideoRights?: boolean;
   durationSeconds?: number;
   outputs?: number;
   upscale?: "none" | "1080p";
   accountId?: string;
   /** Force (true) or disable (false) the "read this" screenshot bypass. See shouldUseReadThis. */
   readThis?: boolean;
+}
+
+/** Flow's agent reads the first attachment as the clip to edit, so the source video
+ *  goes first, then frames, then images. Duplicates are dropped. */
+export function orderFlowReferences(videos: string[], frames: string[], images: string[]): string[] {
+  const out: string[] = [];
+  for (const file of [...videos, ...frames, ...images]) if (!out.includes(file)) out.push(file);
+  return out;
 }
 
 export interface SubmitFlowImageParams {
@@ -205,15 +217,20 @@ export function stripKieImageTags(prompt: string): string {
 
 export async function submitFlowVideo(params: SubmitFlowVideoParams) {
   // References first: a bad frame fails fast, before the browser engine is touched.
-  const referenceFiles: string[] = [];
+  const sourceVideos = params.referenceVideos ?? [];
+  if (sourceVideos.length > 1) throw new Error("Omni Flash edits one source video at a time; connect a single reference video.");
+  const videoAbs: string[] = [];
+  for (const ref of sourceVideos) videoAbs.push(await referenceFile(ref, "Reference video"));
   const startAbs = params.startFrame ? await referenceFile(params.startFrame, "Start frame") : null;
   const endAbs = params.endFrame ? await referenceFile(params.endFrame, "End frame") : null;
-  if (startAbs) referenceFiles.push(startAbs);
-  if (endAbs) referenceFiles.push(endAbs);
-  for (const ref of params.referenceImages ?? []) {
-    const abs = await referenceFile(ref, "Reference image");
-    if (!referenceFiles.includes(abs)) referenceFiles.push(abs);
-  }
+  const imageAbs: string[] = [];
+  for (const ref of params.referenceImages ?? []) imageAbs.push(await referenceFile(ref, "Reference image"));
+  const referenceFiles = orderFlowReferences(
+    videoAbs,
+    [startAbs, endAbs].filter((f): f is string => Boolean(f)),
+    imageAbs,
+  );
+  const editingVideo = videoAbs.length > 0;
 
   const { flow, store } = await getFlowEngine();
   await store.initialize();
@@ -234,7 +251,8 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
   const aspectRatio = params.aspectRatio === "16:9" ? "16:9" : "9:16";
 
   let prompt = params.prompt;
-  if (shouldUseReadThis(model, params.prompt, params.readThis, Boolean(startAbs || endAbs))) {
+  // A video edit names its attachments in the prompt; a prompt screenshot would be read as the replacement look.
+  if (shouldUseReadThis(model, params.prompt, params.readThis, Boolean(startAbs || endAbs || editingVideo))) {
     const promptImagePath = await renderPromptImage(params.prompt, outputDirectory);
     referenceFiles.push(promptImagePath);
     prompt = "read this";
@@ -253,6 +271,7 @@ export async function submitFlowVideo(params: SubmitFlowVideoParams) {
     durationSeconds: params.durationSeconds,
     outputs: params.outputs ?? 1,
     referenceFiles,
+    affirmVideoRights: params.affirmVideoRights === true,
     upscale: params.upscale ?? "none",
     outputDirectory,
     download: true,

@@ -560,7 +560,10 @@ export const VIDEO_MODELS: VideoModel[] = [
     durations: [10], // Flow currently offers a fixed 10-second Omni Flash clip.
     defaultDuration: 10,
     defaultRatio: "9:16",
-    handles: ["prompt", "startFrame"],
+    // referenceVideo = clip to edit (character/object swap, max 1); resource = replacement look.
+    handles: ["prompt", "startFrame", "resource", "referenceVideo"],
+    maxResources: 3,
+    maxReferenceVideos: 1,
     sound: false, // Flow path ignores sound
     resolutions: ["720p", "1080p"],
     defaultResolution: "720p",
