@@ -664,19 +664,10 @@ function GalleryInner() {
   });
   const prePendingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingGensRef = useRef(pendingGens);
+  // Older builds copied the empty-state samples into Cache Storage on every
+  // visit. With no service worker nothing ever read them back; drop the copy.
   useEffect(() => {
-    if (!("caches" in window)) return;
-    const CACHE_NAME = "hg-empty-state-v1";
-    // Only cache same-origin assets — cross-origin video URLs require CORS headers
-    // on the remote server which aren't configured, causing fetch errors.
-    const ASSETS = ["/1.webp", "/2.webp", "/3.webp", "/4.webp"];
-    caches.open(CACHE_NAME).then(cache => {
-      ASSETS.forEach(url => {
-        cache.match(url).then(hit => {
-          if (!hit) cache.add(url).catch(() => {});
-        });
-      });
-    });
+    if ("caches" in window) caches.delete("hg-empty-state-v1").catch(() => {});
   }, []);
 
   useEffect(() => { pendingGensRef.current = pendingGens; }, [pendingGens]);
@@ -982,11 +973,16 @@ function GalleryInner() {
 
   // ── Load items ────────────────────────────────────────────────────────────
 
+  const inflightLoadsRef = useRef<Set<string>>(new Set());
   const loadItems = useCallback(async (currentTab: Tab, page: number, replace = false) => {
     // Apply cache / loading state synchronously before any await so the UI
     // updates in the very next render rather than after the token promise.
     const apiSource = sourceFilterRef.current === "uploaded" ? "upload" : "generation";
     const cacheKey = `${currentTab}-${apiSource}`;
+    // Several mount effects ask for the same page at once; one request serves them all.
+    const inflightKey = `${cacheKey}-${page}`;
+    if (inflightLoadsRef.current.has(inflightKey)) return;
+    inflightLoadsRef.current.add(inflightKey);
     if (replace) {
       const cached = galleryCache.get(cacheKey);
       if (cached) { setItems(cached.items); setHasMore(cached.hasMore); }
@@ -996,7 +992,7 @@ function GalleryInner() {
       setLoadingMore(true);
     }
     const token = await getToken();
-    if (!token) { setLoading(false); setLoadingMore(false); return; }
+    if (!token) { inflightLoadsRef.current.delete(inflightKey); setLoading(false); setLoadingMore(false); return; }
     try {
       const genType = currentTab === "videos" ? "video" : "image";
       const res = await fetch(`/api/gallery?type=${genType}&page=${page}&source=${apiSource}`, {
@@ -1020,6 +1016,7 @@ function GalleryInner() {
         useFolderStore.getState().setGalleryCount(currentTab, total);
       }
     } finally {
+      inflightLoadsRef.current.delete(inflightKey);
       setLoading(false);
       setLoadingMore(false);
       loadingMoreRef.current = false;

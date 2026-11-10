@@ -195,12 +195,9 @@ const CSS = `
 
 // ── Template card ─────────────────────────────────────────────────────────────
 
-const TEMPLATE_PREVIEWS = [
-  "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/workflow-template/1.png",
-  "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/workflow-template/2.png",
-  "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/workflow-template/3.png",
-  "https://pub-73a59b956f1c4a7db2934522c13d8027.r2.dev/workflow-template/4.png",
-];
+// Local sample art. These used to point at the upstream project's public R2
+// bucket, which now answers 401, so every template card showed four broken images.
+const TEMPLATE_PREVIEWS = ["/1.webp", "/2.webp", "/3.webp", "/4.webp"];
 
 // No dedicated preview render exists yet for this template; reuse the same
 // avatar stills until a real thumbnail set is captured.
@@ -295,7 +292,11 @@ function collectMedia(space: Space): MediaItem[] {
 // ── 4-cell thumbnail mosaic ───────────────────────────────────────────────────
 
 function ThumbnailMosaic({ space }: { space: Space }) {
-  const media = collectMedia(space).slice(0, 4);
+  // URLs that failed to load (e.g. sample media whose host is gone) fall back to
+  // the empty-cell placeholder instead of the browser's broken-image icon.
+  const [dead, setDead] = useState<ReadonlySet<string>>(new Set());
+  const markDead = (url: string) => setDead((prev) => new Set(prev).add(url));
+  const media = collectMedia(space).filter((m) => !dead.has(m.url)).slice(0, 4);
   return (
     <div className="wsd-thumbs">
       {Array.from({ length: 4 }).map((_, i) => {
@@ -307,10 +308,11 @@ function ThumbnailMosaic({ space }: { space: Space }) {
                 <video
                   src={item.url}
                   muted loop playsInline autoPlay preload="metadata"
+                  onError={() => markDead(item.url)}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
               ) : (
-                <NextImage src={item.url} alt="" fill sizes="160px" style={{ objectFit: "cover" }} />
+                <NextImage src={item.url} alt="" fill sizes="160px" style={{ objectFit: "cover" }} onError={() => markDead(item.url)} />
               )
             ) : (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"

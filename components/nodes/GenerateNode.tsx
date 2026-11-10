@@ -4,6 +4,7 @@ import { useNodeEdges, useNeighborNodes } from "@/lib/nodeSelectors";
 import { useCallback, useEffect, useRef, useState, Fragment } from "react";
 import NodeLabel, { requestRename } from "@/components/nodes/NodeLabel";
 import { resolveMentions } from "@/lib/mentions";
+import { thumbSrc } from "@/lib/galleryUtils";
 import { useAnimatedPopup } from "@/lib/useAnimatedPopup";
 import { createPortal } from "react-dom";
 import GenerateButton from "@/components/nodes/GenerateButton";
@@ -367,16 +368,27 @@ function GenerateNode({ id, data, selected }: NodeProps<GenerateNodeType>) {
     }
   }, [id, updateNodeData, generations]);
 
-  // Probe original URL for true pixel dimensions (Next.js Image serves a reduced copy)
+  // Probe the image for its aspect ratio. A downsized copy has the same ratio
+  // (to within a pixel) and is a few KB; probing the original pulled 2-3 MB per
+  // generator node every time a canvas opened. Sources the optimizer refuses
+  // (remote hosts outside the allow-list) fall back to the original once.
   useEffect(() => {
     const url = data.imageUrl as string | undefined;
     if (!url) return;
     let cancelled = false;
+    let triedOriginal = false;
     const img = new window.Image();
     img.onload = () => {
       if (!cancelled) updateNodeData(id, { imageNaturalRatio: `${img.naturalWidth} / ${img.naturalHeight}` });
     };
-    img.src = url;
+    img.onerror = () => {
+      if (cancelled || triedOriginal) return;
+      triedOriginal = true;
+      img.src = url;
+    };
+    const small = thumbSrc(url, 128);
+    triedOriginal = small === url;
+    img.src = small;
     return () => { cancelled = true; };
   }, [data.imageUrl, id, updateNodeData]);
 

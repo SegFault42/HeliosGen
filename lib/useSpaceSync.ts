@@ -16,6 +16,9 @@ export function useSpaceSync() {
 
   const [status,       setStatus]       = useState<SyncStatus>("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  // True once the initial DB load has answered (success or not). Until then the
+  // store may only hold what this browser's localStorage knew about.
+  const [dbLoaded, setDbLoaded] = useState(false);
   // Block all writes until localStorage has fully rehydrated. In Zustand v5,
   // persist rehydration is async — if we save before it completes, we'd write
   // the default empty state and delete all real spaces.
@@ -68,6 +71,8 @@ export function useSpaceSync() {
         setStatus("synced");
       } catch {
         /* keep local state */
+      } finally {
+        setDbLoaded(true);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,7 +177,7 @@ export function useSpaceSync() {
     };
   }, [hydrated, save]);
 
-  return { status, lastSyncedAt, syncNow };
+  return { status, lastSyncedAt, syncNow, dbLoaded };
 }
 
 // ── Time-ago helper ───────────────────────────────────────────────────────────
