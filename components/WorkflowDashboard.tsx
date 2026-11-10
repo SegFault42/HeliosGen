@@ -7,6 +7,7 @@ import { useWorkflowStore, Space } from "@/lib/store";
 import { makeUGCTemplate, makeSplitReactionTemplate } from "@/lib/templates";
 import { timeAgo } from "@/lib/useSpaceSync";
 import { WorkflowHero } from "@/components/WorkflowHero";
+import { hoverVideoHandlers } from "@/lib/hoverVideo";
 import DotCanvasBackground from "@/components/ui/DotCanvasBackground";
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
@@ -307,7 +308,7 @@ function ThumbnailMosaic({ space }: { space: Space }) {
               item.type === "video" ? (
                 <video
                   src={item.url}
-                  muted loop playsInline autoPlay preload="metadata"
+                  muted loop playsInline preload="metadata"
                   onError={() => markDead(item.url)}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
@@ -512,6 +513,7 @@ function SpaceCard({ space, onOpen }: { space: Space; onOpen: () => void }) {
   return (
     <article
       className="wsd-card"
+      {...hoverVideoHandlers}
       onClick={() => { if (!renaming && !menuOpen) onOpen(); }}
     >
       {/* Hover action buttons */}
