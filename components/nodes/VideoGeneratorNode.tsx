@@ -13,6 +13,7 @@ import NodeActionBar from "./NodeActionBar";
 import { useWorkflowStore, NodeData } from "@/lib/store";
 import { resolveInputs, resolveImageUrl } from "@/lib/executor";
 import { buildVideoPayload } from "@/lib/workflow-runtime/generationPayloads";
+import { needsVideoRights, videoRightsAffirmed, videoRightsKey } from "@/lib/videoRights";
 import { VIDEO_JOB_DEADLINE_MS, needsKieKey, showsCreditsRefunded, findLocalFrameUrl, isStaleSubmit, SUBMIT_STALE_MS, dropNullGenerations } from "@/lib/videoNodeGuards";
 import { useReadOnly } from "@/lib/readOnlyContext";
 import { ShieldBan } from "lucide-react";
@@ -773,6 +774,11 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
   const textNode = textEdge ? nodes.find((n) => n.id === textEdge.source) : undefined;
   const hasResource = edges.some((e) => e.target === id && e.targetHandle === "resource");
 
+  // Flow edits an uploaded clip only after the user declares the rights to it.
+  const refVideoUrls = resolveInputs(id, nodes as Node<NodeData>[], edges).referenceVideoUrls;
+  const rightsNeeded = needsVideoRights(videoModelId, refVideoUrls);
+  const rightsAffirmed = videoRightsAffirmed(data.videoRightsAffirmedFor, refVideoUrls);
+
   // ── Generate ──────────────────────────────────────────────────────────────
   const generate = useCallback(async () => {
     const accessToken = "guest";
@@ -812,6 +818,18 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       updateNodeData(id, { hasError: true });
       addToast("Connect all required inputs for this model.", "error");
       return;
+    }
+
+    // Flow would stop at its rights dialog anyway; say so before the browser engine starts.
+    if (needsVideoRights(videoModelId, upstream.referenceVideoUrls)) {
+      const affirmedFor = useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data.videoRightsAffirmedFor;
+      if (!videoRightsAffirmed(affirmedFor, upstream.referenceVideoUrls)) {
+        setErrorHandles(new Set(["referenceVideo"]));
+        setTimeout(() => setErrorHandles(new Set()), 1400);
+        updateNodeData(id, { hasError: true });
+        addToast('Turn on "I have the rights" on the node first.', "error");
+        return;
+      }
     }
 
     if (!cfg.promptOptional && !finalPrompt.trim()) {
@@ -1061,7 +1079,8 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
       }
     }, 3000);
   }, [id, nodes, edges, prompt, sound, seed, duration, aspectRatio, videoModelId, veoMode, isVeo,
-    mode, resolution, cfg, debugMode, textEdge, updateNodeData, flashEdgeError, kieKeySet, addToast]);
+    mode, resolution, cfg, debugMode, textEdge, updateNodeData, flashEdgeError, kieKeySet, addToast,
+    data.videoRightsAffirmedFor]);
 
   const handleGenerateBatch = useCallback(() => {
     generate();
@@ -1917,6 +1936,20 @@ function VideoGeneratorNode({ id, data, selected }: NodeProps<VideoGeneratorNode
                   >
                     <ToggleSwitch on={sound} activeColor="var(--accent)" />
                     <span className="text-[12px] text-[var(--text-2)]">Sound</span>
+                  </button>
+                )}
+
+                {/* Rights declaration for a Flow video edit */}
+                {rightsNeeded && (
+                  <button
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => updateNodeData(id, { videoRightsAffirmedFor: rightsAffirmed ? undefined : videoRightsKey(refVideoUrls) })}
+                    className="flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors"
+                    style={{ background: "var(--bg-0)", border: `1px solid ${rightsAffirmed ? "var(--border-1)" : "var(--warning)"}` }}
+                    title="Flow only edits an uploaded video after you declare you have the rights to use it. This applies to the connected clip; connecting another one asks again."
+                  >
+                    <ToggleSwitch on={rightsAffirmed} activeColor="var(--accent)" />
+                    <span className="text-[12px] text-[var(--text-2)]">I have the rights</span>
                   </button>
                 )}
 

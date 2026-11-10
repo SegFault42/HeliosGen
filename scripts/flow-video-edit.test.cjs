@@ -44,3 +44,36 @@ test("flow-omni-flash exposes one reference video and up to 3 look images", () =
   assert.equal(m.apiInput.useFlow, true);
   assert.equal(isVetoedVideoModel("flow-omni-flash", {}), false);
 });
+
+// ── Rights declaration: only an explicit, clip-specific yes reaches Flow ──────
+const { needsVideoRights, videoRightsAffirmed, videoRightsKey } = require("../lib/videoRights.ts");
+const { buildVideoPayload } = require("../lib/workflow-runtime/generationPayloads.ts");
+
+const videoInputs = (referenceVideoUrls) => ({
+  prompt: "swap the man", imageUrls: [], imageNodeLabels: [], resources: [],
+  referenceVideoUrls, referenceAudioUrls: [],
+});
+
+test("only a Flow model with a reference video needs the declaration", () => {
+  assert.equal(needsVideoRights("flow-omni-flash", ["/v.mp4"]), true);
+  assert.equal(needsVideoRights("flow-omni-flash", []), false);
+  assert.equal(needsVideoRights("seedance-2", ["/v.mp4"]), false);
+  assert.equal(needsVideoRights("no-such-model", ["/v.mp4"]), false);
+});
+
+test("a declaration holds only for the clip it was made for", () => {
+  const made = videoRightsKey(["/v.mp4"]);
+  assert.equal(videoRightsAffirmed(made, ["/v.mp4"]), true);
+  assert.equal(videoRightsAffirmed(made, ["/other.mp4"]), false);
+  assert.equal(videoRightsAffirmed(undefined, ["/v.mp4"]), false);
+  assert.equal(videoRightsAffirmed("", []), false);
+});
+
+test("the payload carries affirmVideoRights only after the user declared it for that clip", () => {
+  const node = (videoRightsAffirmedFor) => ({ videoModel: "flow-omni-flash", videoRightsAffirmedFor });
+  assert.equal(buildVideoPayload(node(videoRightsKey(["/v.mp4"])), videoInputs(["/v.mp4"])).affirmVideoRights, true);
+  assert.equal("affirmVideoRights" in buildVideoPayload(node(undefined), videoInputs(["/v.mp4"])), false);
+  assert.equal("affirmVideoRights" in buildVideoPayload(node(videoRightsKey(["/old.mp4"])), videoInputs(["/v.mp4"])), false);
+  // a model that does not go through Flow never sends it, whatever the node holds
+  assert.equal("affirmVideoRights" in buildVideoPayload({ videoModel: "seedance-2", videoRightsAffirmedFor: videoRightsKey(["/v.mp4"]) }, videoInputs(["/v.mp4"])), false);
+});

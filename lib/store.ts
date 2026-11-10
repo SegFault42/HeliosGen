@@ -36,6 +36,8 @@ export interface NodeData extends Record<string, unknown> {
   inputImage?: string;      // base64 data URL — only kept while session is active
   r2Url?: string;           // R2 CDN URL — durable, used instead of inputImage after upload
   imageNaturalRatio?: string;
+  /** Rights declaration for a Flow video edit: the reference clip(s) it was made for (lib/videoRights). */
+  videoRightsAffirmedFor?: string;
   // generation settings
   quality?: string;
   azureQuality?: string;

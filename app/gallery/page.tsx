@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } fr
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { IMAGE_MODELS, VIDEO_MODELS, AZURE_POPULAR_SIZES, validateAzureCustomSize } from "@/lib/modelConfig";
+import { needsVideoRights, videoRightsAffirmed, videoRightsKey } from "@/lib/videoRights";
 import { canGenerate as canGenerateGate, pollMaxIterations } from "@/lib/galleryGate";
 import { PROVIDERS, getModelProvider, setModelProvider, modelHasProviderChoice } from "@/lib/providers";
 import { useWorkflowStore } from "@/lib/store";
@@ -841,6 +842,12 @@ function GalleryInner() {
   const [vidRefVideos, setVidRefVideos]   = useState<RefImage[]>(() => (loadSettings(tab, selectedFolderId)?.vidRefVideoUrls ?? []).map(urlToRef));
   const [vidRefAudios, setVidRefAudios]   = useState<RefImage[]>(() => (loadSettings(tab, selectedFolderId)?.vidRefAudioUrls ?? []).map(urlToRef));
   const [vidElements, setVidElements]     = useState<KlingElement[]>(() => loadSettings(tab, selectedFolderId)?.vidElements ?? []);
+  // Flow edits an uploaded clip only after the user declares the rights to it.
+  // Held for this visit only and against the attached clip(s) (lib/videoRights).
+  const [vidRightsFor, setVidRightsFor] = useState("");
+  const vidRightsUrls = vidRefVideos.filter(r => r.cdnUrl && !r.error).map(r => r.cdnUrl!);
+  const vidRightsNeeded = needsVideoRights(modelId, vidRightsUrls);
+  const vidRightsAffirmed = vidRightsNeeded && videoRightsAffirmed(vidRightsFor, vidRightsUrls);
   const [elementPickerOpen, setElementPickerOpen] = useState(false);
   const vidImgInputRef   = useRef<HTMLInputElement>(null);
   const vidVideoInputRef = useRef<HTMLInputElement>(null);
@@ -1758,6 +1765,7 @@ function GalleryInner() {
           ...(klingElements?.length       ? { klingElements }               : {}),
           ...(referenceImageUrls?.length  ? { referenceImageUrls }          : {}),
           ...(referenceVideoUrls?.length  ? { referenceVideoUrls }          : {}),
+          ...(referenceVideoUrls?.length && vidRightsAffirmed ? { affirmVideoRights: true } : {}),
           ...(referenceAudioUrls?.length  ? { referenceAudioUrls }          : {}),
           ...(vm?.supportsSeeds && seed ? { seed } : {}),
         }),
@@ -1809,6 +1817,10 @@ function GalleryInner() {
     if (refImages.some(r => r.uploading)) { setGenError("Images still uploading…"); setTimeout(() => setGenError(""), 3_000); return; }
     if (isVideo && [vidStartFrame, vidEndFrame, vidVideoRef, ...vidResources, ...vidRefVideos, ...vidRefAudios].some(r => r?.uploading)) {
       setGenError("References still uploading…"); setTimeout(() => setGenError(""), 3_000); return;
+    }
+    if (isVideo && vidRightsNeeded && !vidRightsAffirmed) {
+      addToast('Turn on "I have the rights" for this video.', "error");
+      return;
     }
     if (isVideo) {
       const vm = VIDEO_MODELS.find(m => m.id === modelId);
@@ -4270,6 +4282,42 @@ function GalleryInner() {
                       }} />
                     </span>
                     Sound
+                  </button>
+                )}
+
+                {/* Rights declaration for a Flow video edit */}
+                {isVideo && vidRightsNeeded && (
+                  <button
+                    onClick={() => setVidRightsFor(vidRightsAffirmed ? "" : videoRightsKey(vidRightsUrls))}
+                    disabled={submitting}
+                    title="Flow only edits an uploaded video after you declare you have the rights to use it. This applies to the attached clip; attaching another one asks again."
+                    style={{
+                      display: "flex", alignItems: "center", gap: "7px",
+                      height: "36px", padding: "0 12px",
+                      borderRadius: "8px",
+                      border: `1px solid ${vidRightsAffirmed ? "var(--border-2)" : "var(--warning)"}`,
+                      background: "var(--border-1)",
+                      color: "var(--text-2)",
+                      fontSize: "13px", fontFamily: "inherit",
+                      cursor: submitting ? "not-allowed" : "pointer",
+                      transition: "border-color 150ms",
+                      flexShrink: 0,
+                    }}>
+                    <span style={{
+                      width: "28px", height: "16px", borderRadius: "8px",
+                      background: vidRightsAffirmed ? "var(--accent)" : "var(--border-2)",
+                      position: "relative", flexShrink: 0,
+                      transition: "background 150ms",
+                    }}>
+                      <span style={{
+                        position: "absolute", top: "2px",
+                        left: vidRightsAffirmed ? "14px" : "2px",
+                        width: "12px", height: "12px", borderRadius: "50%",
+                        background: vidRightsAffirmed ? "var(--on-accent)" : "var(--text-1)",
+                        transition: "left 150ms",
+                      }} />
+                    </span>
+                    I have the rights
                   </button>
                 )}
 

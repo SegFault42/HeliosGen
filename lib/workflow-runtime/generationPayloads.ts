@@ -3,6 +3,7 @@ import type { NodeData } from "../store";
 import { DEFAULT_VIDEO_MODEL, VIDEO_MODELS, IMAGE_MODELS } from "../modelConfig";
 import { resolveInputs } from "../executor";
 import { resolveMentions } from "../mentions";
+import { needsVideoRights, videoRightsAffirmed } from "../videoRights";
 
 export type ResolvedInputs = ReturnType<typeof resolveInputs>;
 export function buildImagePayload(data: NodeData, inputs: ResolvedInputs, provider: "codex" | "kie" | "flow" | "grok"): Record<string, unknown> {
@@ -46,6 +47,9 @@ export function buildVideoPayload(data: NodeData, inputs: ResolvedInputs): Recor
     referenceImageUrls: orderedUrls,
     referenceVideoUrls: inputs.referenceVideoUrls,
     referenceAudioUrls: inputs.referenceAudioUrls,
+    // Sent only when the user declared the rights for exactly these clips on the node.
+    ...(needsVideoRights(model, inputs.referenceVideoUrls) && videoRightsAffirmed(data.videoRightsAffirmedFor, inputs.referenceVideoUrls)
+      ? { affirmVideoRights: true } : {}),
   };
 }
 export function resolveNodeInputs(nodeId: string, nodes: Node<NodeData>[], edges: Parameters<typeof resolveInputs>[2]): ResolvedInputs { return resolveInputs(nodeId, nodes, edges); }
