@@ -99,13 +99,18 @@ function matchFlowModel(labels, requested) {
 const FLOW_VIDEO = ["Omni 1.2 Flash", "Omni 1.1 Flash Leaving Dec 5", "Veo 3.1 - Lite", "Veo 3.1 - Fast Leaving Dec 5", "Veo 3.1 - Quality Leaving Dec 5"];
 const FLOW_IMAGE = ["Nano Banana Pro", "Nano Banana 2 Lite", "Nano Banana 2.1"];
 
-test("each Omni Flash version resolves to its own entry in Flow's picker", () => {
-  const v11 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash");
-  const v12 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash-1-2");
-  assert.equal(matchFlowModel(FLOW_VIDEO, v11.apiInput.flowModel), "Omni 1.1 Flash Leaving Dec 5");
-  assert.equal(matchFlowModel(FLOW_VIDEO, v12.apiInput.flowModel), "Omni 1.2 Flash");
-  // why neither can ask for a bare "Omni Flash": two versions make it ambiguous
-  assert.equal(matchFlowModel(FLOW_VIDEO, "Omni Flash"), null);
+test("Omni Flash runs 1.2, and names the version while Flow still lists 1.1", () => {
+  const omni = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash");
+  assert.equal(matchFlowModel(FLOW_VIDEO, omni.apiInput.flowModel), "Omni 1.2 Flash");
+  assert.equal(matchFlowModel(FLOW_VIDEO, "Omni Flash"), null, "a bare name is ambiguous until 1.1 is gone");
+});
+
+test("no Flow model ANVIL offers is one Flow is retiring", () => {
+  const retiring = FLOW_VIDEO.filter((label) => label.includes("Leaving"));
+  assert.equal(retiring.length, 3);
+  for (const m of VIDEO_MODELS.filter((x) => x.apiInput.useFlow)) {
+    assert.ok(!retiring.includes(matchFlowModel(FLOW_VIDEO, m.apiInput.flowModel)), m.id);
+  }
 });
 
 test("every Flow model ANVIL offers exists in Flow's picker", () => {
@@ -115,15 +120,6 @@ test("every Flow model ANVIL offers exists in Flow's picker", () => {
       assert.notEqual(matchFlowModel(picker, m.apiInput.flowModel), null, m.id + " asks for " + m.apiInput.flowModel);
     }
   }
-});
-
-test("Omni Flash 1.2 behaves like 1.1: video edit, rights declaration, fixed length", () => {
-  const v12 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash-1-2");
-  assert.ok(v12.handles.includes("referenceVideo"));
-  assert.equal(v12.maxReferenceVideos, 1);
-  assert.equal(isVetoedVideoModel("flow-omni-flash-1-2", {}), false);
-  assert.equal(needsVideoRights("flow-omni-flash-1-2", ["/v.mp4"]), true);
-  assert.equal(buildVideoPayload({ videoModel: "flow-omni-flash-1-2", duration: 5 }, videoInputs([])).duration, 10);
 });
 
 test("the read-this heuristic covers every Omni Flash name and nothing else", () => {

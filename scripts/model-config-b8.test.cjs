@@ -22,7 +22,7 @@ test("Flow interpolation requires start and end frames", () => {
 });
 
 test("Flow video: no sound toggle, default 720p, 1080p still offered", () => {
-  assert.ok(flow.length >= 4);
+  assert.ok(flow.length >= 3);
   for (const m of flow) {
     assert.equal(m.sound, false, m.id);
     assert.equal(m.defaultResolution, "720p", m.id);

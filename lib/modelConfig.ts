@@ -595,7 +595,7 @@ export const VIDEO_MODELS: VideoModel[] = [
   {
     id: "flow-omni-flash",
     apiId: "flow-omni-flash",
-    name: "Omni Flash 1.1 (Flow)",
+    name: "Omni Flash 1.2 (Flow)",
     provider: "Google Flow",
     ratios: ["16:9", "9:16"],
     durations: [10], // Flow currently offers a fixed 10-second Omni Flash clip.
@@ -615,36 +615,9 @@ export const VIDEO_MODELS: VideoModel[] = [
       durationMin: 0,
       durationMax: 0,
       useFlow: true,
-      // The engine matches this against Flow's own picker: exact name first, else
-      // the single option containing every word. A bare "Omni Flash" stops being
-      // unique once Flow lists 1.1 and 1.2 side by side, so each names its version.
-      flowModel: "Omni 1.1 Flash",
-    },
-  },
-  {
-    // Same capabilities as 1.1 until Flow's picker says otherwise: the settings
-    // below were copied from it, not read from a live account.
-    id: "flow-omni-flash-1-2",
-    apiId: "flow-omni-flash-1-2",
-    name: "Omni Flash 1.2 (Flow)",
-    provider: "Google Flow",
-    ratios: ["16:9", "9:16"],
-    durations: [10],
-    defaultDuration: 10,
-    defaultRatio: "9:16",
-    handles: ["prompt", "startFrame", "resource", "referenceVideo"],
-    maxResources: 3,
-    maxReferenceVideos: 1,
-    sound: false, // Flow path ignores sound
-    resolutions: ["720p", "1080p"],
-    defaultResolution: "720p",
-    apiInput: {
-      aspectRatioKey: "aspect_ratio",
-      resolutionKey: "resolution",
-      promptMaxLength: 20000,
-      durationMin: 0,
-      durationMax: 0,
-      useFlow: true,
+      // Flow retires Omni 1.1 on 2026-12-05, so this id (the one saved workspaces
+      // hold) now runs 1.2. The version is named because the engine refuses a bare
+      // "Omni Flash" while Flow's picker still lists both.
       flowModel: "Omni 1.2 Flash",
     },
   },
@@ -669,52 +642,6 @@ export const VIDEO_MODELS: VideoModel[] = [
       durationMax: 0,
       useFlow: true,
       flowModel: "Veo 3.1 - Lite",
-    },
-  },
-  {
-    id: "flow-veo-3.1-fast",
-    apiId: "flow-veo-3.1-fast",
-    name: "Veo 3.1 Fast (Flow)",
-    provider: "Google Flow",
-    ratios: ["16:9", "9:16"],
-    durations: [],
-    defaultDuration: 0,
-    defaultRatio: "9:16",
-    handles: ["prompt", "startFrame", "endFrame"],
-    sound: false, // Flow path ignores sound
-    resolutions: ["720p", "1080p"],
-    defaultResolution: "720p",
-    apiInput: {
-      aspectRatioKey: "aspect_ratio",
-      resolutionKey: "resolution",
-      promptMaxLength: 20000,
-      durationMin: 0,
-      durationMax: 0,
-      useFlow: true,
-      flowModel: "Veo 3.1 - Fast",
-    },
-  },
-  {
-    id: "flow-veo-3.1-quality",
-    apiId: "flow-veo-3.1-quality",
-    name: "Veo 3.1 Quality (Flow)",
-    provider: "Google Flow",
-    ratios: ["16:9", "9:16"],
-    durations: [],
-    defaultDuration: 0,
-    defaultRatio: "9:16",
-    handles: ["prompt", "startFrame", "endFrame"],
-    sound: false, // Flow path ignores sound
-    resolutions: ["720p", "1080p"],
-    defaultResolution: "720p",
-    apiInput: {
-      aspectRatioKey: "aspect_ratio",
-      resolutionKey: "resolution",
-      promptMaxLength: 20000,
-      durationMin: 0,
-      durationMax: 0,
-      useFlow: true,
-      flowModel: "Veo 3.1 - Quality",
     },
   },
   {
