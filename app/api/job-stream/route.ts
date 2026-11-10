@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { jobStore, type JobResult } from "@/lib/jobStore";
-import { jobEvents } from "@/lib/jobEvents";
+import { jobEvents, JOB_STREAM_BUDGET_MS } from "@/lib/jobEvents";
 import { resumeKieJob } from "@/lib/kieJobPoller";
+import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
 import * as guestDb from "@/lib/guest/db";
 
 const SSE_HEADERS = {
@@ -10,7 +12,8 @@ const SSE_HEADERS = {
   "Connection": "keep-alive",
 };
 
-const TIMEOUT_MS = 12 * 60 * 1000; // 12 min hard cap
+const TIMEOUT_MS = JOB_STREAM_BUDGET_MS;
+const RECHECK_MS = 5_000; // safety net if an emit is missed
 
 function immediate(payload: JobResult): Response {
   return new Response(`data: ${JSON.stringify(payload)}\n\n`, { headers: SSE_HEADERS });
@@ -26,6 +29,7 @@ function recoverJob(taskId: string): JobResult | null {
   if (gen?.status === "error") {
     return { status: "error", error: gen.error_msg ?? "Generation failed" };
   }
+  if (gen) return { status: "pending", type: gen.generation_type === "video" ? "video" : "image" };
   return null;
 }
 
@@ -43,16 +47,17 @@ export async function GET(req: NextRequest) {
     const recovered = recoverJob(taskId);
     if (recovered) {
       jobStore.set(taskId, recovered);
-      return immediate(recovered);
+      if (recovered.status !== "pending") return immediate(recovered);
+    } else {
+      // No DB record either — truly not found
+      return immediate({ status: "error", error: "Job not found" });
     }
-    // No DB record either — truly not found
-    return immediate({ status: "error", error: "Job not found" });
   }
 
-  // Restart the kie.ai poller if a server restart lost it.
-  if (!taskId.startsWith("azure-")) {
-    resumeKieJob(taskId, existing.type === "video" ? "video" : "image");
-  }
+  // Restart the provider-specific poller if a server restart lost it.
+  if (taskId.startsWith("heygen-agent:")) resumeHeyGenJob(taskId);
+  else if (taskId.startsWith("flow-video:") || taskId.startsWith("flow-image:")) resumeFlowJob(taskId);
+  else if (!taskId.startsWith("azure-") && !taskId.startsWith("grok-img-")) resumeKieJob(taskId, existing?.type === "video" ? "video" : "image");
 
   // Job is pending — open an SSE stream and wait for the poller/callback to fire
   const stream = new ReadableStream({
@@ -64,6 +69,7 @@ export async function GET(req: NextRequest) {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        clearInterval(recheck);
         clearTimeout(timeout);
         controller.close();
       };
@@ -78,6 +84,15 @@ export async function GET(req: NextRequest) {
       const heartbeat = setInterval(() => {
         if (!closed) controller.enqueue(enc.encode(": ping\n\n"));
       }, 25_000);
+
+      // Re-read jobStore so a missed event cannot hang the stream
+      const recheck = setInterval(() => {
+        const cur = jobStore.get(taskId);
+        if (cur && cur.status !== "pending") {
+          jobEvents.off(`job:${taskId}`, send);
+          send(cur);
+        }
+      }, RECHECK_MS);
 
       // Hard cap — emit error if callback never arrives
       const timeout = setTimeout(() => {

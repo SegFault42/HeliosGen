@@ -1,0 +1,153 @@
+<!--CSS-->
+.sheet{width:1440px;height:2480px;background:radial-gradient(1200px 600px at 30% 0%,rgba(255,90,44,.08),transparent 70%),var(--bone);padding:48px 64px;display:flex;flex-direction:column;gap:40px;overflow:hidden}
+.h{display:flex;align-items:baseline;gap:24px;border-bottom:1px solid var(--rule2);padding-bottom:16px}
+.h h1{font-family:var(--serif);font-size:64px;font-weight:500;letter-spacing:-.02em;margin:0;line-height:1}
+.h .mono{margin-left:auto}
+.sec h2{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em;margin:0 0 16px}
+.sec .cap{color:var(--ash);font-size:13px;margin:-10px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.cell{background:var(--paper);border:1px solid var(--rule);border-radius:12px;box-shadow:inset 0 1px 0 var(--hi);padding:20px;display:flex;flex-direction:column;gap:12px;min-height:120px}
+.cell .mono{color:var(--ash)}
+.rowx{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.btn.hover.primary{background:var(--ember-deep)}
+.btn.press.primary{transform:translateY(1px);box-shadow:none}
+.btn.dis{opacity:.4}
+.field.focus{border-color:var(--ink);background:var(--paper)}
+.field.err{border-color:var(--fail)}
+.field.sm{min-height:40px;padding:9px 12px;font-size:14px}
+.plate{position:relative;width:100%}
+.toast{background:var(--ink);color:var(--bone);border-radius:6px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.toast .mono{color:var(--bone);opacity:.7}
+.empty{border:1px solid var(--rule2);border-radius:10px;height:140px;display:grid;place-items:center}
+.empty .serif{font-size:28px;font-style:italic;font-weight:400;color:var(--graphite)}
+/* storyboards */
+.sb{display:grid;grid-template-columns:200px repeat(4,1fr);gap:16px;align-items:stretch;padding:16px 0;border-top:1px solid var(--rule)}
+.sb .lead b{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+.sb .lead .mono{display:block;color:var(--ash);margin-top:6px}
+.sb .lead p{margin:0;font-size:13px;color:var(--graphite)}
+.f{background:var(--paper);border:1px solid var(--rule);border-radius:8px;height:120px;position:relative;overflow:hidden}
+.f .fn{position:absolute;left:8px;top:6px;color:var(--ash)}
+.f .cap{position:absolute;left:8px;bottom:6px;right:8px;color:var(--graphite);font-size:12px;font-family:var(--mono);letter-spacing:.04em}
+.f .w{position:absolute;font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:-.02em;left:16px;top:34px;line-height:1;overflow:hidden;height:30px}
+.f .w span{display:inline-block}
+.f .pan{position:absolute;background:var(--card);border:1px solid var(--rule2);border-radius:4px}
+.f .bt{position:absolute;left:50%;top:44px;transform:translateX(-50%);height:24px;padding:0 10px;background:var(--ember);color:var(--ember-ink);font-family:var(--mono);font-size:12px;letter-spacing:.08em;display:flex;align-items:center;border-radius:6px;box-shadow:0 0 16px var(--glow)}
+.f .sp{position:absolute;left:50%;top:56px;width:12px;height:1.5px;background:var(--ember);transform-origin:0 50%}
+.f .num{position:absolute;right:12px;top:40px;font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.f .th{position:absolute;width:28px;height:28px;background:var(--linen);border:1px solid var(--rule2);border-radius:2px}
+.f .pl{position:absolute;background:var(--card);border:1px solid var(--rule2);border-radius:4px;width:56px;height:36px}
+.f .pl.run{box-shadow:inset 2px 0 0 var(--ember)}
+.f .pl.done{box-shadow:inset 2px 0 0 var(--ink)}
+.f svg{position:absolute;inset:0;width:100%;height:100%}
+.f svg path{fill:none;stroke:var(--ink);stroke-width:1.5}
+.f svg path.run{stroke:var(--ember);stroke-dasharray:5 5}
+.f svg path.half{stroke-dasharray:60 200}
+/* migration */
+table.mig{border-collapse:collapse;width:100%}
+table.mig th{text-align:left;padding:0 0 8px;border-bottom:1px solid var(--ink);color:var(--ash);font-weight:400}
+table.mig td{padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px;vertical-align:top}
+table.mig td.m{font-family:var(--mono);font-size:12px}
+table.mig td .old{color:var(--ash);text-decoration:line-through}
+<!--/CSS-->
+<div class="sheet">
+  <div class="h"><h1>Components</h1><span class="serif" style="font-size:28px;color:var(--graphite);font-weight:400">states, motion, migration</span><span class="mono muted">GSAP 3.13 · all plugins</span></div>
+
+  <div class="sec">
+    <h2>Controls</h2>
+    <div class="grid">
+      <div class="cell"><span class="mono">Button · primary</span><div class="rowx"><span class="btn primary">Strike · $0.04</span><span class="btn primary hover">Hover</span><span class="btn primary press">Press</span><span class="btn primary dis">Off</span></div><span class="mono">Ember · glow · mono label · magnetic 12px</span></div>
+      <div class="cell"><span class="mono">Button · secondary / ghost / danger</span><div class="rowx"><span class="btn secondary">Save</span><span class="btn ghost">Discard</span><span class="btn danger">Delete plate</span></div><div class="rowx"><span class="btn sm secondary">Use</span><span class="btn sm ghost">Shorter</span><span class="btn sm danger">Remove</span></div></div>
+      <div class="cell"><span class="mono">Input · rest / focus / error</span><div class="field sm"><span style="color:var(--ash)">Describe the piece</span></div><div class="field sm focus">red apple on tiles, flash|</div><div class="field sm err">sk-</div><span class="mono" style="color:var(--fail)">Key must start with sk-</span></div>
+      <div class="cell"><span class="mono">Selector · tabs · switch</span><div class="sel">Nano Banana<svg class="chev" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4"/></svg></div><div class="rowx"><span class="tabs"><span class="on">YAML</span><span>JSON</span></span><span class="sw on"><i></i></span><span class="sw"><i></i></span></div><span class="mono">Selected = Bone fill; Ember only on live state</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Plates, ports, edges</h2>
+    <div class="grid">
+      <div class="cell"><span class="mono">Plate · idle</span><div class="plate"><div class="ph"><span class="mono" style="color:var(--graphite)">02 · Image</span><span class="mono">Nano Banana</span></div><div class="pb">1024 × 1024 · $0.04</div></div></div>
+      <div class="cell"><span class="mono">Plate · selected</span><div class="plate on"><div class="ph"><span class="mono" style="color:var(--graphite)">06 · Reference</span><span class="mono">Upload</span></div><div class="pb">pear-01.png</div></div><span class="mono">Ink border, Sheet opens right</span></div>
+      <div class="cell"><span class="mono">Plate · running</span><div class="plate run"><div class="ph"><span class="mono" style="color:var(--graphite)">04 · Video</span><span class="mono" style="color:var(--ember)">Striking 42%</span></div><div class="pb">Veo 3.1 · 8s<div style="height:1px;background:var(--rule);margin-top:10px;position:relative"><i style="position:absolute;left:0;top:0;height:1px;width:42%;background:var(--ember)"></i></div></div></div></div>
+      <div class="cell"><span class="mono">Plate · error</span><div class="plate err"><div class="ph"><span class="mono" style="color:var(--graphite)">05 · Upscale</span><span class="mono" style="color:var(--fail)">Failed</span></div><div class="pb" style="color:var(--fail)">402 · wallet below reserve</div></div></div>
+      <div class="cell"><span class="mono">Port · empty / connected</span><div class="rowx" style="gap:24px"><span class="port" style="position:static"></span><span class="port c" style="position:static"></span><span class="mono">8px square, edge-mounted</span></div></div>
+      <div class="cell" style="grid-column:span 2"><span class="mono">Edge · idle / running / draft</span><svg viewBox="0 0 560 60" style="width:100%;height:60px"><path d="M10 30 C 80 30, 80 10, 150 10" fill="none" stroke="#F3EFE8" stroke-width="1.5"/><path d="M200 30 C 270 30, 270 50, 340 50" fill="none" stroke="#FF5A2C" stroke-width="1.5" stroke-dasharray="6 6"/><path d="M390 30 C 460 30, 460 10, 530 10" fill="none" stroke="#403C34" stroke-width="1.5"/></svg><span class="mono">1.5px Bone · Ember dash marches 1.1s linear · Rule-2 while dragging</span></div>
+      <div class="cell"><span class="mono">Toast · notice</span><div class="toast"><span>Piece 0143 forged</span><span class="mono">$0.04</span></div><div class="notice warn" style="height:36px;font-size:13px"><span class="mono" style="color:var(--wait)">Wait</span>Quota resets 02:10</div></div>
+    </div>
+    <div class="grid" style="margin-top:24px">
+      <div class="cell" style="grid-column:span 2"><span class="mono">Empty state</span><div class="empty"><span class="serif">Nothing forged yet.</span></div></div>
+      <div class="cell" style="grid-column:span 2"><span class="mono">Ledger plate</span><div class="card" style="padding:16px;display:flex;justify-content:space-between;align-items:baseline"><span class="mono" style="color:var(--ink)">Piece 0142 · Nano Banana · 2K · $0.04 · 6.2s</span><span class="mono">seed 88213</span></div><span class="mono">Every number is mono, tabular</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Motion</h2>
+    <p class="cap">Tokens t-1 180 · t-2 320 · t-3 600 · t-4 900 ms. Eases expo.out (reveals), power3.inOut (layout), back.out(1.4) (drop-ins), CustomEase "anvil" M0,0 C0.2,0 0.1,1 1,1 (compress and release). Stagger 40ms. Reduced motion: durations 0, Flip off, dashes static.</p>
+
+    <div class="sb">
+      <div class="lead"><b>01 · First paint</b><p>SplitText chars rise from 110% under a clip; panels fade-slide 16px.</p><span class="mono">t-4 · expo.out · stagger 20ms</span></div>
+      <div class="f"><span class="fn mono">0ms</span><div class="w"><span style="transform:translateY(110%);opacity:0">Made on Anvil</span></div><div class="pan" style="left:16px;right:16px;top:80px;height:24px;opacity:0"></div><span class="cap">chars below clip · panels y+16</span></div>
+      <div class="f"><span class="fn mono">300ms</span><div class="w"><span>Made</span> <span style="transform:translateY(40%)">on</span> <span style="transform:translateY(110%)">Anvil</span></div><div class="pan" style="left:16px;right:16px;top:88px;height:24px;opacity:.4"></div><span class="cap">stagger 20ms per char</span></div>
+      <div class="f"><span class="fn mono">600ms</span><div class="w"><span>Made on <em>Anvil</em></span></div><div class="pan" style="left:16px;right:16px;top:84px;height:24px;opacity:.8"></div><span class="cap">panels settle, stagger 40ms</span></div>
+      <div class="f"><span class="fn mono">900ms</span><div class="w"><span>Made on <em>Anvil</em></span></div><div class="pan" style="left:16px;right:16px;top:80px;height:24px"></div><span class="cap">rest</span></div>
+    </div>
+
+    <div class="sb">
+      <div class="lead"><b>02 · Strike</b><p>Button compresses 2px, five Ember sparks burst 60px, ledger ticks, piece drops into the Rack.</p><span class="mono">anvil · t-2 · t-3 · back.out(1.4)</span></div>
+      <div class="f"><span class="fn mono">0ms</span><div class="bt">Strike</div><span class="num">$0.00</span><span class="cap">press</span></div>
+      <div class="f"><span class="fn mono">120ms</span><div class="bt" style="top:46px">Strike</div><span class="sp" style="transform:rotate(-70deg) translateX(14px)"></span><span class="sp" style="transform:rotate(-30deg) translateX(18px)"></span><span class="sp" style="transform:rotate(10deg) translateX(16px)"></span><span class="sp" style="transform:rotate(-110deg) translateX(16px)"></span><span class="sp" style="transform:rotate(-150deg) translateX(14px)"></span><span class="num">$0.01</span><span class="cap">compress 2px · sparks out</span></div>
+      <div class="f"><span class="fn mono">320ms</span><div class="bt">Strike</div><span class="sp" style="transform:rotate(-70deg) translateX(48px);opacity:.3"></span><span class="sp" style="transform:rotate(-30deg) translateX(52px);opacity:.3"></span><span class="sp" style="transform:rotate(10deg) translateX(50px);opacity:.3"></span><span class="num">$0.03</span><div class="th" style="right:12px;top:-30px"></div><span class="cap">sparks fade · number tween</span></div>
+      <div class="f"><span class="fn mono">600ms</span><div class="bt">Strike</div><span class="num">$0.04</span><div class="th" style="right:12px;top:76px"></div><span class="cap">piece lands y −24 → 0</span></div>
+    </div>
+
+    <div class="sb">
+      <div class="lead"><b>03 · Flip</b><p>Rack thumb Flips into the Stage; Esc Flips back.</p><span class="mono">Flip · t-3 · power3.inOut</span></div>
+      <div class="f"><span class="fn mono">0ms</span><div class="pan" style="left:16px;top:24px;width:120px;height:56px"></div><div class="th" style="left:16px;top:88px"></div><div class="th" style="left:52px;top:88px;border-color:var(--ink)"></div><span class="cap" style="left:auto">click 0141</span></div>
+      <div class="f"><span class="fn mono">200ms</span><div class="pan" style="left:16px;top:24px;width:120px;height:56px;opacity:.5"></div><div class="th" style="left:34px;top:60px;width:56px;height:44px"></div><div class="th" style="left:16px;top:88px"></div><span class="cap" style="left:auto">state recorded</span></div>
+      <div class="f"><span class="fn mono">450ms</span><div class="th" style="left:20px;top:28px;width:112px;height:52px"></div><div class="th" style="left:16px;top:88px"></div><span class="cap" style="left:auto">size and position tween</span></div>
+      <div class="f"><span class="fn mono">600ms</span><div class="th" style="left:16px;top:24px;width:120px;height:56px;border-color:var(--ink)"></div><div class="th" style="left:16px;top:88px"></div><div class="th" style="left:52px;top:88px;opacity:.4"></div><span class="cap" style="left:auto">in the Stage</span></div>
+    </div>
+
+    <div class="sb">
+      <div class="lead"><b>04 · Canvas</b><p>Inertia throw snaps to 8px; DrawSVG draws the edge; running dash marches; done = one Ember frame on the rule.</p><span class="mono">Inertia · DrawSVG t-2 · 1.1s loop</span></div>
+      <div class="f"><span class="fn mono">throw</span><div class="pl" style="left:16px;top:40px"></div><div class="pl" style="left:44px;top:44px;opacity:.3"></div><div class="pl" style="left:72px;top:46px;opacity:.15"></div><span class="cap">inertia · snap 8px</span></div>
+      <div class="f"><span class="fn mono">connect</span><div class="pl" style="left:16px;top:24px"></div><div class="pl" style="left:120px;top:64px"></div><svg viewBox="0 0 200 120"><path class="half" d="M72 42 C 96 42, 96 82, 120 82"/></svg><span class="cap">DrawSVG 0 → 100% · t-2</span></div>
+      <div class="f"><span class="fn mono">running</span><div class="pl run" style="left:16px;top:24px"></div><div class="pl" style="left:120px;top:64px"></div><svg viewBox="0 0 200 120"><path class="run" d="M72 42 C 96 42, 96 82, 120 82"/></svg><span class="cap">dashoffset −12 · 1.1s linear</span></div>
+      <div class="f"><span class="fn mono">done</span><div class="pl done" style="left:16px;top:24px"></div><div class="pl" style="left:120px;top:64px"></div><svg viewBox="0 0 200 120"><path d="M72 42 C 96 42, 96 82, 120 82"/></svg><span class="cap">1 frame Ember, then Ink</span></div>
+    </div>
+
+    <div class="sb">
+      <div class="lead"><b>05 · Micro</b><p>Primary button magnetic within 12px; plate hover lifts hairline to Rule-2; toasts slide from bottom-right.</p><span class="mono">t-1 · t-2 · no shadows</span></div>
+      <div class="f"><span class="fn mono">magnet</span><div class="bt" style="transform:translate(-50%,0)">Strike</div><span style="position:absolute;left:54%;top:34px;width:6px;height:6px;border:1px solid var(--ink);border-radius:50%"></span><span class="cap">pull ≤ 4px toward cursor</span></div>
+      <div class="f"><span class="fn mono">plate hover</span><div class="pl" style="left:16px;top:36px;border-color:var(--rule)"></div><div class="pl" style="left:100px;top:36px;border-color:var(--rule2)"></div><span class="cap">Rule → Rule-2 · t-1</span></div>
+      <div class="f"><span class="fn mono">toast in</span><div class="toast" style="position:absolute;right:-40px;bottom:24px;width:120px;font-size:12px;padding:6px 10px;opacity:.5">Forged</div><span class="cap">x +24 → 0 · t-2 · expo.out</span></div>
+      <div class="f"><span class="fn mono">toast rest</span><div class="toast" style="position:absolute;right:12px;bottom:24px;width:120px;font-size:12px;padding:6px 10px">Forged</div><span class="cap">holds 4s, slides out</span></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Migration from Solstice</h2>
+    <p class="cap">Every v1 token has one v2 replacement. Component shapes change; data and routes do not.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px">
+      <table class="mig">
+        <tr><th class="mono">Solstice (v1)</th><th class="mono">ANVIL v2</th><th class="mono">Note</th></tr>
+        <tr><td class="m"><span class="old">--bg-0 #0B0B0C</span></td><td class="m">--bone #0B0A09</td><td>warm coal instead of neutral black</td></tr>
+        <tr><td class="m"><span class="old">--bg-1 / --surface</span></td><td class="m">--paper #141311</td><td>panels with a top highlight</td></tr>
+        <tr><td class="m"><span class="old">--bg-2</span></td><td class="m">--linen #1B1A17</td><td>inputs at rest</td></tr>
+        <tr><td class="m"><span class="old">--text-1 / -2 / -3</span></td><td class="m">--ink #F3EFE8 / --graphite / --ash</td><td>warm whites, muted floor #7C7870</td></tr>
+        <tr><td class="m"><span class="old">--border-1 / -2</span></td><td class="m">--rule / --rule-2</td><td>1px, never 2px</td></tr>
+        <tr><td class="m"><span class="old">--accent #D9FF3D</span></td><td class="m">--ember #FF5A2C</td><td>heat, not lime; glow allowed on live state only</td></tr>
+        <tr><td class="m"><span class="old">--success / --warning / --error</span></td><td class="m">--ok / --wait / --fail</td><td>words, not colours, in the UI</td></tr>
+      </table>
+      <table class="mig">
+        <tr><th class="mono">Solstice (v1)</th><th class="mono">ANVIL v2</th><th class="mono">Note</th></tr>
+        <tr><td class="m"><span class="old">Outfit / Archivo</span></td><td class="m">Newsreader + Geist</td><td>serif display, italic Ember accent word</td></tr>
+        <tr><td class="m"><span class="old">Space Mono</span></td><td class="m">Geist Mono</td><td>tabular numerals, .06em</td></tr>
+        <tr><td class="m"><span class="old">--r-pill</span></td><td class="m">removed</td><td>rounded rectangles, radius 8 on controls</td></tr>
+        <tr><td class="m"><span class="old">--shadow-btn</span></td><td class="m">top highlight + Ember glow</td><td>primary only</td></tr>
+        <tr><td class="m"><span class="old">dot grid canvas</span></td><td class="m">plain Slate frame</td><td>plates carry the structure, no dot grid</td></tr>
+        <tr><td class="m"><span class="old">round handles</span></td><td class="m">8px square ports</td><td>Ember connected, Rule-2 empty</td></tr>
+        <tr><td class="m"><span class="old">"credits"</span></td><td class="m">dollars, "strike"</td><td>the Ledger is the product</td></tr>
+      </table>
+    </div>
+  </div>
+</div>

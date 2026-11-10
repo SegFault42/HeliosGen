@@ -30,19 +30,40 @@ export function getSpaces(): GuestSpace[] {
     .filter((s): s is GuestSpace => s !== null);
 }
 
-export function saveSpaces(spaces: GuestSpace[]): void {
+/** Thrown for malformed space input; the route maps this to a 400. */
+export class InvalidSpaceError extends Error {}
+
+function validateSpace(s: GuestSpace): void {
+  if (!s || typeof s.id !== "string" || !s.id) throw new InvalidSpaceError("space.id must be a non-empty string");
+  if (typeof s.name !== "string") throw new InvalidSpaceError(`space '${s.id}'.name must be a string`);
+}
+
+/**
+ * `partial: true` upserts only the given spaces and leaves the rest alone —
+ * the client sends just the spaces that changed. A full save (default) also
+ * deletes every space not in the list, which is how deletions propagate.
+ */
+export function saveSpaces(spaces: GuestSpace[], opts: { partial?: boolean } = {}): void {
+  for (const s of spaces) validateSpace(s);
   const d = db();
   d.exec("BEGIN");
-  const keep = new Set(spaces.map((s) => s.id));
-  const upsert = d.prepare(`
-    INSERT INTO spaces (id, name, data, updated_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, data = excluded.data, updated_at = excluded.updated_at
-  `);
-  for (const s of spaces) {
-    upsert.run(s.id, s.name ?? "Untitled", JSON.stringify(s), Number(s.updatedAt ?? s.createdAt ?? Date.now()));
+  try {
+    const keep = new Set(spaces.map((s) => s.id));
+    const upsert = d.prepare(`
+      INSERT INTO spaces (id, name, data, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, data = excluded.data, updated_at = excluded.updated_at
+    `);
+    for (const s of spaces) {
+      upsert.run(s.id, s.name ?? "Untitled", JSON.stringify(s), Number(s.updatedAt ?? s.createdAt ?? Date.now()));
+    }
+    if (!opts.partial) {
+      const existing = d.prepare("SELECT id FROM spaces").all() as { id: string }[];
+      const del = d.prepare("DELETE FROM spaces WHERE id = ?");
+      for (const { id } of existing) if (!keep.has(id)) del.run(id);
+    }
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
   }
-  const existing = d.prepare("SELECT id FROM spaces").all() as { id: string }[];
-  const del = d.prepare("DELETE FROM spaces WHERE id = ?");
-  for (const { id } of existing) if (!keep.has(id)) del.run(id);
-  d.exec("COMMIT");
 }

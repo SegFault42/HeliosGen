@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -17,14 +17,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-import { useWorkflowStore, NodeData } from "@/lib/store";
+import { getNodeLabel, useWorkflowStore, NodeData } from "@/lib/store";
 import { requestWorkflowSync } from "@/lib/workflowSyncBus";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL, IMAGE_MODELS } from "@/lib/modelConfig";
+import { NODES_MIME, shouldHandleCopy, resolvePasteIntent } from "@/lib/clipboardIntent";
 import CuttableEdge from "@/components/edges/CuttableEdge";
-import { topoSort, resolveInputs } from "@/lib/executor";
 import { NODE_SIZE, FALLBACK_SIZE, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { edgeStyle } from "@/lib/edgeStyles";
-import { sha256Hex } from "@/lib/assetHash";
+import { storeAsset } from "@/lib/uploadAsset";
 import { detectTextMode } from "@/lib/textFormat";
 
 import { motion } from "motion/react";
@@ -130,7 +130,7 @@ function GroupPreviewOverlay({ groupIds }: { groupIds: Set<string> | null }) {
         top: sy,
         width: sw,
         height: sh,
-        border: "2px dashed rgba(150, 150, 150, 0.45)",
+        border: "2px dashed var(--border-2)",
         borderRadius: Math.max(10, 14 * zoom),
         background: "transparent",
         pointerEvents: "none",
@@ -143,16 +143,7 @@ function GroupPreviewOverlay({ groupIds }: { groupIds: Set<string> | null }) {
 /** Human-readable label with auto-incrementing counter per type */
 function nodeLabel(type: string, existingNodes: Node<NodeData>[]): string {
   const count = existingNodes.filter((n) => n.type === type).length + 1;
-  const names: Record<string, string> = {
-    videoInputNode: "VIDEO",
-    imageInputNode: "IMAGE",
-    promptNode: "TEXT",
-    generateNode: "IMAGE GEN",
-    videoGeneratorNode: "VIDEO GEN",
-    assistantNode: "ASSISTANT",
-  };
-  if (type === "assistantNode") return "ASSISTANT";
-  return `${names[type] ?? type} #${count}`;
+  return getNodeLabel(type, count);
 }
 
 /** True if `node` has a free "prompt" input handle that a pasted text node can connect into. */
@@ -163,7 +154,7 @@ function nodeAcceptsPromptInput(node: Node<NodeData>, edges: Edge[]): boolean {
   if (node.type === "generateNode") return true;
 
   if (node.type === "videoGeneratorNode") {
-    const videoModelId = (node.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const videoModelId = (node.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
     const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
     return videoCfg?.handles.includes("prompt" as never) ?? false;
   }
@@ -176,7 +167,7 @@ export default function WorkflowCanvas() {
     nodes, edges,
     onNodesChange: _onNodesChange, onEdgesChange, onConnect,
     addNode, insertEdge,
-    updateNodeData, isRunning, setIsRunning, debugMode, toggleDebug,
+    updateNodeData,
     setConnectingHandleType,
     saveViewport: _saveViewport,
     pushUndoSnapshot, undo, redo,
@@ -190,7 +181,7 @@ export default function WorkflowCanvas() {
     saveViewportTimerRef.current = setTimeout(() => _saveViewport(vp), 300);
   }, [_saveViewport]);
   const updateNodeDataRef = useRef(updateNodeData);
-  updateNodeDataRef.current = updateNodeData;
+  useLayoutEffect(() => { updateNodeDataRef.current = updateNodeData; });
   const [activeTool, setActiveTool] = useState<"select" | "hand">("select");
 
   const canUndo = undoStack.length > 0;
@@ -203,6 +194,8 @@ export default function WorkflowCanvas() {
   const [potentialGroupIds, setPotentialGroupIds] = useState<Set<string> | null>(null);
   // Ref so the nodes map always reads the latest selected IDs in the same render
   const selectedIdsRef = useRef<Set<string>>(new Set());
+  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
+  const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
   // True while the rubber-band drag is in progress — skip BFS and dimming to prevent blinking
   const isRubberBandSelectingRef = useRef(false);
   // Edge IDs that will be removed by our delayed node-delete handler — suppress RF's auto-remove
@@ -537,23 +530,13 @@ export default function WorkflowCanvas() {
           // Hash + lookup + upload in background
           (async () => {
             try {
-              const bytes = await file.arrayBuffer();
-              const hash = await sha256Hex(bytes);
-
-              try {
-                const lk = await fetch(`/api/lookup-asset?hash=${hash}`);
-                const { cdnUrl } = await lk.json() as { cdnUrl: string | null };
-                if (cdnUrl) { updateNodeDataRef.current(nodeId, { inputImage: cdnUrl, r2Url: cdnUrl }); return; }
-              } catch { /* fall through */ }
-
-              const res = await fetch("/api/upload-asset", {
-                method: "POST",
-                headers: { "Content-Type": file.type || "image/jpeg" },
-                body: bytes,
-              });
-              const { cdnUrl } = await res.json() as { cdnUrl?: string };
-              if (cdnUrl) updateNodeDataRef.current(nodeId, { inputImage: cdnUrl, r2Url: cdnUrl });
-            } catch { /* blob URL stays as fallback */ }
+              const cdnUrl = await storeAsset(await file.arrayBuffer(), file.type || "image/jpeg");
+              updateNodeDataRef.current(nodeId, { inputImage: cdnUrl, r2Url: cdnUrl });
+            } catch {
+              // A blob: URL must never travel downstream as a frame (dead after reload).
+              updateNodeDataRef.current(nodeId, { inputImage: undefined, r2Url: undefined, hasError: true });
+              useWorkflowStore.getState().addToast("Image upload failed. Drop the file again.");
+            }
           })();
 
         } else {
@@ -567,22 +550,8 @@ export default function WorkflowCanvas() {
 
           (async () => {
             try {
-              const bytes = await file.arrayBuffer();
-              const hash = await sha256Hex(bytes);
-
-              try {
-                const lk = await fetch(`/api/lookup-asset?hash=${hash}`);
-                const { cdnUrl } = await lk.json() as { cdnUrl: string | null };
-                if (cdnUrl) { updateNodeDataRef.current(nodeId, { videoUrl: cdnUrl }); return; }
-              } catch { /* fall through */ }
-
-              const res = await fetch("/api/upload-asset", {
-                method: "POST",
-                headers: { "Content-Type": file.type || "video/mp4" },
-                body: bytes,
-              });
-              const { cdnUrl } = await (await res.json()) as { cdnUrl?: string };
-              if (cdnUrl) updateNodeDataRef.current(nodeId, { videoUrl: cdnUrl });
+              const cdnUrl = await storeAsset(await file.arrayBuffer(), file.type || "video/mp4");
+              updateNodeDataRef.current(nodeId, { videoUrl: cdnUrl });
             } catch { /* blob URL stays as fallback */ }
           })();
         }
@@ -615,9 +584,6 @@ export default function WorkflowCanvas() {
 
   // ── Copy / Paste ─────────────────────────────────────────────────────────────
   const clipboardRef = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
-  // Written to the OS clipboard when nodes are copied, so Ctrl+V can tell the
-  // difference between "paste my nodes" and "paste real external text".
-  const nodeSentinelRef = useRef<string | null>(null);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const handleCopy = useCallback(() => {
@@ -637,11 +603,6 @@ export default function WorkflowCanvas() {
       (e) => selectedIds.has(e.source) && selectedIds.has(e.target)
     );
     clipboardRef.current = { nodes: allNodes, edges: selectedEdges };
-    // Write a sentinel to the OS clipboard so Ctrl+V knows this was a node copy,
-    // not real external text the user wants to paste as a prompt node.
-    const sentinel = `__rf_nodes_${Date.now()}__`;
-    nodeSentinelRef.current = sentinel;
-    navigator.clipboard.writeText(sentinel).catch(() => { });
   }, [nodes, edges]);
 
   const handlePaste = useCallback(() => {
@@ -698,15 +659,31 @@ export default function WorkflowCanvas() {
     }
   }, [addNode, insertEdge]);
 
+  // Tool the canvas returns to when the space bar is released (null = not held).
+  const toolBeforeSpaceRef = useRef<"select" | "hand" | null>(null);
+
   useEffect(() => {
+    const isTyping = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    };
+
     const onKey = (e: KeyboardEvent) => {
-      // Ignore when typing in an input / textarea
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (isTyping(e.target)) return;
 
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         if (e.key === "v" || e.key === "V") setActiveTool("select");
         if (e.key === "h" || e.key === "H") setActiveTool("hand");
+        // Hold space to pan, like Photoshop and Figma: the tool snaps back on
+        // release. preventDefault stops the browser from scrolling the page.
+        if (e.code === "Space") {
+          e.preventDefault();
+          if (toolBeforeSpaceRef.current === null) {
+            setActiveTool((t) => { toolBeforeSpaceRef.current = t; return "hand"; });
+          }
+        }
       }
 
       const mod = e.ctrlKey || e.metaKey;
@@ -715,25 +692,58 @@ export default function WorkflowCanvas() {
         if (e.shiftKey) handleRedo(); else handleUndo();
       }
       if (mod && (e.key === "y" || e.key === "Y")) { e.preventDefault(); handleRedo(); }
-      if (mod && e.key === "c") { e.preventDefault(); handleCopy(); }
     };
+
+    const releaseSpace = () => {
+      if (toolBeforeSpaceRef.current === null) return;
+      setActiveTool(toolBeforeSpaceRef.current);
+      toolBeforeSpaceRef.current = null;
+    };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.code === "Space") releaseSpace(); };
+
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [handleCopy, handleUndo, handleRedo]);
+    document.addEventListener("keyup", onKeyUp);
+    // Alt-tabbing away while space is held would otherwise strand the hand tool.
+    window.addEventListener("blur", releaseSpace);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", releaseSpace);
+    };
+  }, [handleUndo, handleRedo]);
+
+  // Native `copy` event: text copies (inputs, selections) stay native; a node
+  // copy tags the clipboard with a custom type only, never text/plain.
+  useEffect(() => {
+    const onCopyEvent = (e: ClipboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      const hasTextSelection = !!window.getSelection()?.toString();
+      const hasSelectedNodes = useWorkflowStore.getState().nodes.some((n) => n.selected);
+      if (!shouldHandleCopy({ typing, hasTextSelection, hasSelectedNodes })) return;
+      handleCopy();
+      e.clipboardData?.setData(NODES_MIME, String(Date.now()));
+      e.preventDefault();
+    };
+    document.addEventListener("copy", onCopyEvent);
+    return () => document.removeEventListener("copy", onCopyEvent);
+  }, [handleCopy]);
 
   // Native `paste` event, not navigator.clipboard.readText() — reading clipboardData
   // off the event is treated as a direct user gesture, so it pastes immediately
   // instead of popping the browser's "Paste" permission button.
   useEffect(() => {
     const onPasteEvent = (e: ClipboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
 
-      const raw = e.clipboardData?.getData("text/plain") ?? "";
-      const text = raw.trim();
-      // If the OS clipboard contains our node-copy sentinel, paste nodes.
-      // Otherwise treat non-empty text as external content → prompt node(s).
-      if (text && text !== nodeSentinelRef.current) {
+      const text = (e.clipboardData?.getData("text/plain") ?? "").trim();
+      const intent = resolvePasteIntent({
+        types: Array.from(e.clipboardData?.types ?? []),
+        text,
+        hasNodes: !!clipboardRef.current,
+      });
+      if (intent === "text") {
         e.preventDefault();
         const currentState = useWorkflowStore.getState();
         const currentNodes = currentState.nodes;
@@ -806,7 +816,7 @@ export default function WorkflowCanvas() {
             });
           }
         });
-      } else if (clipboardRef.current) {
+      } else if (intent === "nodes") {
         e.preventDefault();
         handlePaste();
       }
@@ -916,7 +926,7 @@ export default function WorkflowCanvas() {
     if (sourceNode?.type !== "videoInputNode") return;
     if (targetNode?.type !== "videoGeneratorNode") return;
 
-    const videoModelId = (targetNode.data?.videoModel as string | undefined) ?? "kling-3.0";
+    const videoModelId = (targetNode.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
     const cfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
     if (!cfg) return;
 
@@ -978,12 +988,6 @@ export default function WorkflowCanvas() {
   }, []);
 
   // ── Alignment snap guides ─────────────────────────────────────────────────────
-  const [snapGuides, setSnapGuides] = useState<SnapGuide[]>([]);
-  const snapTargetRef = useRef<{ id: string; x: number; y: number } | null>(null);
-
-  const push = useCallback((text: string, ok = true) => {
-    setLog((l) => [...l.slice(-60), { text, ok }]);
-  }, []);
 
   // prompt handle: only promptNode; 1 connection max. image handle: up to 14 (nano-banana-2 limit).
   const isValidConnection = useCallback(
@@ -1033,7 +1037,9 @@ export default function WorkflowCanvas() {
           const count = edges.filter(
             (e) => e.target === connection.target && e.targetHandle === "image"
           ).length;
-          if (count >= 14) return false;
+          const imgCfg = IMAGE_MODELS.find((m) => m.id === ((target.data?.model as string | undefined) ?? "nano-banana-2"));
+          const cap = imgCfg && imgCfg.maxImages > 0 ? imgCfg.maxImages : 14;
+          if (count >= cap) return false;
 
           // Same image source cannot be connected twice to the same node
           const duplicate = edges.some(
@@ -1048,7 +1054,7 @@ export default function WorkflowCanvas() {
 
       // Video generator: prompt/startFrame/endFrame accept 1 each; resource accepts up to 3
       if (target?.type === "videoGeneratorNode") {
-        const videoModelId = (target.data?.videoModel as string | undefined) ?? "kling-3.0";
+        const videoModelId = (target.data?.videoModel as string | undefined) ?? DEFAULT_VIDEO_MODEL;
         const videoCfg = VIDEO_MODELS.find((m) => m.id === videoModelId);
         const isMotionControl = videoCfg?.apiInput.useMotionControl === true;
 
@@ -1150,242 +1156,6 @@ export default function WorkflowCanvas() {
     },
     [],
   );
-
-  const addToast   = useWorkflowStore((s) => s.addToast);
-  const kieKeySet  = useWorkflowStore((s) => s.kieKeySet);
-
-  const runAll = useCallback(async () => {
-    const token = await getAccessToken();
-
-    setIsRunning(true);
-    setLog([]);
-    push("Running workflow…");
-    const order = topoSort(nodes, edges);
-
-    for (const nodeId of order) {
-      const node = nodes.find((n) => n.id === nodeId) as Node<NodeData> | undefined;
-      if (!node) continue;
-
-      // ── Image generator ─────────────────────────────────────────────────────
-      if (node.type === "generateNode") {
-        // Extract frames from VideoInputNodes on the image handle that lack a capturedFrameUrl.
-        // Uses trimEnd if set (end frame), otherwise trimStart ?? 0 (start / first frame).
-        const videoImageEdges = edges.filter(
-          (e) => e.target === nodeId && e.targetHandle === "image" &&
-            useWorkflowStore.getState().nodes.find((n) => n.id === e.source)?.type === "videoInputNode"
-        );
-        for (const edge of videoImageEdges) {
-          const src = useWorkflowStore.getState().nodes.find((n) => n.id === edge.source);
-          if (!src || (src.data.capturedFrameUrl as string | undefined)) continue;
-          const videoUrl = (src.data.videoUrl ?? src.data.r2Url) as string | undefined;
-          if (!videoUrl || videoUrl.startsWith("blob:")) continue;
-          const trimStart = src.data.trimStart as number | undefined;
-          const trimEnd = src.data.trimEnd as number | undefined;
-          const extractBody = trimEnd !== undefined
-            ? { videoUrl, timeSeconds: trimEnd }
-            : { videoUrl, timeSeconds: trimStart ?? 0 };
-          try {
-            const r = await fetch("/api/extract-frame", {
-              method: "POST",
-              headers: authHeaders(token),
-              body: JSON.stringify(extractBody),
-            });
-            const j = await r.json();
-            if (j.cdnUrl) updateNodeData(src.id, { capturedFrameUrl: j.cdnUrl });
-          } catch { /* proceed without */ }
-        }
-
-        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const prompt = upstream.prompt;
-        const imageUrls = upstream.imageUrls;
-        const aspectRatio = node.data.aspectRatio ?? "1:1";
-        const quality = node.data.quality ?? "1k";
-        const payload = { prompt, imageUrls, model: node.data.model, aspectRatio, quality };
-
-        if (!prompt?.trim()) {
-          const promptNodeId = edges.find(
-            (e) => e.target === nodeId && e.targetHandle === "prompt"
-          )?.source;
-          if (promptNodeId) updateNodeData(promptNodeId, { hasError: true });
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] node=${node.id}`, payload);
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] ${aspectRatio} · ${imageUrls.length} image(s)…`);
-        updateNodeData(nodeId, { status: "running", imageUrl: undefined });
-
-        try {
-          // Submit job
-          const res = await fetch("/api/generate", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-
-          const { taskId, referenceImageUrls } = data as {
-            taskId: string;
-            referenceImageUrls?: string[];
-          };
-
-          // If reference images were uploaded to R2, update those nodes immediately
-          if (referenceImageUrls?.length) {
-            const imageEdges = edges.filter(
-              (e) => e.target === nodeId && e.targetHandle === "image"
-            );
-            referenceImageUrls.forEach((cdnUrl, i) => {
-              const srcId = imageEdges[i]?.source;
-              if (srcId) updateNodeData(srcId, { r2Url: cdnUrl });
-            });
-          }
-
-          // Poll /api/job-status until done (image generate is async/callback-based)
-          push(`[${node.id}] waiting for result…`);
-          let imageUrl: string | undefined;
-          for (let attempt = 0; attempt < 120; attempt++) {
-            await new Promise((r) => setTimeout(r, 3000));
-            const poll = await fetch(`/api/job-status?taskId=${taskId}`);
-            const result = await poll.json();
-            if (result.status === "done") { imageUrl = result.imageUrl; break; }
-            if (result.status === "error") throw new Error(result.error ?? "Generation failed");
-            if (attempt > 0 && attempt % 5 === 0) push(`[${node.id}] still waiting…`);
-          }
-
-          if (!imageUrl) throw new Error("Timed out waiting for generation result");
-          updateNodeData(nodeId, { status: "done", imageUrl });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-
-      // ── Assistant (text-to-text LLM) ────────────────────────────────────────
-      if (node.type === "assistantNode") {
-        const upstream = resolveInputs(nodeId, nodes as Node<NodeData>[], edges);
-        const prompt = upstream.prompt ?? (node.data.localPrompt as string | undefined) ?? "";
-
-        if (!prompt.trim()) {
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] assistantNode=${node.id}`, { prompt, model: node.data.model });
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] generating text…`);
-        updateNodeData(nodeId, { status: "running", outputText: "", errorMsg: undefined });
-
-        try {
-          const res = await fetch("/api/assistant", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify({
-              prompt,
-              model: node.data.model ?? "claude-sonnet-4-6",
-              systemPrompt: "You are an expert prompt engineer. Rewrite the user's prompt to be clearer, more specific, and more effective for an AI model. Output only the improved prompt — no explanation, no preamble, no quotes, no commentary of any kind.",
-            }),
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({ error: "Generation failed" }));
-            throw new Error(err.error ?? "Generation failed");
-          }
-
-          const reader = res.body!.getReader();
-          const decoder = new TextDecoder();
-          let accumulated = "";
-          outer: while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            for (const line of decoder.decode(value, { stream: true }).split("\n")) {
-              if (!line.startsWith("data: ")) continue;
-              const payload = line.slice(6).trim();
-              if (payload === "[DONE]") break outer;
-              try {
-                const parsed = JSON.parse(payload);
-                if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-                  const delta = parsed.delta.text ?? "";
-                  if (delta) { accumulated += delta; updateNodeData(nodeId, { outputText: accumulated }); }
-                }
-              } catch { /* skip */ }
-            }
-          }
-          updateNodeData(nodeId, { status: "done", outputText: accumulated });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-
-      // ── Video generator (Kling 3.0) ─────────────────────────────────────────
-      if (node.type === "videoGeneratorNode") {
-        const upstream = resolveInputs(nodeId, useWorkflowStore.getState().nodes as Node<NodeData>[], edges);
-        const prompt = upstream.prompt ?? "";
-        const duration = node.data.duration ?? 5;
-        const aspectRatio = node.data.aspectRatio ?? "16:9";
-        const klingMode = node.data.klingMode ?? "pro";
-        const sound = node.data.sound ?? false;
-        const payload = {
-          prompt,
-          startFrameUrl: upstream.startFrameUrl,
-          endFrameUrl: upstream.endFrameUrl,
-          resources: upstream.resources,
-          sound, duration, aspectRatio,
-          mode: klingMode,
-        };
-
-        if (!prompt.trim()) {
-          const promptNodeId = edges.find(
-            (e) => e.target === nodeId && e.targetHandle === "prompt"
-          )?.source;
-          if (promptNodeId) updateNodeData(promptNodeId, { hasError: true });
-          push(`[${node.id}] skipped — prompt is empty`, false);
-          continue;
-        }
-
-        if (debugMode) {
-          console.log(`[DEBUG] videoNode=${node.id}`, payload);
-          push(`[DEBUG] ${node.id} — logged to console`);
-          continue;
-        }
-
-        push(`[${node.id}] Kling 3.0 · ${klingMode} · ${duration}s…`);
-        updateNodeData(nodeId, { status: "running", videoUrl: undefined });
-
-        try {
-          const res = await fetch("/api/generate-video", {
-            method: "POST",
-            headers: authHeaders(token),
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
-          updateNodeData(nodeId, { status: "done", videoUrl: data.videoUrl });
-          push(`[${node.id}] done`);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          updateNodeData(nodeId, { status: "error", errorMsg: msg });
-          push(`[${node.id}] error: ${msg}`, false);
-        }
-      }
-    }
-
-    push("Complete");
-    setIsRunning(false);
-  }, [nodes, edges, updateNodeData, setIsRunning, debugMode, push, kieKeySet, addToast]);
 
   // ── Place a node at the viewport center (used by the empty-state picker) ────
   const addNodeAtCenter = useCallback((type: string) => {
@@ -1495,10 +1265,6 @@ export default function WorkflowCanvas() {
     setPotentialGroupIds(null);
   }, []);
 
-  const canRun = !isRunning && nodes.some(
-    (n) => n.type === "generateNode" || n.type === "videoGeneratorNode" || n.type === "assistantNode"
-  );
-
   const computedNodes = useMemo(() => {
     // During rubber-band: return nodes as-is so only actually-changed nodes (selected state)
     // get new references. Wrapping every node in a new object causes ReactFlow to re-render
@@ -1506,6 +1272,7 @@ export default function WorkflowCanvas() {
     // CSS class .is-rubber-band-selecting suppresses handle/card animations.
     if (isRubberBandSelecting && dyingNodeIds.size === 0) return nodes;
 
+    /* eslint-disable react-hooks/refs -- selection is read from a ref on purpose: these memos must not recompute on every selection tick (rubber-band blinking) */
     const selIds = selectedIdsRef.current;
     const anySelected = selIds.size > 0;
     const lockedMemberIds = new Set<string>();
@@ -1551,9 +1318,10 @@ export default function WorkflowCanvas() {
       };
     });
   }, [edges, ancestorEdgeIds, potentialGroupIds, dyingEdgeIds]);
+  /* eslint-enable react-hooks/refs */
 
   return (
-    <div className="relative flex-1 flex flex-col min-w-0 h-full" style={{ background: "#0B0E14" }}>
+    <div className="relative flex-1 flex flex-col min-w-0 h-full" style={{ background: "var(--bg-0)" }}>
       <div
         ref={wrapperRef}
         className={`relative flex-1 flex flex-col min-h-0 min-w-0${activeTool === "hand" ? " canvas-hand-mode" : ""}`}
@@ -1607,13 +1375,13 @@ export default function WorkflowCanvas() {
           panOnScroll
           defaultEdgeOptions={{ animated: false }}
           connectionLineStyle={{
-            stroke: "#555555",
+            stroke: "var(--border-2)",
             strokeWidth: 2,
             strokeDasharray: "6 3",
             strokeLinecap: "round",
           }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="#888888" />
+          <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="var(--border-2)" />
           <ViewportSyncer />
           <GroupPreviewOverlay groupIds={potentialGroupIds} />
           <SelectionToolbar />
@@ -1635,7 +1403,7 @@ export default function WorkflowCanvas() {
 
           <Controls
             showInteractive={false}
-            className="[&>button]:!bg-[#0B0E14] [&>button]:!border-[#1A2030] [&>button]:!text-[#A0A0A0] [&>button:hover]:!text-white"
+            className="[&>button]:!bg-[var(--bg-0)] [&>button]:!border-[var(--border-1)] [&>button]:!text-[var(--text-2)] [&>button:hover]:!text-[var(--text-1)]"
           />
 
         </ReactFlow>
@@ -1661,19 +1429,20 @@ export default function WorkflowCanvas() {
             className="absolute inset-0 pointer-events-none z-20"
             style={{ width: "100%", height: "100%" }}
           >
+            {/* eslint-disable-next-line react-hooks/refs -- guides re-render on every drag frame (setSnapGuides), so the viewport ref is current */}
             {snapGuides.map((guide, i) => {
               const { x: panX, y: panY, zoom } = viewportRef.current;
               if (guide.type === "h") {
                 const sy = guide.canvasPos * zoom + panY;
                 return (
                   <line key={i} x1={-100000} y1={sy} x2={100000} y2={sy}
-                    stroke="#555" strokeWidth={1} opacity={0.8} />
+                    stroke="var(--border-2)" strokeWidth={1} opacity={0.8} />
                 );
               }
               const sx = guide.canvasPos * zoom + panX;
               return (
                 <line key={i} x1={sx} y1={-100000} x2={sx} y2={100000}
-                  stroke="#555" strokeWidth={1} opacity={0.8} />
+                  stroke="var(--border-2)" strokeWidth={1} opacity={0.8} />
               );
             })}
           </svg>
@@ -1686,7 +1455,7 @@ export default function WorkflowCanvas() {
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
-                background: "radial-gradient(ellipse 70% 50% at 50% 52%, rgba(45,212,191,0.06) 0%, transparent 70%)",
+                background: "var(--surface) 0%, transparent 70%)",
               }}
             />
 
@@ -1694,16 +1463,16 @@ export default function WorkflowCanvas() {
               {/* Logo + title */}
               <div className="flex flex-col items-center gap-4 pointer-events-none">
                 {/* Helios star icon */}
-                <svg width="44" height="44" viewBox="0 0 20 20" fill="#2DD4BF" stroke="none">
+                <svg width="44" height="44" viewBox="0 0 20 20" fill="var(--accent)" stroke="none">
                   <path d="M11.8525 4.21651L11.7221 3.2387C11.6906 3.00226 11.4889 2.82568 11.2504 2.82568C11.0118 2.82568 10.8102 3.00226 10.7786 3.23869L10.6483 4.21651C10.2658 7.0847 8.00939 9.34115 5.14119 9.72358L4.16338 9.85396C3.92694 9.88549 3.75037 10.0872 3.75037 10.3257C3.75037 10.5642 3.92694 10.7659 4.16338 10.7974L5.14119 10.9278C8.00938 11.3102 10.2658 13.5667 10.6483 16.4349L10.7786 17.4127C10.8102 17.6491 11.0118 17.8257 11.2504 17.8257C11.4889 17.8257 11.6906 17.6491 11.7221 17.4127L11.8525 16.4349C12.2349 13.5667 14.4913 11.3102 17.3595 10.9278L18.3374 10.7974C18.5738 10.7659 18.7504 10.5642 18.7504 10.3257C18.7504 10.0872 18.5738 9.88549 18.3374 9.85396L17.3595 9.72358C14.4913 9.34115 12.2349 7.0847 11.8525 4.21651Z" />
                 </svg>
 
                 <TypewriterHeading text="Build awesome workflows" />
                 <motion.p
-                  initial={{ filter: "blur(8px)", opacity: 0 }}
-                  animate={{ filter: "blur(0px)", opacity: 1 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: 0.9, delay: 0.15 }}
-                  style={{ color: "rgba(255,255,255,0.35)", fontSize: "14px", margin: 0 }}
+                  style={{ color: "var(--border-2)", fontSize: "14px", margin: 0 }}
                 >
                   Pick a node below to start building
                 </motion.p>
@@ -1721,21 +1490,21 @@ export default function WorkflowCanvas() {
                     type: "promptNode",
                     label: "Text",
                     desc: "Write & refine prompts",
-                    accent: "#4ee5b7",
+                    accent: "var(--success)",
                     icon: <MessageSquare size={20} strokeWidth={1.6} />,
                   },
                   {
                     type: "generateNode",
                     label: "Image Generator",
                     desc: "Generate images from a text prompt",
-                    accent: "#ff955a",
+                    accent: "var(--warning)",
                     icon: <Sparkles size={20} strokeWidth={1.6} />,
                   },
                   {
                     type: "videoGeneratorNode",
                     label: "Video Generator",
                     desc: "Generate videos from a text prompt",
-                    accent: "#a78bfa",
+                    accent: "var(--accent)",
                     icon: <Clapperboard size={20} strokeWidth={1.6} />,
                   },
                 ].map(({ type, label, desc, icon, accent }) => (
@@ -1751,8 +1520,8 @@ export default function WorkflowCanvas() {
                       width: "210px",
                       padding: "24px 22px 26px",
                       borderRadius: "18px",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid var(--border-1)",
+                      background: "var(--border-1)",
                       cursor: "pointer",
                       outline: "none",
                       transition: "transform 200ms ease, box-shadow 220ms ease, border-color 220ms ease, background 220ms ease",
@@ -1760,16 +1529,16 @@ export default function WorkflowCanvas() {
                     onMouseEnter={(e) => {
                       const el = e.currentTarget;
                       el.style.transform = "translateY(-4px)";
-                      el.style.boxShadow = `0 0 0 1px ${accent}35, 0 16px 40px rgba(0,0,0,0.4)`;
+                      el.style.boxShadow = `0 0 0 1px ${accent}35, 0 16px 40px var(--scrim)`;
                       el.style.borderColor = `${accent}35`;
-                      el.style.background = `rgba(255,255,255,0.05)`;
+                      el.style.background = `var(--border-1)`;
                     }}
                     onMouseLeave={(e) => {
                       const el = e.currentTarget;
                       el.style.transform = "translateY(0)";
                       el.style.boxShadow = "";
-                      el.style.borderColor = "rgba(255,255,255,0.08)";
-                      el.style.background = "rgba(255,255,255,0.03)";
+                      el.style.borderColor = "var(--border-1)";
+                      el.style.background = "var(--border-1)";
                     }}
                   >
                     {/* Icon badge */}
@@ -1791,13 +1560,13 @@ export default function WorkflowCanvas() {
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "7px" }}>
                       <span style={{
                         fontSize: "15px", fontWeight: 700,
-                        color: "rgba(255,255,255,0.92)",
+                        color: "var(--text-1)",
                         letterSpacing: "-0.2px",
                         lineHeight: 1.2,
                       }}>
                         {label}
                       </span>
-                      <span style={{ fontSize: "12.5px", color: "rgba(255,255,255,0.42)", fontWeight: 400, lineHeight: 1.4 }}>
+                      <span style={{ fontSize: "12.5px", color: "var(--text-3)", fontWeight: 400, lineHeight: 1.4 }}>
                         {desc}
                       </span>
                     </div>
@@ -1806,8 +1575,8 @@ export default function WorkflowCanvas() {
               </motion.div>
 
               <motion.p
-                className="text-[11px] tracking-wide pointer-events-none select-none"
-                style={{ color: "rgba(255,255,255,0.15)" }}
+                className="text-[12px] tracking-wide pointer-events-none select-none"
+                style={{ color: "var(--border-2)" }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.5 }}
@@ -1819,9 +1588,9 @@ export default function WorkflowCanvas() {
         )}
 
         {log.length > 0 && (
-          <div className="h-24 bg-[#0B0E14] border-t border-[#1A2030] overflow-y-auto px-4 py-2 shrink-0">
+          <div className="h-24 bg-[var(--bg-0)] border-t border-[var(--border-1)] overflow-y-auto px-4 py-2 shrink-0">
             {log.map((l, i) => (
-              <p key={i} className={`text-[11px] font-mono leading-5 ${l.ok ? "text-[#A0A0A0]" : "text-red-500"}`}>
+              <p key={i} className={`text-[12px] font-mono leading-5 ${l.ok ? "text-[var(--text-2)]" : "text-red-500"}`}>
                 {l.text}
               </p>
             ))}

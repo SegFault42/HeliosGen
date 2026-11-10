@@ -1,0 +1,79 @@
+{
+  "artboards": [
+    {
+      "file": "Foundations.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1560,
+      "title": "Foundations"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 1680,
+      "w": 1440,
+      "h": 900,
+      "title": "Bench (Home)"
+    },
+    {
+      "file": "Settings.dc.html",
+      "x": 0,
+      "y": 2700,
+      "w": 1440,
+      "h": 900,
+      "title": "Settings"
+    },
+    {
+      "file": "Components.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 2480,
+      "title": "Components + motion"
+    },
+    {
+      "file": "Assistant.dc.html",
+      "x": 1560,
+      "y": 2600,
+      "w": 1440,
+      "h": 900,
+      "title": "Assistant drawer"
+    },
+    {
+      "file": "Canvas.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Canvas (Workflow)"
+    },
+    {
+      "file": "Ledger.dc.html",
+      "x": 3120,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "Ledger"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -300,
+      "w": 320,
+      "text": "ANVIL v2 · night forge.\nDark premium, own identity: warm coal ground, Ember heat with a soft glow only on live state, serif display with an italic Ember word, rounded rectangles (no pills), plain canvas (no dot grid), square Ember ports, dollars not credits.\n\nLeft column: foundations, Bench, Settings. Middle: components + motion storyboards + migration, Assistant. Right: Canvas, Ledger."
+    },
+    {
+      "id": "fonts",
+      "x": 360,
+      "y": -300,
+      "w": 320,
+      "text": "Type: Newsreader (display), Geist (UI), Geist Mono (numbers), all Google Fonts. Nothing shared with Solstice (Outfit/Archivo/Space Mono) or Higgsfield.\n\nMotion tokens and the GSAP plugin per move are on the Components sheet."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

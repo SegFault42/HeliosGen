@@ -47,6 +47,8 @@ export default function DotCanvasBackground() {
       }
     }
 
+    // Solstice: dots take the --border-2 token (resolved once; no colour literals here).
+    const DOT_COLOR = getComputedStyle(document.documentElement).getPropertyValue("--border-2").trim() || "currentColor";
     let t = 0;
     function draw() {
       if (!canvas || !ctx) return;
@@ -56,8 +58,9 @@ export default function DotCanvasBackground() {
         const alpha = (Math.sin(p.phase + t * p.speed) + 1) / 2;
         const a = alpha * 0.35;
         if (a < 0.01) continue;
-        ctx.fillStyle = `rgba(45,212,191,${a})`;
+        ctx.fillStyle = DOT_COLOR; ctx.globalAlpha = a;
         ctx.fillRect(p.x, p.y, 1.5, 1.5);
+        ctx.globalAlpha = 1;
       }
       raf = requestAnimationFrame(draw);
     }

@@ -1,8 +1,10 @@
 export const dynamic = "force-dynamic";
 
+import { dlog } from "@/lib/debugLog";
 import { NextRequest } from "next/server";
 import { getKieToken } from "@/lib/getKieToken";
 import { getAzureToken } from "@/lib/getAzureKey";
+import { validateAzureEndpoint } from "@/lib/azureEndpoint";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -51,6 +53,13 @@ export async function POST(req: NextRequest) {
 
   // ── Azure Auto (model-router) ──────────────────────────────────────────────
   if (model === "azure-auto") {
+    const endpoint = validateAzureEndpoint(body.azureEndpoint);
+    if (!endpoint) {
+      return new Response(
+        JSON.stringify({ error: "Azure base URL is missing or invalid. Add a valid Azure endpoint in Settings → API Keys." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
     const azureKey = await getAzureToken(req);
     if (!azureKey) {
       return new Response(
@@ -58,21 +67,10 @@ export async function POST(req: NextRequest) {
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
     }
-    // Normalise: strip trailing slashes and any /openai suffix users may have pasted
-    const endpoint = (body.azureEndpoint ?? "")
-      .trim()
-      .replace(/\/+$/, "")
-      .replace(/\/openai$/i, "");
     const deployment  = (body.azureDeployment || "auto-model").trim();
     const modelName   = (body.azureModelName  || "model-router").trim();
-    if (!endpoint) {
-      return new Response(
-        JSON.stringify({ error: "Azure base URL not configured. Add it in Settings → API Keys." }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
     const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${AZURE_API_VERSION}`;
-    console.log("[azure-auto] POST", url.replace(/api-version=.*/, "api-version=…"));
+    dlog("[azure-auto] POST", url.replace(/api-version=.*/, "api-version=…"));
     const upstream = await fetch(url, {
       method: "POST",
       cache: "no-store",

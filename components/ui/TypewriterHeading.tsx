@@ -12,6 +12,7 @@ export default function TypewriterHeading({
   const [done, setDone] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restarts the typewriter when text changes
     setDisplayed("");
     setDone(false);
     let i = 0;
@@ -36,7 +37,7 @@ export default function TypewriterHeading({
       maxWidth: "600px",
     }}>
       <span style={{
-        background: "linear-gradient(to bottom, #ffffff, #2DD4BF)",
+        background: "var(--text-1)",
         WebkitBackgroundClip: "text",
         WebkitTextFillColor: "transparent",
         backgroundClip: "text",

@@ -10,6 +10,10 @@ import * as guestDb from "@/lib/guest/db";
  *   → returns { cdnUrl: string }
  */
 export async function POST(req: NextRequest) {
+  // text/plain is a CORS "simple" request, so a cross-site page could POST here without a preflight.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
   try {
     const { dataUrl, folder = "uploads", mimeType } = await req.json() as {
       dataUrl:   string;
@@ -19,6 +23,10 @@ export async function POST(req: NextRequest) {
 
     if (!dataUrl) {
       return NextResponse.json({ error: "dataUrl is required" }, { status: 400 });
+    }
+    // folder becomes MEDIA_DIR/<folder>: a single plain name, never a path
+    if (typeof folder !== "string" || !/^[\w-]+$/.test(folder)) {
+      return NextResponse.json({ error: "folder must be a single name like \"uploads\"" }, { status: 400 });
     }
 
     let cdnUrl: string;

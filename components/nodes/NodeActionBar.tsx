@@ -10,6 +10,7 @@ interface Props {
   onDelete: () => void;
   onSave?: () => void;
   onDuplicate: () => void;
+  onRename?: () => void;
 }
 
 function Btn({
@@ -33,8 +34,8 @@ function Btn({
       title={title}
       className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
         danger
-          ? "text-white hover:text-red-400 hover:bg-red-400/10"
-          : "text-white hover:bg-white/10"
+          ? "text-[var(--text-1)] hover:text-red-400 hover:bg-red-400/10"
+          : "text-[var(--text-1)] hover:bg-[var(--bg-2)]"
       }`}
     >
       {children}
@@ -51,17 +52,17 @@ function Spinner() {
   );
 }
 
-export default function NodeActionBar({ visible, hasContent, isSaving, onPreview, onDelete, onSave, onDuplicate }: Props) {
+export default function NodeActionBar({ visible, hasContent, isSaving, onPreview, onDelete, onSave, onDuplicate, onRename }: Props) {
   return (
-    <NodeToolbar isVisible={visible} position={Position.Top} offset={16}>
+    // offset 28: the label sits at top:-20px; at 16 the bar overlapped it and
+    // swallowed the second click of a rename double-click.
+    <NodeToolbar isVisible={visible} position={Position.Top} offset={28}>
       <div
         className="flex items-center gap-0.5 px-1.5 py-1 node-action-bar-enter"
         style={{
           borderRadius: 999,
-          background: "rgba(16, 16, 16, 0.96)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.4)",
+          background: "var(--bg-0)",
+          border: "1px solid var(--border-1)",
           whiteSpace: "nowrap",
           zIndex: 10,
         }}
@@ -77,7 +78,16 @@ export default function NodeActionBar({ visible, hasContent, isSaving, onPreview
           </Btn>
         )}
 
-        <span className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0" />
+        <span className="w-px h-4 bg-[var(--bg-2)] mx-0.5 shrink-0" />
+
+        {onRename && (
+          <Btn onClick={onRename} title="Rename node (or double-click its label)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </Btn>
+        )}
 
         <Btn onClick={onDuplicate} title="Duplicate node">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

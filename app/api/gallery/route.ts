@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { removeMediaIfOrphan } from "@/lib/guest/media";
 
 const LIMIT = 20;
 
@@ -78,7 +79,14 @@ export async function DELETE(req: NextRequest) {
   const { id, source } = await req.json() as { id: string; source: "generation" | "upload" };
   if (!id || !source) return NextResponse.json({ error: "Missing id or source" }, { status: 400 });
 
+  // Collect the file URLs first, drop the row, then unlink whatever nothing
+  // else references. Before this the row went away and the file stayed forever.
+  const urls = source === "generation"
+    ? guestDb.getGenerationUrls(id, GUEST_USER_ID)
+    : guestDb.getUploadUrls(id, GUEST_USER_ID);
   if (source === "generation") guestDb.deleteGeneration(id, GUEST_USER_ID);
   else guestDb.deleteUpload(id, GUEST_USER_ID);
-  return NextResponse.json({ ok: true });
+  let freed = 0;
+  for (const u of urls) freed += removeMediaIfOrphan(u);
+  return NextResponse.json({ ok: true, freedBytes: freed });
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useWorkflowStore } from "./store";
 import { buildPipelineWaves } from "./executor";
+import { decideWave } from "./pipelineWait";
 
 interface PipelineState {
   waves: string[][];
@@ -15,7 +16,7 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
   const [pipeline, setPipeline] = useState<PipelineState | null>(null);
   const waveEverActive = useRef(false);
   const scopeRef = useRef(scopeNodeIds);
-  scopeRef.current = scopeNodeIds;
+  useEffect(() => { scopeRef.current = scopeNodeIds; });
 
   const isRunning = pipeline !== null;
 
@@ -67,30 +68,25 @@ export function usePipelineRunner(scopeNodeIds?: string[]) {
       for (const id of currentWave) {
         updateNodeData(id, { pendingGenerate: true });
       }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- advances the wave state machine from node status in the store
       setPipeline(p => p ? { ...p, waveStarted: true } : null);
       return;
     }
 
     // Only mark the wave as "ever active" once a node actually reaches
-    // status "pending" or "running" — NOT merely on pendingGenerate being set.
+    // status "pending" or "running", NOT merely on pendingGenerate being set.
     // This prevents a race where pendingGenerate is cleared before generate()
     // sets status:"pending", causing the runner to think the wave is already done.
-    const anyActive = currentWave.some(id => {
-      const node = nodes.find(n => n.id === id);
-      return node?.data?.status === "pending" || node?.data?.status === "running";
-    });
-    if (anyActive) waveEverActive.current = true;
+    const states = currentWave.map(id => nodes.find(n => n.id === id)?.data);
+    if (states.some(d => d?.status === "pending" || d?.status === "running")) waveEverActive.current = true;
 
-    // Don't check completion until the wave has actually started
-    if (!waveEverActive.current) return;
-
-    const allDone = currentWave.every(id => {
-      const node = nodes.find(n => n.id === id);
-      if (!node) return true;
-      return !node.data.pendingGenerate && node.data.status !== "pending" && node.data.status !== "running";
-    });
-
-    if (!allDone) return;
+    const decision = decideWave(states, waveEverActive.current, waveIdx + 1 < waves.length);
+    if (decision === "wait") return;
+    if (decision === "stop") {
+      // A node failed: end the pipeline (queued flags are cleared by the effect above).
+      setPipeline(null);
+      return;
+    }
 
     // Advance to next wave or finish
     const nextIdx = waveIdx + 1;

@@ -65,3 +65,5 @@ next-env.d.ts
 # Signing / notarization secrets
 /scripts/desktop/sign.env
 /src-tauri/.node-cache/
+
+*.bak-*

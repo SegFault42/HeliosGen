@@ -16,6 +16,17 @@ const nextConfig: NextConfig = {
     proxyClientMaxBodySize: '30mb',
   },
   serverExternalPackages: ["undici"],
+  // Stored media never changes under the same name (uuid / hash-suffixed files),
+  // so the browser may keep it instead of revalidating every image and video on
+  // each visit. Matches what app/generated/[...path]/route.ts already sends.
+  async headers() {
+    return [
+      {
+        source: "/generated/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+    ];
+  },
   // `sharp` is a native module; the file tracer misses its platform binaries
   // unless we point at them explicitly for the standalone bundle.
   outputFileTracingIncludes: {
@@ -26,6 +37,10 @@ const nextConfig: NextConfig = {
     "/**": ["src-tauri/**/*"],
   },
   images: {
+    qualities: [30, 75],
+    // Sources are immutable, so a thumbnail is valid for as long as its file
+    // exists. The 4 h default re-encoded every multi-MB original several times a day.
+    minimumCacheTTL: 31536000,
     remotePatterns: [
       // Read-only public bucket holding the bundled workflow-template sample media
       // (lib/templates.ts). Not app storage — just an image CDN allow-list entry.

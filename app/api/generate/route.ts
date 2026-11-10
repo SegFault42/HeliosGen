@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dlog } from "@/lib/debugLog";
 import https from "node:https";
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -7,14 +8,20 @@ import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import { MEDIA_DIR } from "@/lib/guest/paths";
 import { jobStore } from "@/lib/jobStore";
+import { jobEvents } from "@/lib/jobEvents";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { ensureKieReachableImages } from "@/lib/kieUpload";
 import { ensureR2, uploadBuffer } from "@/lib/storage";
 import { IMAGE_MODELS, validateAzureCustomSize } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { getAzureKeyForUser } from "@/lib/getAzureKey";
+import { validateAzureEndpoint } from "@/lib/azureEndpoint";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { orderedCodexAuthFiles, markCodexLimited } from "@/lib/codexAccounts";
+import { cleanCodexError, codexQualityArgs, runWithAccounts, spawnCodex, CODEX_MAX_EDIT_IMAGES } from "@/lib/codexRun";
+import { submitFlowImage } from "@/lib/flowAdapter";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
 
 const BASE   = "https://api.kie.ai";
 const CREATE = `${BASE}/api/v1/jobs/createTask`;
@@ -134,11 +141,13 @@ async function curlMultipartPost(
     for (let i = 0; i < images.length; i++) {
       args.push("-F", `image[]=@${tmpFiles[i]};type=${images[i].mime}`);
     }
+    // --form-string (not -F) for text fields: curl never treats a --form-string
+    // value starting with @ or < as a file/header reference, unlike -F.
     for (const [k, v] of Object.entries(textFields)) {
-      args.push("-F", `${k}=${v}`);
+      args.push("--form-string", `${k}=${v}`);
     }
 
-    console.log("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
+    dlog("[azure/edits/curl] args:", args.map((a) => (a.startsWith("Bearer ") ? "Bearer ***" : a)));
 
     const runCurl = () => new Promise<{ statusStr: string; stderr: string; exitCode: number }>((resolve, reject) => {
       let out = "";
@@ -153,8 +162,8 @@ async function curlMultipartPost(
     let statusStr: string = "", stderr: string = "", exitCode: number = -1;
     for (let attempt = 1; attempt <= 3; attempt++) {
       ({ statusStr, stderr, exitCode } = await runCurl());
-      console.log(`[azure/edits/curl] attempt ${attempt} exit code:`, exitCode);
-      if (stderr) console.log("[azure/edits/curl] stderr:", stderr);
+      dlog(`[azure/edits/curl] attempt ${attempt} exit code:`, exitCode);
+      if (stderr) dlog("[azure/edits/curl] stderr:", stderr);
       if (exitCode !== 35) break; // 35 = SSL handshake failure — retry
       if (attempt < 3) await new Promise((r) => setTimeout(r, 1000 * attempt));
     }
@@ -166,7 +175,7 @@ async function curlMultipartPost(
 
     const status = parseInt(statusStr, 10) || 0;
     const body   = await readFile(bodyPath, "utf-8").catch(() => "");
-    console.log("[azure/edits/curl] status:", status, "body:", body.slice(0, 1000));
+    dlog("[azure/edits/curl] status:", status, "body:", body.slice(0, 1000));
     return { ok: status >= 200 && status < 300, status, body };
   } finally {
     for (const f of [...tmpFiles, bodyPath]) unlink(f).catch(() => {});
@@ -192,30 +201,6 @@ const CODEX_SIZE_MAP: Record<string, string> = {
 };
 
 /**
- * codex-imagegen's stderr wraps the underlying failure as `codex-imagegen exited
- * with code N: <tmp path> Error: <detail>`, where <detail> is either a JSON blob
- * (e.g. `HTTP 429: {"error":{"message":"..."}}`) or plain prose terminated by a
- * semicolon (e.g. `Responses stream ended without an image result; last status
- * was failed.`). Pull out just the useful part instead of showing the whole dump.
- */
-function cleanCodexError(raw: string): string {
-  const match = raw.match(/Error:\s*([\s\S]*)$/);
-  const tail = (match ? match[1] : raw).trim();
-
-  const braceIdx = tail.indexOf("{");
-  if (braceIdx !== -1) {
-    try {
-      const parsed = JSON.parse(tail.slice(braceIdx));
-      const message = parsed?.error?.message;
-      if (typeof message === "string" && message) return message;
-    } catch { /* not valid JSON — fall through */ }
-  }
-
-  const semiIdx = tail.indexOf(";");
-  return (semiIdx !== -1 ? tail.slice(0, semiIdx).trim() : tail) || raw;
-}
-
-/**
  * Runs the `codex-imagegen` CLI, which drives OpenAI Codex's image tool using the
  * server's local `codex login` session (~/.codex/auth.json) — a single shared
  * identity for the whole deployment, not a per-user API key. Writes reference
@@ -226,6 +211,7 @@ async function runCodexImagegen(opts: {
   prompt: string;
   images: Array<{ buf: Buffer; ext: string }>;
   size: string;
+  quality?: string;
 }): Promise<Buffer> {
   const tmpFiles: string[] = [];
   const outPath = join(tmpdir(), `codex-out-${Date.now()}-${Math.random().toString(36).slice(2)}.png`);
@@ -239,30 +225,26 @@ async function runCodexImagegen(opts: {
       imagePaths.push(p);
     }
 
-    const args = imagePaths.length > 0
-      ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"]
-      : ["generate", "--prompt", opts.prompt, "--size", opts.size, "--out", outPath, "--force"];
+    // Prompt goes through a file so user text never reaches a shell or argv limits.
+    const promptPath = join(tmpdir(), `codex-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+    await writeFile(promptPath, opts.prompt, "utf8");
+    tmpFiles.push(promptPath);
 
-    const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
+    const common = ["--prompt-file", promptPath, "--size", opts.size, ...codexQualityArgs(opts.quality), "--out", outPath, "--force"];
+    const args = imagePaths.length > 0
+      ? ["edit", ...imagePaths.flatMap((p) => ["--image", p]), ...common]
+      : ["generate", ...common];
+
+    const runOnce = (authFile: string) => new Promise<{ exitCode: number; stderr: string }>((resolve, reject) => {
       let err = "";
-      const proc = spawn("codex-imagegen", args);
+      const proc = spawnCodex([...args, "--auth-file", authFile]);
       proc.stderr.on("data", (d: Buffer) => err += d.toString());
       proc.on("close", (code) => resolve({ exitCode: code ?? -1, stderr: err }));
       proc.on("error", (e) => reject(new Error(`codex-imagegen spawn failed: ${e.message} — is it installed and on PATH?`)));
     });
 
-    if (exitCode !== 0) {
-      // The useful part — codex-imagegen's final `Error: ...` line — is at the
-      // *tail* of stderr, after any retry `Warning:` lines. Those warnings
-      // (now including a raw failed-item dump per retry, see cli.py's
-      // item_failed_no_detail handling) can push well past a head-truncated
-      // slice, which cuts the real error off before cleanCodexError() ever
-      // sees it. Log the untruncated stream for debugging and only cap what
-      // gets wrapped into the thrown Error as a sane upper bound.
-      console.error("[codex-imagegen] full stderr:", stderr || "(empty)");
-      throw new Error(`codex-imagegen exited with code ${exitCode}: ${stderr.slice(-4000) || "no stderr output"}`);
-    }
-
+    // Rotate across ChatGPT accounts on usage-limit or expired session (lib/codexRun.ts).
+    await runWithAccounts(orderedCodexAuthFiles(), runOnce, markCodexLimited);
     return await readFile(outPath);
   } finally {
     for (const f of [...tmpFiles, outPath]) unlink(f).catch(() => {});
@@ -272,10 +254,14 @@ async function runCodexImagegen(opts: {
 export const maxDuration = 1000;
 
 export async function POST(req: NextRequest) {
+  // text/plain is a CORS "simple" request, so a cross-site page could POST here without a preflight.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
   const {
     model       = "nano-banana-2",
     prompt,
-    imageUrls   = [],
+    imageUrls: rawImageUrls = [],
     aspectRatio = "1:1",
     quality     = "1k",
     azureQuality,
@@ -302,9 +288,12 @@ export async function POST(req: NextRequest) {
     debugOnly?:          boolean;
   };
 
+  // Drop empty/non-string entries so `[""]` is neither resolved nor counted as a mirror failure.
+  const imageUrls = (Array.isArray(rawImageUrls) ? rawImageUrls : []).filter((u): u is string => typeof u === "string" && u.trim() !== "");
+
   if (debugOnly) {
     const body = { model, prompt, imageUrls, aspectRatio, quality, azureQuality, azureResolution, azureCustomWidth, azureCustomHeight };
-    console.log("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
+    dlog("[DEBUG] generate payload:", JSON.stringify(body, null, 2));
     return NextResponse.json({ ok: true });
   }
 
@@ -313,17 +302,147 @@ export async function POST(req: NextRequest) {
   const cfg = IMAGE_MODELS.find((m) => m.id === model);
   if (!cfg) return NextResponse.json({ error: `Unknown model: ${model}` }, { status: 400 });
 
+  if (codexProvider && imageUrls.length > CODEX_MAX_EDIT_IMAGES) {
+    return NextResponse.json({ error: `Codex accepts at most ${CODEX_MAX_EDIT_IMAGES} reference images (got ${imageUrls.length}). Remove some and retry.` }, { status: 400 });
+  }
+
   let r2ImageUrls: string[] = [];
   try {
     r2ImageUrls = await resolveImages(imageUrls);
   } catch {
-    // image mirroring failures are non-fatal — proceed without reference images
+    // counted below
+  }
+  // Flow resolves the raw URLs itself; every other provider would silently drop the
+  // reference and degrade an edit into text-to-image.
+  if (!cfg.apiInput?.useFlow && r2ImageUrls.length < Math.min(imageUrls.length, 14)) {
+    return NextResponse.json({ error: "Failed to prepare one or more reference images; not falling back to text-to-image. Retry." }, { status: 502 });
   }
 
   const currentUserId = GUEST_USER_ID;
 
+  // ── Google Flow branch ────────────────────────────────────────────────────────
+  if (cfg.apiInput?.useFlow) {
+    try {
+      const flowRes = await submitFlowImage({
+        prompt: prompt.trim(),
+        modelName: cfg.apiInput.flowModel || "Nano Banana 2",
+        aspectRatio,
+        referenceImages: r2ImageUrls.length > 0 ? r2ImageUrls : (imageUrls as string[]),
+      });
+      jobStore.set(flowRes.taskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+      guestDb.insertGeneration({
+        task_id: flowRes.taskId,
+        user_id: currentUserId,
+        generation_type: "image",
+        status: "pending",
+        model,
+        prompt: prompt.trim(),
+        aspect_ratio: aspectRatio,
+        reference_image_urls: imageUrls,
+      });
+      resumeFlowJob(flowRes.taskId);
+      return NextResponse.json({ taskId: flowRes.taskId, provider: "flow" });
+    } catch (err) {
+      console.error("[generate] Google Flow image error:", err);
+      return NextResponse.json({ error: (err instanceof Error && err.message) || "Google Flow image generation failed" }, { status: 500 });
+    }
+  }
+
+  // ── xAI Grok Imagine branch ───────────────────────────────────────────────────
+  if (cfg.apiInput?.useGrok) {
+    let clientKey = process.env.GROK_CLIENT_KEY || "";
+    if (!clientKey) {
+      try { clientKey = (await readFile("F:/grok-pool/.client_key", "utf8")).trim(); } catch {}
+    }
+    if (!clientKey) {
+      return NextResponse.json({ error: "Grok pool client key is unavailable" }, { status: 503 });
+    }
+    const grokModel = cfg.apiId || "grok-imagine-image-lite";
+    try {
+      const catalog = await fetch("http://127.0.0.1:8000/v1/models", {
+        headers: { Authorization: `Bearer ${clientKey}` },
+        signal: AbortSignal.timeout(5_000),
+        cache: "no-store",
+      });
+      if (!catalog.ok) throw new Error(`model catalog HTTP ${catalog.status}`);
+      const listing = await catalog.json() as { data?: Array<{ id?: string }> };
+      if (!listing.data?.some((entry) => entry.id === grokModel)) {
+        return NextResponse.json({ error: `Grok model ${grokModel} is unavailable in the connected pool; reauthenticate its Web/Console accounts` }, { status: 503 });
+      }
+    } catch (error) {
+      return NextResponse.json({ error: `Grok pool availability check failed: ${error instanceof Error ? error.message : "unknown error"}` }, { status: 503 });
+    }
+    const grokTaskId = `grok-img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    jobStore.set(grokTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: grokTaskId,
+      user_id: currentUserId,
+      generation_type: "image",
+      status: "pending",
+      model,
+      prompt: prompt.trim(),
+      aspect_ratio: aspectRatio,
+    });
+
+    (async () => {
+      try {
+        const payload = {
+          model: grokModel,
+          prompt: prompt.trim(),
+          aspect_ratio: aspectRatio || "1:1",
+          response_format: "url",
+        };
+
+        const res = await fetch("http://127.0.0.1:8000/v1/images/generations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${clientKey}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          let msg = `Grok Imagine error HTTP ${res.status}`;
+          try {
+            const parsed = JSON.parse(errText);
+            msg = parsed?.error?.message || msg;
+          } catch {}
+          throw new Error(msg);
+        }
+
+        const data = (await res.json()) as { data?: Array<{ url?: string }> };
+        const rawUrl = data?.data?.[0]?.url;
+        if (!rawUrl) throw new Error("Grok Imagine returned no image URL");
+
+        const buf = await fetchBuffer(rawUrl);
+        const imageUrl = await uploadBuffer(buf, "image/jpeg", "generated");
+
+        const doneResult = { status: "done" as const, imageUrl };
+        jobStore.set(grokTaskId, doneResult);
+        jobEvents.emit(`job:${grokTaskId}`, doneResult);
+
+        guestDb.updateGeneration(grokTaskId, { status: "done", image_url: imageUrl });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[grok-imagine] error:", msg, e);
+        const errResult = { status: "error" as const, error: msg };
+        jobStore.set(grokTaskId, errResult);
+        jobEvents.emit(`job:${grokTaskId}`, errResult);
+        guestDb.updateGeneration(grokTaskId, { status: "error", error_msg: msg });
+      }
+    })();
+
+    return NextResponse.json({ taskId: grokTaskId, provider: "grok" });
+  }
+
   // ── Azure Foundry branch ──────────────────────────────────────────────────────
   if (azureBaseUrl && azureDeployment) {
+    const validatedBase = validateAzureEndpoint(azureBaseUrl);
+    if (!validatedBase) {
+      return NextResponse.json({ error: "Azure base URL is missing or invalid. Add a valid Azure endpoint in Settings." }, { status: 400 });
+    }
     const azureKey = (await getAzureKeyForUser()) ?? process.env.AZURE_API_KEY ?? null;
     if (!azureKey) return NextResponse.json({ error: "Azure API key is not configured. Add it in Settings." }, { status: 500 });
 
@@ -336,7 +455,7 @@ export async function POST(req: NextRequest) {
       ? `${azureCustomWidth}x${azureCustomHeight}`
       : (sizeMap[aspectRatio] ?? "1024x1024");
     const quality         = azureQuality || "medium";
-    const base            = azureBaseUrl.replace(/\/$/, "");
+    const base            = validatedBase;
     const azureApiVersion = cfg.azureApiVersion ?? "2025-04-01-preview";
     const truncatedPrompt = prompt.slice(0, cfg.apiInput.promptMaxLength ?? 32000);
 
@@ -388,7 +507,7 @@ export async function POST(req: NextRequest) {
           };
           if (size && size !== "auto") body.size = size;
 
-          console.log("[azure/generations] request →", {
+          dlog("[azure/generations] request →", {
             url:    azureUrl,
             method: "POST",
             body,
@@ -402,7 +521,7 @@ export async function POST(req: NextRequest) {
         }
 
         const txt = await res.text();
-        console.log("[azure] raw response body:", txt.slice(0, 1000));
+        dlog("[azure] raw response body:", txt.slice(0, 1000));
         if (!res.ok) {
           let displayError = `Azure error ${res.status}`;
           try {
@@ -453,6 +572,11 @@ export async function POST(req: NextRequest) {
     jobStore.set(codexTaskId, { status: "pending", type: "image", userId: currentUserId ?? undefined });
 
     const codexUserId = currentUserId;
+    guestDb.insertGeneration({
+      task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
+      status: "pending", prompt: prompt.slice(0, 2000),
+      model, aspect_ratio: aspectRatio, quality,
+    });
     const size = CODEX_SIZE_MAP[aspectRatio] ?? "auto";
 
     // "<<<image N>>>" tags are an in-text convention other providers resolve to a
@@ -469,7 +593,7 @@ export async function POST(req: NextRequest) {
     (async () => {
       try {
         const images = await Promise.all(
-          r2ImageUrls.slice(0, 5).map(async (url) => {
+          r2ImageUrls.map(async (url) => {
             const buf = await fetchBuffer(url);
             const raw = url.split("?")[0].split(".").pop()?.toLowerCase() ?? "png";
             const ext = raw === "jpg" ? "jpeg" : raw;
@@ -477,19 +601,17 @@ export async function POST(req: NextRequest) {
           }),
         );
 
-        const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size });
+        const outBuf   = await runCodexImagegen({ prompt: codexPrompt, images, size, quality });
         const imageUrl = await uploadBuffer(outBuf, "image/png", "generated");
         jobStore.set(codexTaskId, { status: "done", imageUrl });
 
-        guestDb.insertGeneration({
-          task_id: codexTaskId, user_id: codexUserId, generation_type: "image",
-          status: "done", image_url: imageUrl, prompt: prompt.slice(0, 2000),
-          model, aspect_ratio: aspectRatio, quality,
-        });
+        guestDb.updateGeneration(codexTaskId, { status: "done", image_url: imageUrl });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[codex] background error:", msg, e);
-        jobStore.set(codexTaskId, { status: "error", error: cleanCodexError(msg) });
+        const clean = cleanCodexError(msg);
+        jobStore.set(codexTaskId, { status: "error", error: clean });
+        guestDb.updateGeneration(codexTaskId, { status: "error", error_msg: clean });
       }
     })();
 

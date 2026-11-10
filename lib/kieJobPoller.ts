@@ -17,17 +17,22 @@ import { mirrorToR2 } from "./storage";
 import * as guestDb from "./guest/db";
 
 const BASE = "https://api.kie.ai";
-const POLL_INTERVAL_MS = 3_000;
+// Poll fast while the job is young, then back off: 3 s for the first minute,
+// 6 s until five minutes, 10 s after that (a 10-minute video used to cost ~200 calls).
+function pollInterval(elapsedMs: number): number {
+  if (elapsedMs < 60_000) return 3_000;
+  if (elapsedMs < 5 * 60_000) return 6_000;
+  return 10_000;
+}
+const MAX_TRANSIENT_ERRORS = 20;
 const MAX_POLL_MS = 12 * 60 * 1000; // matches the SSE hard cap in job-status
 
 type Kind = "image" | "video";
 
 // Tasks currently being polled by this process — guards against double-starts.
-const active = new Set<string>();
-
-export function isPolling(taskId: string): boolean {
-  return active.has(taskId);
-}
+// Per process, not per route bundle: job-status and the submit route must share it.
+const ACTIVE_KEY = Symbol.for("heliosgen.kie-poller.active");
+const active = ((globalThis as typeof globalThis & { [ACTIVE_KEY]?: Set<string> })[ACTIVE_KEY] ??= new Set<string>());
 
 /** Start polling a kie.ai job in the background. Safe to call more than once. */
 export function pollKieJob(taskId: string, apiKey: string, kind: Kind): void {
@@ -64,10 +69,12 @@ export function resumeKieJob(taskId: string, kind: Kind): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
-  const deadline = Date.now() + MAX_POLL_MS;
+  const started = Date.now();
+  const deadline = started + MAX_POLL_MS;
+  let transientErrors = 0;
 
   while (Date.now() < deadline) {
-    await sleep(POLL_INTERVAL_MS);
+    await sleep(pollInterval(Date.now() - started));
 
     let data: Record<string, unknown>;
     try {
@@ -83,8 +90,13 @@ async function loop(taskId: string, apiKey: string, kind: Kind): Promise<void> {
       data = (json?.data ?? json) as Record<string, unknown>;
     } catch (e) {
       console.warn(`[kie-poller] ${taskId} transient poll error:`, (e as Error).message);
+      if (++transientErrors >= MAX_TRANSIENT_ERRORS) {
+        settle(taskId, kind, { status: "error", error: "Lost contact with kie.ai while polling" });
+        return;
+      }
       continue;
     }
+    transientErrors = 0;
 
     const state = String(data.state ?? data.status ?? "").toLowerCase();
 

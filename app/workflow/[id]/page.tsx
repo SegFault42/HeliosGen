@@ -19,18 +19,20 @@ export default function WorkflowPage({
   const router = useRouter();
   const switchSpace = useWorkflowStore((s) => s.switchSpace);
 
-  useSpaceSync();
+  const { dbLoaded } = useSpaceSync();
 
-  // Guard: if this ID doesn't exist in the store, redirect home.
-  // Also ensures the correct space is active on direct URL access.
+  // Ensures the correct space is active on direct URL access, and redirects
+  // home when the ID does not exist. A space missing from the store is only
+  // "not found" once the DB has answered: a fresh browser (or another origin,
+  // or cleared storage) knows nothing locally and used to bounce a valid link.
   useEffect(() => {
     const spaces = useWorkflowStore.getState().spaces;
-    if (!spaces.some((sp) => sp.id === id)) {
-      router.replace("/");
+    if (spaces.some((sp) => sp.id === id)) {
+      switchSpace(id);
       return;
     }
-    switchSpace(id);
-  }, [id, switchSpace, router]);
+    if (dbLoaded) router.replace("/");
+  }, [id, switchSpace, router, dbLoaded]);
 
   return (
     <div className="flex-1 flex overflow-hidden min-h-0">

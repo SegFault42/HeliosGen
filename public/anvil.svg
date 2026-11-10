@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- ANVIL brand mark. Asset file: literal colours allowed here (accent D9FF3D, ink 0B0B0C). -->
+  <rect width="256" height="256" rx="80" fill="#D9FF3D"/>
+  <g fill="#0B0B0C" transform="translate(48 48) scale(6.6667)">
+    <path d="M2 8h15v4H9l-1.5 1H6L5 12H2z"/>
+    <rect x="9" y="12" width="7" height="4"/>
+    <path d="M6 16h13v3H6z"/>
+    <path d="M20 1l.9 2.1L23 4l-2.1.9L20 7l-.9-2.1L17 4l2.1-.9z"/>
+  </g>
+</svg>

@@ -1,3 +1,4 @@
+import { dlog } from "../debugLog";
 import { DatabaseSync } from "node:sqlite";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
@@ -97,7 +98,7 @@ function migrateFromJson(d: DatabaseSync): void {
     try {
       importGuestDbJson(d, JSON.parse(readFileSync(dbJson, "utf8")));
       markImported(d, dbJson, "_import_guest_db");
-      console.log("[guest/sqlite] imported guest-db.json");
+      dlog("[guest/sqlite] imported guest-db.json");
     } catch (e) {
       console.error("[guest/sqlite] guest-db.json import failed:", (e as Error).message);
     }
@@ -118,7 +119,7 @@ function migrateFromJson(d: DatabaseSync): void {
       }
       d.exec("COMMIT");
       markImported(d, spacesJson, "_import_guest_spaces");
-      console.log(`[guest/sqlite] imported guest-spaces.json (${list.length})`);
+      dlog(`[guest/sqlite] imported guest-spaces.json (${list.length})`);
     } catch (e) {
       console.error("[guest/sqlite] guest-spaces.json import failed:", (e as Error).message);
     }

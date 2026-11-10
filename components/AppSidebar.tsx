@@ -1,8 +1,8 @@
 "use client";
+import { BrandMark, BRAND_NAME } from "@/components/BrandLogo";
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkflowStore } from "@/lib/store";
 import { useChatSessionStore } from "@/lib/chatSessionStore";
@@ -25,6 +25,8 @@ import {
   LayoutGrid,
   ChevronRight,
   ChevronDown,
+  Plus,
+  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -137,17 +139,17 @@ function GitHubButtons() {
       .catch(() => {});
   }, []);
 
-  const btnCls = "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 h-8 text-sm font-medium whitespace-nowrap transition-colors hover:bg-accent hover:text-accent-foreground text-white/60";
+  const btnCls = "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 h-8 text-sm font-medium whitespace-nowrap transition-colors hover:bg-bg-2 hover:text-text-1 text-text-3";
 
   return (
     <div className="group-data-[collapsible=icon]:hidden flex gap-1 justify-center px-2 pb-3">
       <a href="https://github.com/segfault42/HeliosGen" target="_blank" rel="noreferrer" className={btnCls}>
         <Star size={14} strokeWidth={1.8} />
-        {stats && <span className="text-xs text-muted-foreground tabular-nums">{fmtCount(stats.stars)}</span>}
+        {stats && <span className="label tabular text-text-3">{fmtCount(stats.stars)}</span>}
       </a>
       <a href="https://github.com/segfault42/HeliosGen/fork" target="_blank" rel="noreferrer" className={btnCls}>
         <ForkIcon />
-        {stats && <span className="text-xs text-muted-foreground tabular-nums">{fmtCount(stats.forks)}</span>}
+        {stats && <span className="label tabular text-text-3">{fmtCount(stats.forks)}</span>}
       </a>
     </div>
   );
@@ -158,14 +160,14 @@ let _dragFolderId: string | null = null;
 
 const FOLDER_COLORS: { color: string | null; label: string }[] = [
   { color: null, label: "Default" },
-  { color: "#3B82F6", label: "Blue" },
-  { color: "#2DD4BF", label: "Cyan" },
-  { color: "#A855F7", label: "Purple" },
-  { color: "#EC4899", label: "Pink" },
-  { color: "#EF4444", label: "Red" },
-  { color: "#F97316", label: "Orange" },
-  { color: "#EAB308", label: "Yellow" },
-  { color: "#22C55E", label: "Green" },
+  { color: "hsl(217, 91%, 60%)", label: "Blue" },
+  { color: "hsl(174, 70%, 51%)", label: "Cyan" },
+  { color: "hsl(271, 81%, 66%)", label: "Purple" },
+  { color: "hsl(330, 81%, 60%)", label: "Pink" },
+  { color: "hsl(0, 84%, 60%)", label: "Red" },
+  { color: "hsl(21, 90%, 55%)", label: "Orange" },
+  { color: "hsl(45, 85%, 51%)", label: "Yellow" },
+  { color: "hsl(142, 71%, 45%)", label: "Green" },
 ];
 
 // ── Clean failed pending generations from localStorage + notify gallery page ──
@@ -287,7 +289,7 @@ const FolderRow = React.memo(function FolderRow({
   return (
     <React.Fragment>
       {drop === "before" && (
-        <div style={{ height: 1, background: "#2DD4BF", margin: "1px 8px", borderRadius: 1, pointerEvents: "none" }} />
+        <div className="h-px mx-2 rounded-full bg-accent pointer-events-none" />
       )}
       <div
         draggable
@@ -325,32 +327,32 @@ const FolderRow = React.memo(function FolderRow({
         onDragEnd={() => { _dragFolderId = null; setDrop(null); }}
         onClick={() => !isRenaming && onSelect(folder.id)}
         className={cn(
-          "group flex items-center gap-2 py-2 rounded-lg cursor-pointer transition-colors select-none",
-          isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]",
+          "group flex items-center gap-[10px] h-[34px] rounded-full cursor-pointer transition-colors select-none",
+          isActive ? "bg-bg-2 font-semibold" : "hover:bg-bg-2",
+          drop === "inside" && "outline outline-1 outline-accent -outline-offset-1",
         )}
         style={{
-          paddingLeft: `${8 + depth * 14}px`,
+          paddingLeft: `${12 + depth * 14}px`,
           paddingRight: "8px",
-          outline: drop === "inside" ? "1px solid rgba(45,212,191,0.7)" : "none",
-          outlineOffset: -1,
         }}
       >
         {/* Expand toggle */}
         <button
           onClick={e => { e.stopPropagation(); onToggleExpand(folder.id); }}
-          style={{
-            width: 10, height: 10, display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, opacity: (hasChildren || isCreatingHere) ? 0.45 : 0,
-            pointerEvents: (hasChildren || isCreatingHere) ? "auto" : "none",
-            background: "none", border: "none", padding: 0, cursor: "pointer",
-          }}
+          className={cn(
+            "flex items-center justify-center shrink-0 bg-transparent border-0 p-0 cursor-pointer text-text-3",
+            (hasChildren || isCreatingHere) ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
+          )}
+          style={{ width: 10, height: 10 }}
         >
-          {isExpanded ? <ChevronDown size={10} color="white" /> : <ChevronRight size={10} color="white" />}
+          {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
         </button>
 
-        {isActive
-          ? <FolderOpen size={13} className="shrink-0" style={{ color: folder.color ?? "rgba(255,255,255,0.70)" }} />
-          : <Folder size={13} className="shrink-0" style={{ color: folder.color ?? "rgba(255,255,255,0.35)" }} />}
+        {/* Colour dot */}
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: folder.color ?? "var(--text-3)" }}
+        />
 
         {isRenaming ? (
           <input
@@ -363,47 +365,35 @@ const FolderRow = React.memo(function FolderRow({
             }}
             onBlur={confirmRename}
             onClick={e => e.stopPropagation()}
-            className="flex-1 bg-transparent text-[12px] text-white/90 outline-none border-b border-white/30 pb-0.5 min-w-0"
+            className="flex-1 bg-transparent text-[13px] text-text-1 outline-none border-b border-border-2 pb-0.5 min-w-0"
           />
         ) : (
           <span className={cn(
-            "flex-1 text-[12px] truncate leading-tight",
-            isActive ? "text-white/90" : "text-white/55",
+            "flex-1 text-[13px] truncate leading-tight",
+            isActive ? "text-text-1 font-semibold" : "text-text-2",
           )}>
             {folder.name}
           </span>
         )}
 
         {!isRenaming && (() => { const c = getCount(folder.id); return c > 0 ? (
-          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-            {c}
-          </span>
+          <span className="label tabular text-text-3 shrink-0">{c}</span>
         ) : null; })()}
         {!isRenaming && isGenerating && (
-          <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0, animation: "spin 0.9s linear infinite" }}>
-            <circle cx="5" cy="5" r="3.5" fill="none" stroke="rgba(45,212,191,0.2)" strokeWidth="1.5" />
-            <path d="M5 1.5A3.5 3.5 0 0 1 8.5 5" fill="none" stroke="url(#fg-spin)" strokeWidth="1.5" strokeLinecap="round" />
-            <defs>
-              <linearGradient id="fg-spin" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#3B82F6" />
-                <stop offset="100%" stopColor="#2DD4BF" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <span
+            className="shrink-0 rounded-full border-2 border-border-1 animate-spin"
+            style={{ width: 10, height: 10, borderTopColor: "var(--accent)" }}
+          />
         )}
         {!isRenaming && !isGenerating && hasUnseen && (
-          <span style={{
-            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: "linear-gradient(135deg, #3B82F6 0%, #2DD4BF 100%)",
-            boxShadow: "0 0 5px rgba(45,212,191,0.6)",
-          }} />
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent" />
         )}
 
         {/* ⋯ context menu button */}
         <button
           ref={btnRef}
           onClick={openMenu}
-          className="w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/35 hover:text-white/70 hover:bg-white/[0.08] transition-all shrink-0"
+          className="w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 text-text-3 hover:text-text-1 hover:bg-bg-1 transition-all shrink-0"
         >
           <MoreHorizontal size={12} />
         </button>
@@ -414,22 +404,16 @@ const FolderRow = React.memo(function FolderRow({
         <div
           ref={menuRef}
           onMouseDown={e => e.preventDefault()}
+          className="fixed z-[9999] bg-surface border border-border-2 rounded-2 p-1"
           style={{
-            position: "fixed",
             left: menuPos.x,
             top: menuPos.y,
             transform: "translateX(-100%)",
-            zIndex: 9999,
-            background: "#16181f",
-            border: "1px solid rgba(255,255,255,0.09)",
-            borderRadius: 8,
-            padding: 4,
             minWidth: 130,
-            boxShadow: "0 6px 24px rgba(0,0,0,0.6)",
           }}
         >
           {/* Color swatches */}
-          <div style={{ padding: "6px 10px 6px", display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="px-2.5 pt-1.5 pb-1.5 flex gap-1 items-center flex-wrap">
             {FOLDER_COLORS.map(({ color, label }) => {
               const isSelected = color === null ? !folder.color : folder.color === color;
               return (
@@ -437,61 +421,36 @@ const FolderRow = React.memo(function FolderRow({
                   key={label}
                   title={label}
                   onClick={e => { e.stopPropagation(); setMenuOpen(false); onColorChange(folder.id, color); }}
+                  className="relative shrink-0 rounded-full cursor-pointer p-0"
                   style={{
-                    width: 14, height: 14, borderRadius: "50%",
-                    background: color ?? "rgba(255,255,255,0.18)",
-                    border: isSelected ? "2px solid rgba(255,255,255,0.85)" : "2px solid transparent",
-                    outline: isSelected ? "1px solid rgba(0,0,0,0.4)" : "none",
-                    outlineOffset: -1,
-                    cursor: "pointer",
-                    padding: 0,
-                    flexShrink: 0,
-                    position: "relative",
+                    width: 14, height: 14,
+                    background: color ?? "var(--border-2)",
+                    border: isSelected ? "2px solid var(--text-1)" : "2px solid transparent",
                   }}
                 >
                   {color === null && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" style={{ position: "absolute", inset: 0, margin: "auto", display: "block" }}>
-                      <line x1="2" y1="8" x2="8" y2="2" stroke="rgba(255,255,255,0.45)" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
+                    <X size={10} className="absolute inset-0 m-auto text-text-2" strokeWidth={1.5} />
                   )}
                 </button>
               );
             })}
           </div>
-          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "2px 0 4px" }} />
+          <div className="h-px bg-border-1 my-0.5" />
           <button
             onClick={e => { e.stopPropagation(); startRename(); }}
-            style={{
-              display: "block", width: "100%", textAlign: "left",
-              padding: "6px 10px", borderRadius: 5, fontSize: 12,
-              color: "rgba(255,255,255,0.72)", background: "none", border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            className="block w-full text-left px-2.5 py-1.5 rounded-1 text-[13px] text-text-2 bg-transparent border-0 cursor-pointer hover:bg-bg-2 hover:text-text-1"
           >
             Rename
           </button>
           <button
             onClick={e => { e.stopPropagation(); setMenuOpen(false); cleanFailedJobs(folder.id); }}
-            style={{
-              display: "block", width: "100%", textAlign: "left",
-              padding: "6px 10px", borderRadius: 5, fontSize: 12,
-              color: "rgba(255,255,255,0.72)", background: "none", border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            className="block w-full text-left px-2.5 py-1.5 rounded-1 text-[13px] text-text-2 bg-transparent border-0 cursor-pointer hover:bg-bg-2 hover:text-text-1"
           >
             Clean failed jobs
           </button>
           <button
             onClick={e => { e.stopPropagation(); setMenuOpen(false); onDelete(folder.id); }}
-            style={{
-              display: "block", width: "100%", textAlign: "left",
-              padding: "6px 10px", borderRadius: 5, fontSize: 12,
-              color: "rgba(248,113,113,0.85)", background: "none", border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            className="block w-full text-left px-2.5 py-1.5 rounded-1 text-[13px] text-error bg-transparent border-0 cursor-pointer hover:bg-bg-2"
           >
             Delete
           </button>
@@ -499,7 +458,7 @@ const FolderRow = React.memo(function FolderRow({
       )}
 
       {drop === "after" && (
-        <div style={{ height: 1, background: "#2DD4BF", margin: "1px 8px", borderRadius: 1, pointerEvents: "none" }} />
+        <div className="h-px mx-2 rounded-full bg-accent pointer-events-none" />
       )}
       {isExpanded && (hasChildren || isCreatingHere) && (
         <>
@@ -511,7 +470,7 @@ const FolderRow = React.memo(function FolderRow({
               className="flex items-center gap-2 py-1"
               style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, paddingRight: "8px" }}
             >
-              <Folder size={13} className="shrink-0 text-white/40" />
+              <Folder size={13} className="shrink-0 text-text-3" />
               <input
                 ref={inputRef}
                 value={newFolderName}
@@ -519,7 +478,7 @@ const FolderRow = React.memo(function FolderRow({
                 onKeyDown={onNameKeyDown}
                 onBlur={onNameBlur}
                 placeholder="Folder name…"
-                className="flex-1 bg-transparent text-[12px] text-white/80 placeholder:text-white/25 outline-none border-b border-white/20 pb-0.5 min-w-0"
+                className="flex-1 bg-transparent text-[13px] text-text-1 placeholder:text-text-3 outline-none border-b border-border-2 pb-0.5 min-w-0"
               />
             </div>
           )}
@@ -567,45 +526,33 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
       <div
         onClick={onSelect}
         className={cn(
-          "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
-          isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
+          "group flex items-center gap-[10px] h-[34px] px-3 rounded-full cursor-pointer transition-colors",
+          isActive ? "bg-bg-2 font-semibold" : "hover:bg-bg-2"
         )}
       >
-        <LayoutGrid size={13} className={cn("shrink-0", isActive ? "text-white/70" : "text-white/35")} />
+        <LayoutGrid size={13} className={cn("shrink-0", isActive ? "text-text-1" : "text-text-3")} />
         <span className={cn(
-          "flex-1 text-[12px] truncate leading-tight",
-          isActive ? "text-white/90" : "text-white/55"
+          "flex-1 text-[13px] truncate leading-tight",
+          isActive ? "text-text-1 font-semibold" : "text-text-2"
         )}>
           All assets
         </span>
         {count > 0 && (
-          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-            {count}
-          </span>
+          <span className="label tabular text-text-3 shrink-0">{count}</span>
         )}
         {isGenerating && (
-          <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0, animation: "spin 0.9s linear infinite" }}>
-            <circle cx="5" cy="5" r="3.5" fill="none" stroke="rgba(45,212,191,0.2)" strokeWidth="1.5" />
-            <path d="M5 1.5A3.5 3.5 0 0 1 8.5 5" fill="none" stroke="url(#fg-spin-all)" strokeWidth="1.5" strokeLinecap="round" />
-            <defs>
-              <linearGradient id="fg-spin-all" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#3B82F6" />
-                <stop offset="100%" stopColor="#2DD4BF" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <span
+            className="shrink-0 rounded-full border-2 border-border-1 animate-spin"
+            style={{ width: 10, height: 10, borderTopColor: "var(--accent)" }}
+          />
         )}
         {!isGenerating && hasUnseen && (
-          <span style={{
-            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: "linear-gradient(135deg, #3B82F6 0%, #2DD4BF 100%)",
-            boxShadow: "0 0 5px rgba(45,212,191,0.6)",
-          }} />
+          <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent" />
         )}
         <button
           ref={btnRef}
           onClick={openMenu}
-          className="w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/35 hover:text-white/70 hover:bg-white/[0.08] transition-all shrink-0"
+          className="w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 text-text-3 hover:text-text-1 hover:bg-bg-1 transition-all shrink-0"
         >
           <MoreHorizontal size={12} />
         </button>
@@ -615,29 +562,17 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
         <div
           ref={menuRef}
           onMouseDown={e => e.preventDefault()}
+          className="fixed z-[9999] bg-surface border border-border-2 rounded-2 p-1"
           style={{
-            position: "fixed",
             left: menuPos.x,
             top: menuPos.y,
             transform: "translateX(-100%)",
-            zIndex: 9999,
-            background: "#16181f",
-            border: "1px solid rgba(255,255,255,0.09)",
-            borderRadius: 8,
-            padding: 4,
             minWidth: 130,
-            boxShadow: "0 6px 24px rgba(0,0,0,0.6)",
           }}
         >
           <button
             onClick={e => { e.stopPropagation(); setMenuOpen(false); cleanFailedJobs(null); }}
-            style={{
-              display: "block", width: "100%", textAlign: "left",
-              padding: "6px 10px", borderRadius: 5, fontSize: 12,
-              color: "rgba(255,255,255,0.72)", background: "none", border: "none", cursor: "pointer",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            className="block w-full text-left px-2.5 py-1.5 rounded-1 text-[13px] text-text-2 bg-transparent border-0 cursor-pointer hover:bg-bg-2 hover:text-text-1"
           >
             Clean failed jobs
           </button>
@@ -649,7 +584,7 @@ const AllAssetsRow = React.memo(function AllAssetsRow({ isActive, count, onSelec
 
 // ── Static icons ──────────────────────────────────────────────────────────────
 function LogoIcon() {
-  return <Image src="/HG.svg" alt="Logo" width={26} height={26} />;
+  return <BrandMark size={32} />;
 }
 
 function CreditIcon({ size = 12 }: { size?: number }) {
@@ -792,22 +727,21 @@ export function AppSidebar() {
   ];
 
   const itemCls = (active: boolean, disabled?: boolean) => cn(
-    "flex items-center gap-3.5 px-3 h-11 w-full rounded-xl transition-colors duration-150 text-left",
-    "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:mx-auto",
-    active ? "bg-white/[0.08] text-white" : "text-white/50 hover:text-white/80 hover:bg-white/[0.05]",
-    disabled && "opacity-35 cursor-not-allowed pointer-events-none",
+    "flex items-center gap-[10px] px-3 h-[38px] w-full rounded-full transition-colors duration-150 text-left",
+    "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:mx-auto",
+    active ? "bg-surface border border-border-2 font-semibold text-text-1" : "text-text-2 font-medium hover:bg-bg-2",
+    disabled && "opacity-40 cursor-not-allowed pointer-events-none",
   );
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0 bg-[#0B0E14]" style={{ borderRight: "none" }}>
+    <Sidebar collapsible="icon" className="border-r-0 bg-bg-0">
 
       {/* ── Header ── */}
       <SidebarHeader className="flex-row items-center justify-between px-4 pt-5 pb-2 gap-0">
         <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:hidden">
           <LogoIcon />
-          <span className="text-white text-[22px] leading-none select-none"
-            style={{ fontFamily: "'Georgia','Times New Roman',serif", fontStyle: "italic" }}>
-            HeliosGen
+          <span className="display text-text-1 text-[18px] leading-none select-none">
+            {BRAND_NAME}
           </span>
         </div>
         {/* Collapsed: logo fades to trigger on hover */}
@@ -816,10 +750,10 @@ export function AppSidebar() {
             <div className="pointer-events-none transition-opacity duration-200 group-hover/logo-area:opacity-0">
               <LogoIcon />
             </div>
-            <SidebarTrigger className="absolute inset-0 opacity-0 group-hover/logo-area:opacity-100 transition-opacity duration-200 text-white/50 hover:text-white hover:bg-white/[0.05] w-full h-full rounded-xl p-0 [&_svg]:size-4" />
+            <SidebarTrigger className="absolute inset-0 opacity-0 group-hover/logo-area:opacity-100 transition-opacity duration-200 text-text-2 hover:text-text-1 hover:bg-bg-2 w-full h-full rounded-full p-0 [&_svg]:size-4" />
           </div>
         </div>
-        <SidebarTrigger className="group-data-[collapsible=icon]:hidden text-white/30 hover:text-white/70 hover:bg-white/[0.05] transition-colors p-1.5 rounded-lg -mr-1 [&_svg]:size-4" />
+        <SidebarTrigger className="group-data-[collapsible=icon]:hidden text-text-3 hover:text-text-1 hover:bg-bg-2 transition-colors p-1.5 rounded-full -mr-1 [&_svg]:size-4" />
       </SidebarHeader>
 
       {/* ── Nav + Chat history ── */}
@@ -829,10 +763,15 @@ export function AppSidebar() {
           {navItems.map((item) => {
             const content = (
               <>
-                {React.createElement(item.icon, { size: 20, strokeWidth: 1.5, className: "shrink-0" })}
-                <span className="text-[14px] font-medium group-data-[collapsible=icon]:hidden leading-none">
+                {React.createElement(item.icon, { size: 18, strokeWidth: 1.5, className: "shrink-0" })}
+                <span className="text-[14px] group-data-[collapsible=icon]:hidden leading-none flex-1">
                   {item.label}
                 </span>
+                {item.label === "Workflow" && (
+                  <span className="label font-bold bg-accent text-on-accent rounded-full px-2 py-0.5 group-data-[collapsible=icon]:hidden">
+                    NEW
+                  </span>
+                )}
               </>
             );
             if (item.disabled) return (
@@ -849,17 +788,17 @@ export function AppSidebar() {
 
         {/* Folders section — hidden in icon mode */}
         <div className="group-data-[collapsible=icon]:hidden flex flex-col shrink-0 px-2">
-          <div className="border-t border-white/[0.06] mb-1" />
+          <div className="border-t border-border-1 mb-1" />
 
           {/* Section header */}
           <div className="flex items-center justify-between px-1 py-2 shrink-0">
-            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-white/25">Folders</span>
+            <span className="label text-text-3">Folders</span>
             <button
               onClick={handleCreateFolder}
               title="New folder"
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-colors"
+              className="w-[22px] h-[22px] rounded-full border border-border-2 flex items-center justify-center text-text-2 hover:bg-bg-2 hover:text-text-1 transition-colors"
             >
-              <FolderPlus size={12} />
+              <Plus size={12} />
             </button>
           </div>
 
@@ -903,8 +842,8 @@ export function AppSidebar() {
 
             {/* Root-level new folder input — shown at bottom when no folder is selected */}
             {creatingFolder && selectedFolderId === null && (
-              <div className="flex items-center gap-2 px-2 py-1">
-                <Folder size={13} className="shrink-0 text-white/40" />
+              <div className="flex items-center gap-[10px] px-3 py-1">
+                <Folder size={13} className="shrink-0 text-text-3" />
                 <input
                   ref={newFolderInputRef}
                   value={newFolderName}
@@ -912,7 +851,7 @@ export function AppSidebar() {
                   onKeyDown={handleFolderKeyDown}
                   onBlur={confirmCreateFolder}
                   placeholder="Folder name…"
-                  className="flex-1 bg-transparent text-[12px] text-white/80 placeholder:text-white/25 outline-none border-b border-white/20 pb-0.5 min-w-0"
+                  className="flex-1 bg-transparent text-[13px] text-text-1 placeholder:text-text-3 outline-none border-b border-border-2 pb-0.5 min-w-0"
                 />
               </div>
             )}
@@ -921,15 +860,15 @@ export function AppSidebar() {
 
         {/* Chat history — hidden in icon mode */}
         <div className="group-data-[collapsible=icon]:hidden flex flex-col flex-1 min-h-0 px-2 pb-2">
-          <div className="border-t border-white/[0.06] mb-1" />
+          <div className="border-t border-border-1 mb-1" />
 
           {/* Section header */}
           <div className="flex items-center justify-between px-1 py-2 shrink-0">
-            <span className="text-[10px] font-bold tracking-[0.08em] uppercase text-white/25">Chats</span>
+            <span className="label text-text-3">Chats</span>
             <button
               onClick={startNewChat}
               title="New chat"
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/[0.06] transition-colors"
+              className="w-[22px] h-[22px] rounded-full border border-border-2 flex items-center justify-center text-text-2 hover:bg-bg-2 hover:text-text-1 transition-colors"
             >
               <Pencil size={12} />
             </button>
@@ -938,7 +877,7 @@ export function AppSidebar() {
           {/* Session list */}
           <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 min-h-0">
             {sessions.length === 0 ? (
-              <p className="text-center text-[11px] text-white/20 px-2 py-4">No chats yet</p>
+              <p className="text-center text-[12px] text-text-3 px-2 py-4">No chats yet</p>
             ) : sessions.map(sess => {
               const isActive = pathname === "/chat" && sess.id === activeChatId;
               return (
@@ -946,23 +885,22 @@ export function AppSidebar() {
                   key={sess.id}
                   onClick={() => router.push(`/chat?id=${sess.id}`)}
                   className={cn(
-                    "group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors",
-                    isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
+                    "group flex items-center gap-[10px] h-[34px] px-3 rounded-full cursor-pointer transition-colors",
+                    isActive ? "bg-bg-2 font-semibold" : "hover:bg-bg-2"
                   )}
                 >
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                    style={{ background: "rgba(45,212,191,0.08)", border: "1px solid rgba(45,212,191,0.12)" }}>
-                    <Bot size={11} style={{ color: "rgba(45,212,191,0.7)" }} />
+                  <div className="w-6 h-6 rounded-full border border-border-1 flex items-center justify-center shrink-0">
+                    <Bot size={11} className="text-text-3" />
                   </div>
                   <span className={cn(
-                    "flex-1 text-[12px] truncate leading-tight",
-                    isActive ? "text-white/90" : "text-white/55"
+                    "flex-1 text-[13px] truncate leading-tight",
+                    isActive ? "text-text-1 font-semibold" : "text-text-2"
                   )}>
                     {sess.title}
                   </span>
                   <button
                     onClick={e => { e.stopPropagation(); handleDeleteChat(sess.id, isActive); }}
-                    className="w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400/70 hover:bg-red-400/10 transition-all shrink-0"
+                    className="w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 text-text-3 hover:text-error hover:bg-bg-1 transition-all shrink-0"
                   >
                     <Trash2 size={10} />
                   </button>
@@ -984,23 +922,23 @@ export function AppSidebar() {
               <button
                 title={displayName}
                 className={cn(
-                  "flex items-center gap-3 w-full px-2.5 py-2 rounded-xl hover:bg-white/[0.05] transition-colors cursor-pointer",
+                  "flex items-center gap-3 w-full px-2.5 py-2 rounded-2 hover:bg-bg-2 transition-colors cursor-pointer",
                   "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:mx-auto",
                 )}
               >
-                <Avatar className="size-9 rounded-xl shrink-0 after:rounded-xl after:border-white/15">
-                  <AvatarFallback className="rounded-xl bg-transparent p-0 overflow-hidden">
+                <Avatar className="size-9 rounded-2 shrink-0 after:rounded-2 after:border-border-2">
+                  <AvatarFallback className="rounded-2 bg-transparent p-0 overflow-hidden">
                     <PixelAvatar seed={avatarSeed} size={36} />
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 text-left group-data-[collapsible=icon]:hidden min-w-0">
-                  {displayName && <div className="text-[13px] font-semibold text-white/90 truncate leading-tight">{displayName}</div>}
-                  <div className="flex items-center gap-1 mt-0.5 text-[11px] text-white/40">
+                  {displayName && <div className="text-[13px] font-semibold text-text-1 truncate leading-tight">{displayName}</div>}
+                  <div className="flex items-center gap-1 mt-0.5 label tabular text-text-3">
                     <CreditIcon />
                     <span>{balance !== null ? `${balance.toLocaleString()} Credits` : "0 Credits"}</span>
                   </div>
                 </div>
-                <MoreHorizontal size={15} className="text-white/30 shrink-0 group-data-[collapsible=icon]:hidden" />
+                <MoreHorizontal size={15} className="text-text-3 shrink-0 group-data-[collapsible=icon]:hidden" />
               </button>
             }
           />
@@ -1010,40 +948,40 @@ export function AppSidebar() {
             side="top"
             align="start"
             sideOffset={8}
-            className="!p-0 !rounded-2xl !bg-[#0f0f0f] !border-white/[0.12] !ring-0 !shadow-[0_8px_48px_rgba(0,0,0,0.85)] overflow-hidden !w-auto !min-w-[280px]"
+            className="!p-0 !rounded-2 !bg-surface !border-border-2 !ring-0 !shadow-none overflow-hidden !w-auto !min-w-[280px]"
           >
             {/* User header — non-interactive */}
             <div className="flex items-center gap-3.5 px-4 pt-4 pb-3.5">
-              <Avatar className="size-14 rounded-xl shrink-0 after:rounded-xl after:border-white/15">
-                <AvatarFallback className="rounded-xl bg-transparent p-0 overflow-hidden">
+              <Avatar className="size-14 rounded-2 shrink-0 after:rounded-2 after:border-border-2">
+                <AvatarFallback className="rounded-2 bg-transparent p-0 overflow-hidden">
                   <PixelAvatar seed={avatarSeed} size={56} />
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0">
-                {displayName && <div className="text-[15px] font-semibold text-white truncate">{displayName}</div>}
-                <div className="flex items-center gap-1.5 mt-0.5 text-[12px] text-white/40">
+                {displayName && <div className="text-[15px] font-semibold text-text-1 truncate">{displayName}</div>}
+                <div className="flex items-center gap-1.5 mt-0.5 label tabular text-text-3">
                   <CreditIcon size={13} />
                   <span>{balance !== null ? `${balance.toLocaleString()} Credits` : "0 Credits"}</span>
                 </div>
               </div>
             </div>
 
-            <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
+            <DropdownMenuSeparator className="!bg-border-1 !my-0 !mx-0" />
 
             {/* Purchase Kie Credits */}
             <DropdownMenuItem
-              className="flex items-center justify-between rounded-none px-4 py-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+              className="flex items-center justify-between rounded-none px-4 py-3 text-[14px] text-text-2 hover:text-text-1 focus:text-text-1 focus:bg-bg-2 cursor-pointer"
               onClick={() => window.open("https://kie.ai?ref=25abb3f2236cbff9780ab9c2f84479ec", "_blank")}
             >
               <span>Purchase Kie Credits</span>
               <CreditIcon size={15} />
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator className="!bg-white/[0.07] !my-0 !mx-0" />
+            <DropdownMenuSeparator className="!bg-border-1 !my-0 !mx-0" />
 
             {/* Settings */}
             <DropdownMenuItem
-              className="rounded-none px-4 pb-4 pt-3 text-[14px] text-white/60 hover:text-white focus:text-white focus:bg-white/[0.06] cursor-pointer"
+              className="rounded-none px-4 pb-4 pt-3 text-[14px] text-text-2 hover:text-text-1 focus:text-text-1 focus:bg-bg-2 cursor-pointer"
               onClick={() => setSettingsOpen(true)}
             >
               Settings

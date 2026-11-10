@@ -1,0 +1,128 @@
+/* ============================================================
+   SOLSTICE (HeliosGen redesign) — design tokens
+   Drop-in for globals.css. Dark theme only.
+   Rule: NO hex literals anywhere else in the app. Every colour,
+   radius, shadow and font goes through these variables.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75,900&family=Outfit:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  /* ---------- Background (3 levels) + surface ---------- */
+  --bg-0: #09090B;      /* app background, behind panels */
+  --bg-1: #111113;      /* panels, canvas, modal body */
+  --bg-2: #18181B;      /* inset blocks, inputs at rest, hover rows */
+  --surface: #1F1F23;   /* cards, nodes, popovers, toasts */
+
+  /* ---------- Border (2 levels) — solid, never rgba ---------- */
+  --border-1: #27272B;  /* dividers, panel edges (1px) */
+  --border-2: #3A3A40;  /* interactive outlines: inputs, pills, nodes (1px) */
+
+  /* ---------- Text (all ≥ 4.5:1 on --surface) ---------- */
+  --text-1: #F5F5F7;    /* primary · 16.1:1 */
+  --text-2: #B4B4BC;    /* secondary · 8.4:1 */
+  --text-3: #8A8A93;    /* muted floor · 4.8:1 — never lighter than this */
+
+  /* ---------- Accent (lime default) ---------- */
+  --accent: #D9FF3D;
+  --accent-hover: #E6FF70;
+  --accent-press: #C2EA1E;
+  --accent-edge: #8DAA12;   /* bottom edge of primary buttons */
+  --on-accent: #0B0B0C;     /* ink text on accent, warning, error, text-1 fills */
+
+  /* ---------- Semantic ---------- */
+  --success: #3DDC97;
+  --warning: #FFB224;   /* pending + warning banner fill */
+  --error: #FF5C5C;
+
+  /* ---------- Focus ---------- */
+  --focus-ring: #F5F5F7;          /* outline: 2px solid; outline-offset: 2px */
+
+  /* ---------- Type ---------- */
+  --font-ui: "Outfit", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Archivo", "Archivo Black", Impact, sans-serif; /* font-stretch: 75%; font-weight: 900; uppercase */
+  --font-mono: "Space Mono", ui-monospace, Menlo, monospace;      /* uppercase, letter-spacing .1em */
+
+  --fs-2: 12px;  /* mono labels, badges, meta — FLOOR, nothing smaller */
+  --fs-3: 13px;  /* controls: pills, buttons sm, card captions */
+  --fs-4: 14px;  /* body / default UI */
+  --fs-5: 16px;  /* subheading, prompt text */
+  --fs-6: 20px;  /* heading (modal title) */
+  --fs-7: 28px;  /* display */
+  --fs-8: 44px;  /* hero line "START CREATING WITH …" */
+  --lh-tight: 0.92;  /* display */
+  --lh-ui: 1.4;
+  --lh-body: 1.5;
+  --tracking-mono: 0.1em;
+
+  /* ---------- Spacing (4px base) ---------- */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-5: 24px;  --sp-6: 32px;
+
+  /* ---------- Radius ---------- */
+  --r-1: 8px;    /* inset blocks inside nodes, dropdown rows */
+  --r-2: 12px;   /* inputs (block), composer sub-cards, tooltips */
+  --r-3: 20px;   /* panels, gallery cards, modals */
+  --r-node: 16px;
+  --r-pill: 999px; /* buttons, segmented controls, badges, nav items */
+
+  /* ---------- Elevation (2 levels + button edge) ---------- */
+  /* Level 0: flat. Level 1: outline steps --border-2 → --text-2 on hover. */
+  --shadow-btn: 0 3px 0 var(--accent-edge);      /* primary button at rest */
+  --shadow-btn-press: 0 1px 0 var(--accent-edge);/* primary button pressed, with translateY(2px) */
+  --scrim: rgba(9, 9, 11, 0.72);                  /* modal scrim — the ONLY translucent surface */
+
+  /* ---------- Motion ---------- */
+  --dur-1: 120ms;  /* state change: hover, press, toggle */
+  --dur-2: 200ms;  /* transitions: popover, modal, toast */
+  --dur-3: 420ms;  /* progress fill */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* Teal alternative — apply [data-accent="teal"] on <html> to switch. */
+:root[data-accent="teal"] {
+  --accent: #2DD4BF;
+  --accent-hover: #5EEAD4;
+  --accent-press: #14B8A6;
+  --accent-edge: #178F82;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-1: 0ms; --dur-2: 0ms; --dur-3: 0ms; }
+}
+
+/* ---------- Tailwind 4 bridge ---------- */
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-border-1: var(--border-1);
+  --color-border-2: var(--border-2);
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-press: var(--accent-press);
+  --color-accent-edge: var(--accent-edge);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --font-ui: var(--font-ui);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-1: var(--r-1);
+  --radius-2: var(--r-2);
+  --radius-3: var(--r-3);
+  --radius-node: var(--r-node);
+}
+
+/* ---------- Base ---------- */
+html { background: var(--bg-0); color: var(--text-1); font-family: var(--font-ui); font-size: var(--fs-4); line-height: var(--lh-ui); -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.tabular { font-variant-numeric: tabular-nums; }
+.label { font-family: var(--font-mono); font-size: var(--fs-2); letter-spacing: var(--tracking-mono); text-transform: uppercase; }
+.display { font-family: var(--font-display); font-stretch: 75%; font-weight: 900; text-transform: uppercase; line-height: var(--lh-tight); letter-spacing: -0.01em; }
+@keyframes spin { to { transform: rotate(360deg); } }

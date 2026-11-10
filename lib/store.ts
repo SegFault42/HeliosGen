@@ -36,6 +36,8 @@ export interface NodeData extends Record<string, unknown> {
   inputImage?: string;      // base64 data URL — only kept while session is active
   r2Url?: string;           // R2 CDN URL — durable, used instead of inputImage after upload
   imageNaturalRatio?: string;
+  /** Rights declaration for a Flow video edit: the reference clip(s) it was made for (lib/videoRights). */
+  videoRightsAffirmedFor?: string;
   // generation settings
   quality?: string;
   azureQuality?: string;
@@ -82,6 +84,7 @@ export function getNodeLabel(type: string, n: number): string {
   const map: Record<string, string> = {
     promptNode:          `Text #${n}`,
     imageInputNode:      `Image #${n}`,
+    videoInputNode:      `Video #${n}`,
     generateNode:        `Image Generator #${n}`,
     videoGeneratorNode:  `Video Generator #${n}`,
     commentNode:         `Comment #${n}`,
@@ -124,9 +127,14 @@ function syncSpace(
   nodes: Node<NodeData>[],
   edges: Edge[],
   nodeCounters: Record<string, number>,
+  /** false = mirror the live canvas into the space without marking it edited
+   *  (`updatedAt` is what useSpaceSync compares to decide whether to save). */
+  touch = true,
 ): Space[] {
   return spaces.map((sp) =>
-    sp.id === activeId ? { ...sp, nodes, edges, nodeCounters, updatedAt: Date.now() } : sp
+    sp.id === activeId
+      ? { ...sp, nodes, edges, nodeCounters, ...(touch ? { updatedAt: Date.now() } : {}) }
+      : sp
   );
 }
 
@@ -197,6 +205,8 @@ interface WorkflowStore {
   remapTargetHandle:    (nodeId: string, fromHandle: string, toHandle: string) => void;
   flashEdgeError:       (edgeId: string) => void;
   updateNodeData:     (id: string, data: Partial<NodeData>) => void;
+  /** Rename a node. Rewrites @OldLabel mentions in every prompt. false = empty or taken. */
+  renameNode:         (id: string, label: string) => boolean;
   updateNodeSize:     (id: string, width: number, height: number) => void;
   setIsRunning:       (v: boolean) => void;
   toggleDebug:        () => void;
@@ -382,11 +392,18 @@ export const useWorkflowStore = create<WorkflowStore>()(
               };
             }
 
+            // Selecting a node, or React Flow measuring nodes as a canvas mounts
+            // (a "dimensions" change without `resizing`), is not an edit. Counting
+            // those re-saved the whole space every time it was merely opened.
+            const edited = changes.some(
+              (c) => c.type !== "select" && !(c.type === "dimensions" && c.resizing === undefined),
+            );
+
             return {
               nodes,
               edges,
               lastNodeSize,
-              spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, edges, s.nodeCounters),
+              spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, edges, s.nodeCounters, edited),
             };
           });
           // Persist discrete edits (node removed, or a manual resize finished)
@@ -534,7 +551,14 @@ export const useWorkflowStore = create<WorkflowStore>()(
 
         updateNodeData: (id, data) =>
           set((s) => {
-            const nodes = s.nodes.map((n) =>
+            // Effects re-assert values a node already holds (ratio probes, status
+            // resets). Rebuilding the node for those re-rendered it and re-saved
+            // the space for nothing, so identical writes leave `nodes` untouched.
+            const current = s.nodes.find((n) => n.id === id);
+            const unchanged = !current || Object.keys(data).every((k) =>
+              Object.is((current.data as Record<string, unknown>)[k], (data as Record<string, unknown>)[k])
+            );
+            const nodes = unchanged ? s.nodes : s.nodes.map((n) =>
               n.id === id ? { ...n, data: { ...n.data, ...data } } : n
             );
 
@@ -549,12 +573,50 @@ export const useWorkflowStore = create<WorkflowStore>()(
               if (pick) nodeDefaults = { ...nodeDefaults, videoGeneratorNode: { ...nodeDefaults.videoGeneratorNode, ...pick } };
             }
 
+            if (unchanged) return nodeDefaults === s.nodeDefaults ? {} : { nodeDefaults };
             return {
               nodes,
               nodeDefaults,
               spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, s.edges, s.nodeCounters),
             };
           }),
+
+        renameNode: (id, rawLabel) => {
+          const label = rawLabel.trim();
+          if (!label) return false;
+          const s = get();
+          const node = s.nodes.find((n) => n.id === id);
+          if (!node) return false;
+          const old = (node.data.label as string) ?? "";
+          if (label === old) return true;
+          if (s.nodes.some((n) => n.id !== id && n.data.label === label)) return false;
+
+          // "@Image #1" must not touch "@Image #10": the char after the mention
+          // has to end the label (anything non-alphanumeric, or end of text).
+          const rewrite = (text: string): string => {
+            const needle = `@${old}`;
+            let out = "", i = 0;
+            while (i < text.length) {
+              const at = text.indexOf(needle, i);
+              if (at === -1) { out += text.slice(i); break; }
+              const next = text[at + needle.length];
+              const ends = next === undefined || !/[A-Za-z0-9_]/.test(next);
+              out += text.slice(i, at) + (ends ? `@${label}` : needle);
+              i = at + needle.length;
+            }
+            return out;
+          };
+
+          const nodes = s.nodes.map((n) => {
+            const data: NodeData = n.id === id ? { ...n.data, label } : { ...n.data };
+            if (old && typeof data.prompt === "string" && data.prompt.includes(`@${old}`)) {
+              data.prompt = rewrite(data.prompt);
+            }
+            return data === n.data ? n : { ...n, data };
+          });
+          set({ nodes, spaces: syncSpace(s.spaces, s.activeSpaceId, nodes, s.edges, s.nodeCounters) });
+          return true;
+        },
 
         updateNodeSize: (id, width, height) => {
           // Ignore junk sizes — the ResizeObserver that drives this can fire
@@ -725,13 +787,10 @@ export const useWorkflowStore = create<WorkflowStore>()(
           })),
         })),
         activeSpaceId: s.activeSpaceId,
-        // Also persist the live copies so a page refresh rehydrates correctly
-        nodes: s.nodes.map((n) => ({
-          ...n,
-          data: { ...n.data, inputImage: undefined },
-        })),
-        edges:        s.edges,
-        nodeCounters: s.nodeCounters,
+        // The live nodes/edges/nodeCounters are NOT stored: they are always a
+        // copy of the active space (syncSpace keeps it current) and are
+        // restored from it in onRehydrateStorage. Storing both doubled the
+        // localStorage payload on every edit.
         debugMode:    s.debugMode,
         sidebarCollapsed: s.sidebarCollapsed,
         nodeDefaults: s.nodeDefaults,
@@ -758,6 +817,14 @@ export const useWorkflowStore = create<WorkflowStore>()(
           });
           state.spaces        = [sp];
           state.activeSpaceId = sp.id;
+        }
+        // Restore the live canvas from the active space (see partialize).
+        const active = state.spaces.find((sp) => sp.id === state.activeSpaceId) ?? state.spaces[0];
+        if (active) {
+          state.activeSpaceId = active.id;
+          state.nodes         = active.nodes;
+          state.edges         = active.edges;
+          state.nodeCounters  = active.nodeCounters ?? {};
         }
       },
     }

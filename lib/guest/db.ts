@@ -1,3 +1,4 @@
+import { dlog } from "../debugLog";
 import { randomUUID, createHash } from "crypto";
 import { db } from "./sqlite";
 
@@ -131,7 +132,7 @@ export function updateGeneration(
 
 export function recoverJob(
   taskId: string,
-): Pick<Generation, "status" | "video_url" | "image_url" | "image_urls" | "error_msg"> | null {
+): Pick<Generation, "status" | "generation_type" | "video_url" | "image_url" | "image_urls" | "error_msg" | "created_at"> | null {
   const r = db().prepare("SELECT * FROM generations WHERE task_id = ?").get(taskId) as GenRow | undefined;
   return r ? rowToGeneration(r) : null;
 }
@@ -148,6 +149,23 @@ export function getGenerations(userId: string, type: "image" | "video"): Generat
     `)
     .all(userId, type) as GenRow[];
   return rows.map(rowToGeneration);
+}
+
+/** Every stored file URL a generation row points at (outputs only, not references). */
+export function getGenerationUrls(id: string, userId: string): string[] {
+  const r = db().prepare("SELECT image_url, image_urls, video_url FROM generations WHERE id = ? AND user_id = ?").get(id, userId) as
+    | { image_url: string | null; image_urls: string | null; video_url: string | null } | undefined;
+  if (!r) return [];
+  const out: string[] = [];
+  if (r.image_url) out.push(r.image_url);
+  if (r.video_url) out.push(r.video_url);
+  try { for (const u of JSON.parse(r.image_urls ?? "[]") as string[]) out.push(u); } catch { /* ignore */ }
+  return out;
+}
+
+export function getUploadUrls(id: string, userId: string): string[] {
+  const r = db().prepare("SELECT r2_url FROM uploads WHERE id = ? AND user_id = ?").get(id, userId) as { r2_url: string } | undefined;
+  return r?.r2_url ? [r.r2_url] : [];
 }
 
 export function deleteGeneration(id: string, userId: string): void {
@@ -190,7 +208,7 @@ export function lookupAssetHash(hash: string): string | null {
   const r = db().prepare("SELECT cdn_url FROM asset_cache WHERE hash = ?").get(hash) as
     | { cdn_url: string }
     | undefined;
-  if (r) console.log("[guest/asset-cache] HIT:", hash.slice(0, 8));
+  if (r) dlog("[guest/asset-cache] HIT:", hash.slice(0, 8));
   return r?.cdn_url ?? null;
 }
 
@@ -303,9 +321,14 @@ export function updateFolder(
 export function deleteFolder(id: string, userId: string): void {
   const d = db();
   d.exec("BEGIN");
-  d.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?").run(id, userId);
-  d.prepare("DELETE FROM folder_items WHERE folder_id = ?").run(id);
-  d.exec("COMMIT");
+  try {
+    d.prepare("DELETE FROM folders WHERE id = ? AND user_id = ?").run(id, userId);
+    d.prepare("DELETE FROM folder_items WHERE folder_id = ?").run(id);
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
 }
 
 // ── Folder Items ───────────────────────────────────────────────────────────

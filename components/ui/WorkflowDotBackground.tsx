@@ -21,7 +21,7 @@ export default function WorkflowDotBackground() {
       const w = canvas.offsetWidth;
       const h = canvas.offsetHeight;
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "rgba(255,255,255,0.2)";
+      ctx.fillStyle = "var(--text-3)";
 
       for (let x = GAP; x < w; x += GAP) {
         for (let y = GAP; y < h; y += GAP) {

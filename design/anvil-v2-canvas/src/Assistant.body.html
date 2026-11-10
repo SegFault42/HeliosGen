@@ -1,0 +1,60 @@
+<!--CSS-->
+.main{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0}
+.stage{flex:1;background:var(--card);border:1px solid var(--rule);border-radius:10px;display:grid;place-items:center;overflow:hidden}
+.stage img{height:100%;width:auto}
+.bench .field{margin-bottom:12px}
+.bench .row{display:flex;gap:12px;align-items:flex-end}
+.bench .row .s{flex:1}
+.ledger{width:320px}
+.ledger .panel{padding:20px}
+.scrim{position:absolute;inset:0;background:#000;opacity:.45}
+.drawer{position:absolute;top:0;right:0;width:400px;height:100%;background:var(--paper);box-shadow:-24px 0 64px rgba(0,0,0,.5);border-left:1px solid var(--rule);display:flex;flex-direction:column}
+.drawer .dh{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--rule)}
+.drawer .db{padding:24px;display:flex;flex-direction:column;gap:20px;flex:1;overflow:hidden}
+.drawer .orig{color:var(--graphite);font-size:14px;padding:12px 14px;background:var(--linen);border-radius:6px}
+.drawer .rw{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:20px}
+.drawer .rw p{font-family:var(--serif);font-size:22px;line-height:1.3;font-weight:400;margin:0;letter-spacing:-.01em}
+.drawer .rw .meta{display:flex;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+.drawer .acts{display:flex;gap:8px}
+.drawer .df{margin-top:auto;padding:16px 24px;border-top:1px solid var(--rule)}
+.drawer .df .field{min-height:44px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center}
+.drawer .df .field span{font-size:14px;color:var(--ash)}
+.q{display:flex;gap:8px;flex-wrap:wrap}
+.q span{height:28px;padding:0 10px;border:1px solid var(--rule2);border-radius:2px;display:inline-flex;align-items:center;font-size:13px;color:var(--graphite)}
+<!--/CSS-->
+<div class="app">
+  <!--RAIL bench-->
+  <section class="main">
+    <div class="notice"><span class="mono">Notice</span><span style="font-size:13px">Codex CLI image quota resets at 02:10. kie.ai wallet is funded.</span><span class="x mono">Dismiss</span></div>
+    <div class="stage"><img src="piece-apple.jpg" alt=""></div>
+    <div class="bench">
+      <div class="field" style="color:var(--ink)">red apple on tiles, flash</div>
+      <div class="row">
+        <div class="s"><span class="lbl mono">Model</span><div class="sel">Nano Banana</div></div>
+        <div class="s"><span class="lbl mono">Provider</span><div class="sel">kie.ai</div></div>
+        <div class="s"><span class="lbl mono">Quality</span><div class="sel">2K</div></div>
+        <div class="s"><span class="lbl mono">Ratio</span><div class="sel">1:1</div></div>
+        <span class="btn primary" style="width:180px">Strike · $0.04</span>
+      </div>
+    </div>
+  </section>
+  <aside class="ledger"><div class="panel"><span class="mono muted">This strike</span><div style="font-family:var(--mono);font-size:40px;margin-top:8px">$0.04</div></div></aside>
+
+  <div class="scrim"></div>
+  <aside class="drawer">
+    <div class="dh"><span class="mono">Assistant</span><span class="tabs"><span class="on">Claude</span><span>GPT</span><span>Local</span></span><span class="mono muted">Esc</span></div>
+    <div class="db">
+      <div><span class="lbl mono">Your prompt</span><div class="orig">red apple on tiles, flash</div></div>
+      <div>
+        <span class="lbl mono">Rewrite · 01 of 03</span>
+        <div class="rw">
+          <p>A single red apple resting on white ceramic tiles, lit by a <em>hard on-camera flash</em>; sharp shadow to the left, slight lens vignette, editorial still life, 1:1.</p>
+          <div class="meta"><span class="mono muted">27 words · Nano Banana</span><span class="mono muted">Est. $0.04</span></div>
+        </div>
+      </div>
+      <div class="acts"><span class="btn secondary">Use</span><span class="btn secondary">Shorter</span><span class="btn secondary">Two more</span><span class="btn ghost" style="margin-left:auto">Discard</span></div>
+      <div><span class="lbl mono">Nudge</span><div class="q"><span>More cinematic</span><span>Plain background</span><span>Add a hand</span><span>Portrait 4:5</span><span>Make it a video</span></div></div>
+    </div>
+    <div class="df"><div class="field"><span>Ask the assistant…</span><span class="mono" style="color:var(--ink)">Enter ↵</span></div></div>
+  </aside>
+</div>

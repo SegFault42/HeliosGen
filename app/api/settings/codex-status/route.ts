@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { spawnCodex } from "@/lib/codexRun";
 
 /**
  * codex-imagegen has no per-user credentials to save from the browser — it's a
@@ -11,9 +11,11 @@ import { join } from "node:path";
  */
 function binaryOnPath(): Promise<boolean> {
   return new Promise((resolve) => {
-    const proc = spawn("codex-imagegen", ["--help"]);
-    proc.on("error", () => resolve(false));
-    proc.on("close", (code) => resolve(code === 0));
+    try {
+      const proc = spawnCodex(["--help"]);
+      proc.on("error", () => resolve(false));
+      proc.on("close", (code) => resolve(code === 0));
+    } catch { resolve(false); }
   });
 }
 

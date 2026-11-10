@@ -2,16 +2,16 @@ import type { CSSProperties } from "react";
 
 // Colours match the handle border colours exactly
 export const EDGE_COLORS: Record<string, string> = {
-  prompt: "#2DD4BF", // teal   — matches node-handle-icon-prompt
-  image: "#fb923c", // orange — matches node-handle-icon-resource
-  startFrame: "#818cf8", // indigo — matches node-handle-icon-image
-  endFrame: "#818cf8", // indigo — matches node-handle-icon-image
-  resource: "#fb923c", // orange — matches node-handle-icon-resource
-  videoRef: "#22d3ee", // cyan   — matches node-handle-icon-videoref
-  referenceVideo: "#38bdf8", // sky    — matches node-handle-icon-refvideo
-  audioRef: "#a78bfa", // violet — matches node-handle-icon-audioref
-  character: "#f472b6", // pink   — matches node-handle-icon-character (motion control startFrame)
-  default: "#3a3a3a", // neutral
+  prompt: "var(--accent)", // teal   — matches node-handle-icon-prompt
+  image: "var(--accent)", // image → accent (Solstice)
+  startFrame: "var(--accent)", // indigo — matches node-handle-icon-image
+  endFrame: "var(--accent)", // indigo — matches node-handle-icon-image
+  resource: "var(--accent)", // orange — matches node-handle-icon-resource
+  videoRef: "var(--warning)", // cyan   — matches node-handle-icon-videoref
+  referenceVideo: "var(--warning)", // sky    — matches node-handle-icon-refvideo
+  audioRef: "var(--success)", // violet — matches node-handle-icon-audioref
+  character: "var(--accent)", // pink   — matches node-handle-icon-character (motion control startFrame)
+  default: "var(--border-2)", // neutral
 };
 
 // Handles that carry image data get a heavier stroke
@@ -29,18 +29,18 @@ export function getSourceHandleColor(nodeType: string | undefined, sourceHandleI
   switch (sourceHandleId) {
     case "startFrameOut":
     case "endFrameOut":
-    case "imagePickOut": return "#818cf8";
-    case "videoRefOut": return "#22d3ee";
-    case "audioRefOut": return "#a78bfa";
+    case "imagePickOut": return "var(--accent)";
+    case "videoRefOut": return "var(--warning)";
+    case "audioRefOut": return "var(--success)";
   }
   // Legacy / single-output nodes — derive from node type
   switch (nodeType) {
-    case "promptNode": return "#2DD4BF";
-    case "assistantNode": return "#FBBF24";
-    case "imageInputNode": return "#818cf8";
-    case "generateNode": return "#818cf8";
-    case "videoInputNode": return "#22d3ee";
-    case "videoGeneratorNode": return "#22d3ee";
+    case "promptNode": return "var(--accent)";
+    case "assistantNode": return "var(--accent)";
+    case "imageInputNode": return "var(--accent)";
+    case "generateNode": return "var(--accent)";
+    case "videoInputNode": return "var(--warning)";
+    case "videoGeneratorNode": return "var(--warning)";
     default: return EDGE_COLORS.default;
   }
 }

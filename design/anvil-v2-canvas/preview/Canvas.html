@@ -1,0 +1,209 @@
+<!doctype html><html><head><meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+:root{
+  --bone:#0B0A09;--paper:#141311;--linen:#1B1A17;--card:#1E1C19;
+  --ink:#F3EFE8;--graphite:#B3AEA4;--ash:#7C7870;--rule:#2A2823;--rule2:#403C34;
+  --ember:#FF5A2C;--ember-deep:#E0461C;--ember-ink:#1A0B06;
+  --ok:#4CC38A;--wait:#E6B422;--fail:#FF5C5C;
+  --glow:rgba(255,90,44,.32);--hi:rgba(255,255,255,.06);
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --sans:"Geist","Inter",system-ui,"Helvetica Neue",Arial,sans-serif;
+  --mono:"Geist Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+html,body{margin:0;height:100%}
+*{box-sizing:border-box}
+body{font-family:var(--sans);font-size:14px;line-height:1.45;color:var(--ink);background:var(--bone);-webkit-font-smoothing:antialiased}
+.app{width:1440px;height:900px;background:radial-gradient(900px 520px at 42% 38%,rgba(255,90,44,.07),transparent 70%),var(--bone);display:flex;overflow:hidden;position:relative}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-variant-numeric:tabular-nums;font-weight:400}
+.mono.n{text-transform:none;letter-spacing:0}
+.serif{font-family:var(--serif);font-weight:400;letter-spacing:-.02em;line-height:1.05}
+.serif em{font-style:italic;color:var(--ember)}
+.muted{color:var(--ash)}
+.dim{color:var(--graphite)}
+.hair{border-top:1px solid var(--rule)}
+/* rail */
+.rail{width:64px;height:100%;background:var(--paper);border-right:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;padding:16px 0}
+.rail .mark{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--ember-ink);background:var(--ember);box-shadow:0 0 20px var(--glow);margin-bottom:28px}
+.rail .nav{display:flex;flex-direction:column;gap:22px;align-items:center}
+.rail .nav a{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--ash);text-decoration:none}
+.rail .nav a.on{color:var(--ink)}
+.rail .nav a .mono{font-size:12px;letter-spacing:.04em}
+.rail .nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:square}
+.rail .bottom{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--ash)}
+/* notice */
+.notice{height:40px;background:var(--paper);border:1px solid var(--rule);border-radius:8px;display:flex;align-items:center;gap:16px;padding:0 16px;color:var(--graphite)}
+.notice.warn{box-shadow:inset 2px 0 0 var(--wait)}
+.notice .x{margin-left:auto;color:var(--ash)}
+/* buttons */
+.btn{height:40px;padding:0 16px;border-radius:8px;font:500 13px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid transparent;white-space:nowrap}
+.btn.primary{background:linear-gradient(180deg,#FF6A40,var(--ember));color:var(--ember-ink);box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 0 28px var(--glow);font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:500}
+.btn.secondary{background:var(--linen);color:var(--ink);border-color:var(--rule2);box-shadow:inset 0 1px 0 var(--hi)}
+.btn.ghost{background:transparent;color:var(--graphite);border-color:transparent}
+.btn.danger{background:transparent;color:var(--fail);border-color:var(--fail)}
+.btn.sm{height:32px;padding:0 12px;font-size:12px}
+/* fields */
+.field{background:var(--linen);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;font-size:15px;color:var(--ink);min-height:56px;box-shadow:inset 0 1px 0 var(--hi)}
+.field .ph{font-family:var(--serif);font-size:21px;color:var(--ash);font-style:italic;letter-spacing:-.01em}
+.sel{height:40px;background:var(--linen);border:1px solid var(--rule2);border-radius:8px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:13px;font-weight:500;box-shadow:inset 0 1px 0 var(--hi)}
+.sel .chev{width:12px;height:12px;stroke:var(--ash);fill:none;stroke-width:1.5}
+.lbl{display:block;margin-bottom:6px;color:var(--ash)}
+/* panels */
+.panel{background:linear-gradient(180deg,#161512,var(--paper));border:1px solid var(--rule);border-radius:16px;box-shadow:inset 0 1px 0 var(--hi)}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:12px}
+/* switch */
+.sw{width:36px;height:20px;border:1px solid var(--rule2);border-radius:4px;background:var(--linen);position:relative;display:inline-block}
+.sw i{position:absolute;top:3px;left:3px;width:12px;height:12px;background:var(--rule2);border-radius:2px}
+.sw.on{background:var(--ember);border-color:var(--ember);box-shadow:0 0 12px var(--glow)}
+.sw.on i{left:19px;background:var(--ember-ink)}
+/* tabs */
+.tabs{display:inline-flex;border:1px solid var(--rule2);border-radius:8px;overflow:hidden;background:var(--linen)}
+.tabs span{padding:0 14px;height:32px;display:inline-flex;align-items:center;font-size:12px;font-weight:500;color:var(--graphite);border-right:1px solid var(--rule2)}
+.tabs span:last-child{border-right:0}
+.tabs span.on{background:var(--ink);color:var(--bone)}
+/* plates */
+.plate{position:absolute;background:var(--card);border:1px solid var(--rule2);border-radius:12px;width:240px;box-shadow:inset 0 1px 0 var(--hi),0 12px 32px rgba(0,0,0,.35)}
+.plate .ph{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--graphite)}
+.plate .pb{padding:12px;font-size:13px;color:var(--graphite)}
+.plate.on{border-color:var(--ink)}
+.plate.run{box-shadow:inset 2px 0 0 var(--ember),inset 0 1px 0 var(--hi),0 0 32px var(--glow)}
+.plate.err{box-shadow:inset 2px 0 0 var(--fail),inset 0 1px 0 var(--hi)}
+.port{position:absolute;width:8px;height:8px;background:var(--rule2);border-radius:2px}
+.port.c{background:var(--ember);box-shadow:0 0 8px var(--glow)}
+.thumb{background:var(--linen);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+/* tables */
+table.led{border-collapse:collapse;width:100%}
+table.led th{text-align:left;padding:0 0 10px;border-bottom:1px solid var(--rule2);color:var(--ash);font-weight:400}
+table.led td{padding:11px 0;border-bottom:1px solid var(--rule);font-size:13px;vertical-align:middle}
+table.led .r{text-align:right}
+
+
+.wrap{flex:1;display:flex;flex-direction:column;padding:16px;gap:16px;min-width:0}
+.top{display:flex;align-items:center;gap:16px}
+.top .name{font-family:var(--serif);font-size:28px;font-weight:500;letter-spacing:-.02em}
+.top .crumbs{color:var(--ash)}
+.top .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.board{flex:1;display:flex;gap:16px;min-height:0}
+.frame{flex:1;background:var(--paper);border:1px solid var(--rule);border-radius:0;position:relative;overflow:hidden}
+.frame svg.edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.frame svg.edges path{fill:none;stroke:var(--graphite);stroke-width:1.5}
+.frame svg.edges path.run{stroke:var(--ember);stroke-dasharray:6 6}
+.frame svg.edges path.idle{stroke:var(--rule2)}
+.plate .pb .thumb{width:100%;height:120px;margin-bottom:8px}
+.plate .pb p{margin:0 0 6px}
+.plate .pb .kv{display:flex;justify-content:space-between;color:var(--ash);margin-top:4px}
+.plate .pb .kv b{color:var(--ink);font-weight:500;font-family:var(--mono);font-size:12px}
+.prog{height:1px;background:var(--rule);margin-top:10px;position:relative}
+.prog i{position:absolute;left:0;top:0;height:1px;background:var(--ember)}
+.bar{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);background:var(--linen);box-shadow:0 16px 40px rgba(0,0,0,.5);border:1px solid var(--rule2);border-radius:6px;display:flex;align-items:center;gap:8px;padding:8px}
+.bar .zoom{display:flex;align-items:center;gap:12px;padding:0 8px;color:var(--graphite);border-left:1px solid var(--rule);margin-left:4px}
+.sheet{width:340px;background:linear-gradient(180deg,#161512,var(--paper));box-shadow:inset 0 1px 0 var(--hi);border:1px solid var(--rule);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+.sheet .sh{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--rule)}
+.sheet pre{margin:0;padding:20px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--ink);white-space:pre;overflow:hidden}
+.sheet pre .k{color:var(--ink);font-weight:500}
+.sheet pre .s{color:var(--ember)}
+.sheet pre .n{color:var(--wait)}
+.sheet pre .c{color:var(--ash)}
+.sheet .sf{margin-top:auto;padding:16px 20px;border-top:1px solid var(--rule);display:flex;gap:8px}
+.legend{position:absolute;left:20px;bottom:20px;display:flex;gap:16px;color:var(--ash)}
+
+  </style>
+</head><body>
+
+<div class="app">
+  <aside class="rail">
+  <div class="mark" title="ANVIL"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M2 8h15v4H9l-1.5 1H6L5 12H2z"/><rect x="9" y="12" width="7" height="4"/><path d="M6 16h13v3H6z"/><path d="M20 1l.9 2.1L23 4l-2.1.9L20 7l-.9-2.1L17 4l2.1-.9z"/></svg></div>
+  <nav class="nav">
+    <a class=""><svg viewBox="0 0 20 20"><path d="M2 7h16M4 7v9M16 7v9M7 11h6"/></svg><span class="mono">Bench</span></a>
+    <a class="on"><svg viewBox="0 0 20 20"><rect x="2" y="3" width="6" height="5"/><rect x="12" y="12" width="6" height="5"/><path d="M8 5.5h2.5a2 2 0 0 1 2 2V12"/></svg><span class="mono">Canvas</span></a>
+    <a class=""><svg viewBox="0 0 20 20"><path d="M3 4h14M3 8h14M3 12h9M3 16h6"/></svg><span class="mono">Ledger</span></a>
+    <a class=""><svg viewBox="0 0 20 20"><path d="M3 6h14M3 14h14"/><rect x="5" y="4" width="4" height="4" fill="#141311"/><rect x="11" y="12" width="4" height="4" fill="#141311"/></svg><span class="mono">Settings</span></a>
+  </nav>
+  <div class="bottom"><span class="mono">v2.0</span></div>
+</aside>
+
+  <section class="wrap">
+    <div class="top">
+      <span class="name">Apple, four ways</span>
+      <span class="crumbs mono">Workflow 07 · 5 plates · last run 14:02 · $0.19</span>
+      <div class="right"><span class="mono muted">Autosaved</span><span class="btn sm secondary">Share</span><span class="btn sm secondary">Export</span></div>
+    </div>
+    <div class="board">
+      <div class="frame">
+        <svg class="edges">
+          <path d="M292 168 C 340 168, 340 122, 388 122"/>
+          <path d="M292 168 C 340 168, 340 268, 388 268"/>
+          <path class="run" d="M628 122 C 676 122, 676 196, 724 196"/>
+          <path d="M628 268 C 676 268, 676 400, 724 400"/>
+          <path d="M292 470 C 340 470, 340 268, 388 268"/>
+        </svg>
+
+        <div class="plate" style="left:52px;top:100px">
+          <div class="ph"><span class="mono">01 · Prompt</span><span class="mono muted">Text</span></div>
+          <div class="pb"><p class="serif" style="font-size:17px;color:var(--ink);font-weight:400;line-height:1.3">A single red apple on a white tiled floor, hard flash, direct daylight, editorial.</p><div class="kv"><span class="mono">Tokens</span><b>28</b></div></div>
+          <i class="port c" style="right:-5px;top:64px"></i>
+        </div>
+
+        <div class="plate" style="left:388px;top:60px;width:240px">
+          <div class="ph"><span class="mono">02 · Image</span><span class="mono muted">Nano Banana</span></div>
+          <div class="pb"><div class="thumb"><img src="../piece-apple.jpg" alt=""></div><div class="kv"><span class="mono">Cost</span><b>$0.04</b></div><div class="kv"><span class="mono">Time</span><b>6.2s</b></div></div>
+          <i class="port c" style="left:-5px;top:58px"></i><i class="port c" style="right:-5px;top:58px"></i>
+        </div>
+
+        <div class="plate" style="left:388px;top:230px;width:240px">
+          <div class="ph"><span class="mono">03 · Image</span><span class="mono muted">GPT Image 2</span></div>
+          <div class="pb"><div class="thumb"><img src="../piece-flash.jpg" alt=""></div><div class="kv"><span class="mono">Cost</span><b>$0.06</b></div><div class="kv"><span class="mono">Time</span><b>18.4s</b></div></div>
+          <i class="port c" style="left:-5px;top:34px"></i><i class="port c" style="right:-5px;top:34px"></i>
+        </div>
+
+        <div class="plate run" style="left:724px;top:140px;width:240px">
+          <div class="ph"><span class="mono">04 · Video</span><span class="mono" style="color:var(--ember)">Striking 42%</span></div>
+          <div class="pb"><p>Veo 3.1 · 8s · 720p</p><div class="kv"><span class="mono">Est. cost</span><b>$0.40</b></div><div class="prog"><i style="width:42%"></i></div></div>
+          <i class="port c" style="left:-5px;top:52px"></i><i class="port" style="right:-5px;top:52px"></i>
+        </div>
+
+        <div class="plate err" style="left:724px;top:350px;width:240px">
+          <div class="ph"><span class="mono">05 · Upscale</span><span class="mono" style="color:var(--fail)">Failed</span></div>
+          <div class="pb"><p style="color:var(--fail)">Provider returned 402: wallet below $0.10 reserve.</p><div style="display:flex;gap:8px;margin-top:8px"><span class="btn sm secondary">Retry</span><span class="btn sm ghost">Top up</span></div></div>
+          <i class="port c" style="left:-5px;top:46px"></i><i class="port" style="right:-5px;top:46px"></i>
+        </div>
+
+        <div class="plate on" style="left:52px;top:420px">
+          <div class="ph"><span class="mono">06 · Reference</span><span class="mono muted">Upload</span></div>
+          <div class="pb"><div class="thumb" style="height:80px"><img src="../piece-pear.jpg" alt=""></div><div class="kv"><span class="mono">Size</span><b>1024 × 1024</b></div></div>
+          <i class="port c" style="right:-5px;top:46px"></i>
+        </div>
+
+        <div class="legend"><span class="mono">■ Ember · connected</span><span class="mono">□ Rule-2 · empty</span><span class="mono" style="color:var(--ember)">— — Ember · running</span></div>
+
+        <div class="bar">
+          <span class="btn sm secondary">Add plate</span>
+          <span class="btn sm primary" style="height:32px;font-size:12px">Run all · $0.50</span>
+          <div class="zoom"><span class="mono">−</span><span class="mono">100%</span><span class="mono">+</span><span class="mono">Fit</span></div>
+        </div>
+      </div>
+
+      <aside class="sheet">
+        <div class="sh"><span class="mono">Sheet · 06 Reference</span><span class="tabs"><span class="on">YAML</span><span>JSON</span></span></div>
+<pre><span class="k">id</span>: <span class="s">plate-06</span>
+<span class="k">kind</span>: <span class="s">reference</span>
+<span class="k">source</span>:
+  <span class="k">file</span>: <span class="s">pear-01.png</span>
+  <span class="k">width</span>: <span class="n">1024</span>
+  <span class="k">height</span>: <span class="n">1024</span>
+<span class="k">outputs</span>:
+  - <span class="k">to</span>: <span class="s">plate-03</span>
+    <span class="k">as</span>: <span class="s">image_ref</span>
+<span class="k">cost</span>:
+  <span class="k">strike</span>: <span class="n">0.00</span>
+  <span class="k">currency</span>: <span class="s">USD</span>
+<span class="c"># edited 14:02 · v4</span></pre>
+        <div class="sf"><span class="btn sm secondary">Apply</span><span class="btn sm ghost">Revert</span><span class="btn sm danger" style="margin-left:auto">Delete plate</span></div>
+      </aside>
+    </div>
+  </section>
+</div>
+
+</body></html>

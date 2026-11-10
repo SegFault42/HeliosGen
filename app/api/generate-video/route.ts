@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { dlog } from "@/lib/debugLog";
 import { jobStore } from "@/lib/jobStore";
 import { pollKieJob } from "@/lib/kieJobPoller";
 import { rewriteLocalMediaForKie } from "@/lib/kieUpload";
 import { ensureR2 } from "@/lib/storage";
-import { VIDEO_MODELS } from "@/lib/modelConfig";
+import { VIDEO_MODELS, DEFAULT_VIDEO_MODEL, isVetoedVideoModel } from "@/lib/modelConfig";
 import { getKieTokenForUser } from "@/lib/getKieToken";
 import { GUEST_USER_ID } from "@/lib/guestMode";
 import * as guestDb from "@/lib/guest/db";
+import { submitHeyGenVideo } from "@/lib/heygenMcp";
+import { resumeHeyGenJob } from "@/lib/heygenJobPoller";
+import { submitFlowVideo } from "@/lib/flowAdapter";
+import { resumeFlowJob } from "@/lib/flowJobPoller";
+import { asUrl, asUrlList, asResources, asKlingElements, flowUpscale, interpolationError } from "@/lib/videoRequest";
 
 const KIE_BASE = "https://api.kie.ai";
 
@@ -23,19 +29,23 @@ interface KlingElementInput {
 
 
 export async function POST(req: NextRequest) {
+  // text/plain is a CORS "simple" request, so a cross-site page could POST here without a preflight.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
   try {
   const body = await req.json();
   const {
-    videoModel      = body.model || "kling-3.0",
+    videoModel      = body.model || DEFAULT_VIDEO_MODEL,
     prompt,
-    startFrameUrl:  rawStartFrame,
-    endFrameUrl:    rawEndFrame,
-    videoRefUrl:    rawVideoRef,
-    resources       = [] as Resource[],
-    klingElements   = [] as KlingElementInput[],
-    referenceImageUrls:  rawRefImages     = body.imageUrls || [] as string[],
-    referenceVideoUrls:  rawRefVideoUrls  = [] as string[],
-    referenceAudioUrls:  rawRefAudioUrls  = [] as string[],
+    startFrameUrl:  inStartFrame,
+    endFrameUrl:    inEndFrame,
+    videoRefUrl:    inVideoRef,
+    resources       : inResources,
+    klingElements   : inKlingElements,
+    referenceImageUrls:  inRefImages     = body.imageUrls,
+    referenceVideoUrls:  inRefVideoUrls,
+    referenceAudioUrls:  inRefAudioUrls,
     sound           = false,
     duration        = 5,
     aspectRatio     = body.aspect_ratio || "16:9",
@@ -46,18 +56,105 @@ export async function POST(req: NextRequest) {
     generationType: rawGenerationType,
     callBackUrl:    rawCallBackUrl,
     debugOnly       = false,
+    avatarId,
+    voiceId,
   } = body;
 
+  // Normalize every list/URL input before any paid submit (null-safe).
+  const rawStartFrame = asUrl(inStartFrame);
+  const rawEndFrame = asUrl(inEndFrame);
+  const rawVideoRef = asUrl(inVideoRef);
+  const resources = asResources(inResources);
+  const klingElements = asKlingElements(inKlingElements);
+  const rawRefImages = asUrlList(inRefImages);
+  const rawRefVideoUrls = asUrlList(inRefVideoUrls);
+  const rawRefAudioUrls = asUrlList(inRefAudioUrls);
+
   const userId = GUEST_USER_ID;
+  if (isVetoedVideoModel(videoModel)) {
+    return NextResponse.json(
+      { error: `Video model ${videoModel} is vetoed by agency policy (Kling). Use flow-omni-flash or heygen-video-agent, or set ALLOW_VETOED_KLING=true.` },
+      { status: 403 },
+    );
+  }
+  const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
+  if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
+  const frameErr = interpolationError(cfg, rawStartFrame, rawEndFrame);
+  if (frameErr) return NextResponse.json({ error: frameErr }, { status: 400 });
+
+  if (cfg.apiInput.useHeyGenMcp) {
+    const max = cfg.apiInput.promptMaxLength;
+    if (max && String(prompt ?? "").length > max) {
+      return NextResponse.json({ error: `HeyGen prompts are limited to ${max} characters (got ${String(prompt).length}).` }, { status: 400 });
+    }
+    if (debugOnly) return NextResponse.json({ debugProvider: "heygen-mcp", videoModel, prompt, aspectRatio });
+    const heygen = await submitHeyGenVideo({
+      prompt: String(prompt ?? ""),
+      aspectRatio: String(aspectRatio),
+      avatarId: typeof avatarId === "string" ? avatarId : undefined,
+      voiceId: typeof voiceId === "string" ? voiceId : undefined,
+      resources: resources as Resource[],
+      referenceImageUrls: rawRefImages as string[],
+      referenceVideoUrls: rawRefVideoUrls as string[],
+      referenceAudioUrls: rawRefAudioUrls as string[],
+      startFrameUrl: rawStartFrame,
+      endFrameUrl: rawEndFrame,
+    });
+    jobStore.set(heygen.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: heygen.taskId,
+      user_id: userId,
+      generation_type: "video",
+      status: "pending",
+      model: videoModel,
+      prompt: String(prompt ?? ""),
+      aspect_ratio: String(aspectRatio),
+      reference_image_urls: [...(rawRefImages as string[]), ...(rawRefVideoUrls as string[])],
+    });
+    resumeHeyGenJob(heygen.taskId);
+    return NextResponse.json({ taskId: heygen.taskId, provider: "heygen" });
+  }
+
+  if (cfg.apiInput.useFlow) {
+    if (debugOnly) return NextResponse.json({ debugProvider: "google-flow", videoModel, prompt, aspectRatio });
+    const flowRes = await submitFlowVideo({
+      prompt: String(prompt ?? ""),
+      modelName: cfg.apiInput.flowModel || "Omni Flash",
+      aspectRatio: String(aspectRatio),
+      startFrame: rawStartFrame,
+      endFrame: rawEndFrame,
+      referenceImages: rawRefImages,
+      referenceVideos: rawRefVideoUrls.length ? rawRefVideoUrls : undefined,
+      affirmVideoRights: body.affirmVideoRights === true,
+      upscale: flowUpscale(rawResolution, cfg),
+      readThis: typeof body.readThis === "boolean" ? body.readThis : undefined,
+    });
+    jobStore.set(flowRes.taskId, { status: "pending", type: "video", userId: userId ?? undefined });
+    guestDb.insertGeneration({
+      task_id: flowRes.taskId,
+      user_id: userId,
+      generation_type: "video",
+      status: "pending",
+      model: videoModel,
+      prompt: String(prompt ?? ""),
+      aspect_ratio: String(aspectRatio),
+      reference_image_urls: [
+        ...(typeof rawStartFrame === "string" ? [rawStartFrame] : []),
+        ...(typeof rawEndFrame === "string" ? [rawEndFrame] : []),
+        ...(Array.isArray(rawRefImages) ? (rawRefImages as string[]) : []),
+        ...rawRefVideoUrls,
+      ],
+    });
+    resumeFlowJob(flowRes.taskId);
+    return NextResponse.json({ taskId: flowRes.taskId, provider: "flow" });
+  }
+
 
   const apiKey = (await getKieTokenForUser()) ?? process.env.KIE_API_TOKEN ?? null;
   if (!apiKey) return NextResponse.json({ error: "No Kie.ai API key configured. Add one in Settings." }, { status: 401 });
 
   // The app polls kie.ai directly (lib/kieJobPoller) — no callback URL needed.
   const callBackUrl = rawCallBackUrl || undefined;
-
-  const cfg = VIDEO_MODELS.find((m) => m.id === videoModel);
-  if (!cfg) return NextResponse.json({ error: `Unknown video model: ${videoModel}` }, { status: 400 });
 
   const resolution = rawResolution || cfg.defaultResolution || "480p";
   const { apiInput } = cfg;
@@ -406,11 +503,11 @@ export async function POST(req: NextRequest) {
 
   // Debug mode — log payload to server console and return without submitting
   if (debugOnly) {
-    console.log(`[DEBUG] generate-video payload → ${endpoint}`, JSON.stringify(kieBody, null, 2));
+    dlog(`[DEBUG] generate-video payload → ${endpoint}`, JSON.stringify(kieBody, null, 2));
     return NextResponse.json({ debugPayload: kieBody, debugEndpoint: endpoint });
   }
 
-  console.log(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
+  dlog(`[generate-video] sending to ${endpoint}:`, JSON.stringify(kieBody));
   const createRes = await fetch(endpoint, {
     method:  "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -427,7 +524,7 @@ export async function POST(req: NextRequest) {
   }
 
   const createdText = await createRes.text();
-  console.log("[generate-video] kie.ai response:", createdText);
+  dlog("[generate-video] kie.ai response:", createdText);
   let created: { code?: number; msg?: string; data?: { taskId?: string; id?: string } };
   try {
     created = JSON.parse(createdText);

@@ -75,18 +75,25 @@ function resolveVideoNodeFrameUrl(src: Node<NodeData>, sourceHandle: string | nu
   return undefined;
 }
 
+/** Image a node shows/exports. A generateNode displays imageUrl; its r2Url may be a stale
+ *  mirror of an earlier generation, so imageUrl wins there. Other nodes: r2Url first. */
+export function nodeImageUrl(src: { type?: string; data: Record<string, unknown> }): string | undefined {
+  const d = src.data;
+  return (src.type === "generateNode"
+    ? (d.imageUrl ?? d.r2Url ?? d.inputImage)
+    : (d.r2Url ?? d.inputImage ?? d.imageUrl)) as string | undefined;
+}
+
 /** Resolves the image URL for a connection, always honouring the source handle.
  *  Frame-specific handles (startFrameOut / endFrameOut / imagePickOut) return only
  *  their designated frame — no fallback to unrelated image fields. */
-function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | undefined): string | undefined {
+export function resolveImageUrl(src: Node<NodeData>, sourceHandle: string | null | undefined): string | undefined {
   if (FRAME_OUT_HANDLES.has(sourceHandle ?? "")) {
     return resolveVideoNodeFrameUrl(src, sourceHandle);
   }
   return (resolveVideoNodeFrameUrl(src, sourceHandle)
     ?? src.data.capturedFrameUrl
-    ?? src.data.r2Url
-    ?? src.data.inputImage
-    ?? src.data.imageUrl) as string | undefined;
+    ?? nodeImageUrl(src)) as string | undefined;
 }
 
 /** Resolve upstream prompt + images for a target node */

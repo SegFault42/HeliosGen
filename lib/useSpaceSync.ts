@@ -16,6 +16,9 @@ export function useSpaceSync() {
 
   const [status,       setStatus]       = useState<SyncStatus>("idle");
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  // True once the initial DB load has answered (success or not). Until then the
+  // store may only hold what this browser's localStorage knew about.
+  const [dbLoaded, setDbLoaded] = useState(false);
   // Block all writes until localStorage has fully rehydrated. In Zustand v5,
   // persist rehydration is async — if we save before it completes, we'd write
   // the default empty state and delete all real spaces.
@@ -32,12 +35,16 @@ export function useSpaceSync() {
   const dirtyRef       = useRef(false);
   // Set by requestWorkflowSync(); makes the next debounce-arm use IMMEDIATE_MS.
   const immediateRef   = useRef(false);
+  // updatedAt of each space as last written to the DB. Lets `save` send only
+  // the spaces that changed since (previously every edit re-sent every space).
+  const savedStampRef  = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (hydrated) return;
     // If hydration already finished before this effect ran (common in Next.js
     // where SSR renders hasHydrated()=false but client is already hydrated)
     if (useWorkflowStore.persist?.hasHydrated()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs hydration flag from the zustand persist API
       setHydrated(true);
       return;
     }
@@ -55,12 +62,17 @@ export function useSpaceSync() {
         const { spaces: dbSpaces } = (await res.json()) as { spaces: Space[] };
         if (!dbSpaces?.length) return;
         loadSpacesFromDB(dbSpaces);
+        savedStampRef.current = new Map(
+          useWorkflowStore.getState().spaces.map((sp) => [sp.id, sp.updatedAt ?? sp.createdAt ?? 0]),
+        );
         const now = new Date();
         lastSyncedRef.current = now.getTime();
         setLastSyncedAt(now);
         setStatus("synced");
       } catch {
         /* keep local state */
+      } finally {
+        setDbLoaded(true);
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,19 +87,29 @@ export function useSpaceSync() {
     immediateRef.current = false;
     setStatus("syncing");
     try {
-      const spacesToSave = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
-      const res = await fetch("/api/workflows", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        keepalive,
-        body: JSON.stringify({
-          spaces: spacesToSave.map((sp) => ({
-            ...sp,
-            nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
-          })),
-        }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
+      const all = useWorkflowStore.getState().spaces.filter((sp) => sp.nodes.length > 0);
+      const stamps = savedStampRef.current;
+      const stamp = (sp: Space) => sp.updatedAt ?? sp.createdAt ?? 0;
+      // A space we saved before is gone → full save so the server drops it too.
+      const deleted = [...stamps.keys()].some((id) => !all.some((sp) => sp.id === id));
+      const partial = !deleted && stamps.size > 0;
+      const spacesToSave = partial ? all.filter((sp) => stamps.get(sp.id) !== stamp(sp)) : all;
+      if (spacesToSave.length > 0 || !partial) {
+        const res = await fetch("/api/workflows", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          keepalive,
+          body: JSON.stringify({
+            partial,
+            spaces: spacesToSave.map((sp) => ({
+              ...sp,
+              nodes: sp.nodes.map((n) => ({ ...n, data: { ...n.data, inputImage: undefined } })),
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+      }
+      savedStampRef.current = new Map(all.map((sp) => [sp.id, stamp(sp)]));
       const now = new Date();
       lastSyncedRef.current = now.getTime();
       setLastSyncedAt(now);
@@ -155,7 +177,7 @@ export function useSpaceSync() {
     };
   }, [hydrated, save]);
 
-  return { status, lastSyncedAt, syncNow };
+  return { status, lastSyncedAt, syncNow, dbLoaded };
 }
 
 // ── Time-ago helper ───────────────────────────────────────────────────────────

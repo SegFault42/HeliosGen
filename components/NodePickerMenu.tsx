@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { useReactFlow, Node, Edge } from "@xyflow/react";
-import { useWorkflowStore, NodeData } from "@/lib/store";
+import { getNodeLabel, useWorkflowStore, NodeData } from "@/lib/store";
 import { edgeStyle, EDGE_COLORS } from "@/lib/edgeStyles";
 import { NODES, NODE_SIZE, FALLBACK_SIZE, NODE_META, getLastNodeSettings, getDefaultNodeSize } from "@/lib/nodeTypes";
 import { VIDEO_MODELS, IMAGE_MODELS } from "@/lib/modelConfig";
@@ -70,14 +70,6 @@ function inputHandleTopY(nodeType: string | undefined, handleId: string | null, 
   return nodeH / 2;
 }
 
-const NODE_DISPLAY_NAMES: Record<string, string> = {
-  videoInputNode:     "VIDEO",
-  imageInputNode:     "IMAGE",
-  promptNode:         "TEXT",
-  generateNode:       "IMAGE GEN",
-  videoGeneratorNode: "VIDEO GEN",
-  assistantNode:      "ASSISTANT",
-};
 
 export interface DropState {
   screenX: number;
@@ -175,7 +167,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
 
     const nodesInStore = storeState.nodes;
     const count  = nodesInStore.filter((n) => n.type === type).length + 1;
-    const label  = `${NODE_DISPLAY_NAMES[type] ?? type} #${count}`;
+    const label  = getNodeLabel(type, count);
 
     const nodeStyle = ["imageInputNode", "videoInputNode", "generateNode", "videoGeneratorNode"].includes(type)
       ? { width: size.w }
@@ -333,11 +325,11 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
       <div
         ref={menuRef}
         style={{ position: "fixed", left, top, zIndex: 1000 }}
-        className="w-56 bg-[#0F1214] border border-[#2A2A2A] rounded-lg shadow-2xl overflow-hidden"
+        className="w-56 bg-[var(--surface)] border border-[var(--border-2)] rounded-lg shadow-2xl overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="px-3 py-2 border-b border-[#1E1E1E]">
-          <p className="text-[10px] text-[#4A4A45] uppercase tracking-widest font-medium">
+        <div className="px-3 py-2 border-b border-[var(--border-1)]">
+          <p className="text-[12px] text-[var(--text-3)] uppercase tracking-widest font-medium">
             Connect to
           </p>
         </div>
@@ -349,7 +341,7 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
               key={n.type}
               onClick={() => handleSelect(n.type)}
               onMouseDown={(e) => e.stopPropagation()}
-              className="w-full text-left px-3 py-2.5 hover:bg-[#161A1E] transition-colors"
+              className="w-full text-left px-3 py-2.5 hover:bg-[var(--bg-2)] transition-colors"
             >
               <div className="flex items-center gap-2.5">
                 <span
@@ -361,18 +353,18 @@ export default function NodePickerMenu({ dropState, onClose }: Props) {
                     width: "30px",
                     height: "30px",
                     borderRadius: "8px",
-                    background: meta?.bg ?? "rgba(255,255,255,0.06)",
-                    color: meta?.accent ?? "#aaa",
-                    border: `1px solid ${meta?.accent ?? "#333"}28`,
+                    background: meta?.bg ?? "var(--border-1)",
+                    color: meta?.accent ?? "var(--text-2)",
+                    border: `1px solid ${meta?.accent ?? "var(--border-2)"}28`,
                   }}
                 >
                   {meta?.bigIcon ?? n.icon}
                 </span>
                 <span className="flex flex-col gap-0.5 min-w-0">
-                  <span className="text-[13px] text-white font-medium leading-none">
+                  <span className="text-[13px] text-[var(--text-1)] font-medium leading-none">
                     {n.label}
                   </span>
-                  <span className="text-[10px] text-[#4A4A45] leading-none">
+                  <span className="text-[12px] text-[var(--text-3)] leading-none">
                     {n.description}
                   </span>
                 </span>
