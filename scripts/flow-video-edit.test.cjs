@@ -77,3 +77,50 @@ test("the payload carries affirmVideoRights only after the user declared it for 
   // a model that does not go through Flow never sends it, whatever the node holds
   assert.equal("affirmVideoRights" in buildVideoPayload({ videoModel: "seedance-2", videoRightsAffirmedFor: videoRightsKey(["/v.mp4"]) }, videoInputs(["/v.mp4"])), false);
 });
+
+// ── Omni Flash 1.2 next to 1.1 ───────────────────────────────────────────────
+const { isOmniFlash } = require("../lib/flowAdapter.ts");
+
+// Copy of the engine's model matching (google-flow-mcp, capabilities.ts): exact
+// normalized name first, else the single picker option holding every requested word.
+const flowId = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+function matchFlowModel(labels, requested) {
+  const options = labels.map((label) => ({ label, id: flowId(label) }));
+  const id = flowId(requested);
+  const exact = options.find((o) => o.id === id);
+  if (exact) return exact.label;
+  const words = id.split("-").filter(Boolean);
+  const candidates = options.filter((o) => { const have = new Set(o.id.split("-")); return words.every((w) => have.has(w)); });
+  return candidates.length === 1 ? candidates[0].label : null;
+}
+
+test("with 1.1 and 1.2 both in Flow's picker, each model resolves to its own version", () => {
+  const v11 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash");
+  const v12 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash-1-2");
+  assert.equal(v12.apiInput.useFlow, true);
+  assert.notEqual(v11.name, v12.name);
+  const picker = ["Omni 1.1 Flash", "Omni 1.2 Flash", "Veo 3.1 - Fast", "Veo 3.1 - Quality"];
+  assert.equal(matchFlowModel(picker, v11.apiInput.flowModel), "Omni 1.1 Flash");
+  assert.equal(matchFlowModel(picker, v12.apiInput.flowModel), "Omni 1.2 Flash");
+  // why 1.1 can no longer ask for a bare "Omni Flash": two versions make it ambiguous
+  assert.equal(matchFlowModel(picker, "Omni Flash"), null);
+  // an account that has not received 1.2 yet fails the request instead of using 1.1
+  assert.equal(matchFlowModel(["Omni 1.1 Flash", "Veo 3.1 - Fast"], v12.apiInput.flowModel), null);
+});
+
+test("Omni Flash 1.2 behaves like 1.1: video edit, rights declaration, fixed length", () => {
+  const v12 = VIDEO_MODELS.find((x) => x.id === "flow-omni-flash-1-2");
+  assert.ok(v12.handles.includes("referenceVideo"));
+  assert.equal(v12.maxReferenceVideos, 1);
+  assert.equal(isVetoedVideoModel("flow-omni-flash-1-2", {}), false);
+  assert.equal(needsVideoRights("flow-omni-flash-1-2", ["/v.mp4"]), true);
+  assert.equal(buildVideoPayload({ videoModel: "flow-omni-flash-1-2", duration: 5 }, videoInputs([])).duration, 10);
+});
+
+test("the read-this heuristic covers every Omni Flash name and nothing else", () => {
+  for (const name of ["Omni Flash", "Omni 1.1 Flash", "Omni 1.2 Flash"]) assert.equal(isOmniFlash(name), true, name);
+  for (const name of ["Veo 3.1 - Fast", "Nano Banana 2", "Gemini Omni Video"]) assert.equal(isOmniFlash(name), false, name);
+  const long = "swap ".repeat(80);
+  assert.equal(shouldUseReadThis("Omni 1.2 Flash", long), true);
+  assert.equal(shouldUseReadThis("Veo 3.1 - Fast", long), false);
+});

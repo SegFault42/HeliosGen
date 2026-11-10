@@ -26,7 +26,7 @@ export function createRunner(store: ReturnType<typeof createRuntimeStore>, trans
         try {
           // allowPaid authorizes Kie credit spend only. Native plan approval is
           // performed before createRun; these pinned routes use the owner's pools.
-          const ownerPoolRoute = (step.provider === "flow" && ["flow-omni-flash", "flow-nano-banana-2"].includes(step.model)) ||
+          const ownerPoolRoute = (step.provider === "flow" && ["flow-omni-flash", "flow-omni-flash-1-2", "flow-nano-banana-2"].includes(step.model)) ||
             (step.provider === "grok" && step.model === "grok-imagine");
           // HeyGen Video Agent spends the account's premium credits: keep it behind allowPaid.
           if (step.provider !== "codex" && !ownerPoolRoute) {

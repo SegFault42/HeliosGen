@@ -14,10 +14,15 @@ import { dlog } from "@/lib/debugLog";
 // guessing upfront from prompt length.
 const READ_THIS_MIN_CHARS = 200;
 
+/** Any Omni Flash version, by Flow's own names ("Omni Flash", "Omni 1.1 Flash", "Omni 1.2 Flash"). */
+export function isOmniFlash(model: string): boolean {
+  return /^omni\b.*\bflash$/i.test(model.trim());
+}
+
 export function shouldUseReadThis(model: string, prompt: string, explicit?: boolean, hasFrames = false): boolean {
   if (explicit !== undefined) return explicit;
   // A prompt image would be one more attached image next to the start/end frames.
-  return !hasFrames && model === "Omni Flash" && prompt.trim().length > READ_THIS_MIN_CHARS;
+  return !hasFrames && isOmniFlash(model) && prompt.trim().length > READ_THIS_MIN_CHARS;
 }
 
 const FLOW_PROJECT_URL_PATTERN = /^https:\/\/flow\.google\.com\/project\/[0-9a-f-]+$/i;

@@ -614,7 +614,37 @@ export const VIDEO_MODELS: VideoModel[] = [
       durationMin: 0,
       durationMax: 0,
       useFlow: true,
-      flowModel: "Omni Flash",
+      // The engine matches this against Flow's own picker: exact name first, else
+      // the single option containing every word. A bare "Omni Flash" stops being
+      // unique once Flow lists 1.1 and 1.2 side by side, so each names its version.
+      flowModel: "Omni 1.1 Flash",
+    },
+  },
+  {
+    // Same capabilities as 1.1 until Flow's picker says otherwise: the settings
+    // below were copied from it, not read from a live account.
+    id: "flow-omni-flash-1-2",
+    apiId: "flow-omni-flash-1-2",
+    name: "Omni Flash 1.2 (Flow)",
+    provider: "Google Flow",
+    ratios: ["16:9", "9:16"],
+    durations: [10],
+    defaultDuration: 10,
+    defaultRatio: "9:16",
+    handles: ["prompt", "startFrame", "resource", "referenceVideo"],
+    maxResources: 3,
+    maxReferenceVideos: 1,
+    sound: false, // Flow path ignores sound
+    resolutions: ["720p", "1080p"],
+    defaultResolution: "720p",
+    apiInput: {
+      aspectRatioKey: "aspect_ratio",
+      resolutionKey: "resolution",
+      promptMaxLength: 20000,
+      durationMin: 0,
+      durationMax: 0,
+      useFlow: true,
+      flowModel: "Omni 1.2 Flash",
     },
   },
   {
