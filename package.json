@@ -12,7 +12,8 @@
     "desktop:check-version": "node scripts/desktop/check-version.mjs",
     "desktop:build": "node scripts/desktop/check-version.mjs && CI=true tauri build",
     "desktop:icon": "tauri icon",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "start:web": "node scripts/web-server.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

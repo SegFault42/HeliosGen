@@ -303,3 +303,12 @@ MIT License
   Built for creators building the future of AI workflows.
 </p>
 
+## 🌐 Experimental browser trial
+
+The original supported release is a local desktop app. An experimental,
+single-workspace browser mode is available on the `web-trial` branch. It adds
+an authenticated Node web server; it is not a multi-user SaaS conversion and
+has not yet been validated for production hosting.
+
+See [WEB-TRIAL.md](WEB-TRIAL.md) for local setup, security requirements, and
+storage limitations. The desktop build remains unchanged.
